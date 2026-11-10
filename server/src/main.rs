@@ -200,8 +200,33 @@ fn app(state: Shared) -> Router {
         .with_state(state)
 }
 
+/// `openleet health`: succeeds when the server on this machine answers `GET /api/version` on
+/// `HTTP_PORT` with 200 (plain HTTP mode). The container image has no shell or curl for this.
+fn health() -> Result<()> {
+    use std::io::{Read, Write};
+    let port: u16 = std::env::var("HTTP_PORT")
+        .unwrap_or_else(|_| "8080".to_owned())
+        .parse()
+        .context("HTTP_PORT")?;
+    let address = SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, port));
+    let mut stream = std::net::TcpStream::connect_timeout(&address, Duration::from_secs(2))?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.write_all(b"GET /api/version HTTP/1.0\r\nHost: localhost\r\n\r\n")?;
+    let mut status = [0; 12];
+    stream.read_exact(&mut status)?;
+    anyhow::ensure!(
+        status.starts_with(b"HTTP/1.") && status.ends_with(b"200"),
+        "unhealthy: {}",
+        String::from_utf8_lossy(&status)
+    );
+    Ok(())
+}
+
 #[tokio::main(worker_threads = 2)]
 async fn main() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("health") {
+        return health();
+    }
     tracing_subscriber::fmt().with_target(false).init();
     let mut sockets = Sockets::from_systemd();
     let config = Config::from_env()?;

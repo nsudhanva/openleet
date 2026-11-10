@@ -1,22 +1,84 @@
-# Local development on macOS or Windows: the judge in a Linux container (see Dockerfile).
-# Production does not use Docker; see deploy/ and the README.
+# One command for OpenLeet in Docker: docker compose up -d, then http://openleet.localhost
+# (HTTP_PORT=8088 docker compose up -d when port 80 is taken: http://openleet.localhost:8088).
+# Production runs natively under systemd instead; see deploy/ and the README.
+name: openleet
+
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
 services:
-  judge:
-    build: .
+  caddy:
+    <<: *hardened
+    image: caddy:2-alpine
     ports:
-      - "127.0.0.1:7777:7777"
-    read_only: true
-    tmpfs:
-      - /tmp:size=16m
-    cap_drop: [ALL]
+      - "127.0.0.1:${HTTP_PORT:-80}:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    tmpfs: [/data, /config]
+    mem_limit: 64m
+    depends_on:
+      app:
+        condition: service_healthy
+
+  app:
+    <<: *hardened
+    image: ghcr.io/nsudhanva/openleet:latest
+    build:
+      context: .
+      target: app
+      args:
+        JOBS: ${BUILD_JOBS:-4} # parallel compiles: DuckDB C++ needs ~1 GB each
+    environment:
+      SITE_ADDRESS: http://openleet.localhost
+      HTTP_PORT: "8080"
+      STATE_DIR: /state
+      JUDGE_SOCKET: /run/openleet-judge/judge.sock
+      JUDGE_CPU_SCALE: ${JUDGE_CPU_SCALE:-2.5}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - state:/state
+      - judge-socket:/run/openleet-judge:ro
+    mem_limit: 200m
+    depends_on: [judge]
+
+  judge: &judge
+    <<: *hardened
+    image: ghcr.io/nsudhanva/openleet-judge:latest
+    build:
+      context: .
+      target: judge
+      args:
+        JOBS: ${BUILD_JOBS:-4}
+    network_mode: none
+    # Root in the container only to drop each submission to uid 61000.
     cap_add: [SETUID, SETGID, KILL]
-    security_opt:
-      - no-new-privileges:true
+    tmpfs: [/tmp:size=16m]
+    volumes:
+      - judge-socket:/run/openleet-judge
     pids_limit: 64
-    # As in production (deploy/openleet-judge.service): no swap, so a memory hog fails fast;
-    # the kernel's OOM killer never picks the daemon or the zygote, only the solution
-    # (zygote.py raises its score); and an init reaps orphans, which the daemon does not.
     mem_limit: 512m
+    # No swap, so a memory hog fails fast as Memory Limit Exceeded; the kernel kills the
+    # submission first (zygote.py raises its OOM score), never the judge; and an init reaps
+    # orphaned children, which the daemon does not.
     memswap_limit: 512m
     oom_score_adj: -1000
     init: true
+
+  # For `cargo run` on the host (macOS has no Linux judge): the judge on 127.0.0.1:7777.
+  # docker compose --profile dev up -d judge-dev
+  judge-dev:
+    <<: *judge
+    profiles: [dev]
+    network_mode: bridge
+    environment:
+      JUDGE_SOCKET: tcp://0.0.0.0:7777
+    ports:
+      - "127.0.0.1:7777:7777"
+    volumes: []
+
+volumes:
+  state:
+  judge-socket:

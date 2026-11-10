@@ -1,7 +1,20 @@
-# The judge image is built from these only (see Dockerfile).
+# Only what the Dockerfile copies (tests.duckdb is downloaded during the build).
 *
 !Cargo.toml
 !Cargo.lock
 !proto
+!server
 !judge
+!web
+!package.json
+!bun.lock
+!data/problems.json
+!data/approaches.json
+!data/judge/specs.json
+!data/judge/corpus.json
 **/__pycache__
+**/target
+web/node_modules
+web/dist
+web/e2e
+web/.tanstack
