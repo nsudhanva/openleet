@@ -148,7 +148,7 @@ deploy/  systemd units, install and update scripts
 | `GET /api/topics?company=&period=&difficulty=` | The list's topics and their problem counts, most first |
 | `GET /api/problems/:slug` | One card: statement, topics, companies, approach |
 | `GET /api/deck?company=&period=&set=&topic=&difficulty=` | Next card (`period`: `30d`, `3m`, `6m`, `all`, `lc1000`; `topic` by name, `difficulty` `Easy`, `Medium` or `Hard`; unknown values filter nothing) |
-| `GET /api/search?q=two+sum` | Search by number, title, topic or statement |
+| `GET /api/search?q=two+sum` | Search by number, title, topic or statement (`q` required) |
 | `POST /api/attempts` `{slug, grade, guessed, hints}` | Grade or skip a card |
 | `PUT /api/notes` `{slug, text}` | Save your answer |
 | `DELETE /api/progress?slug=` or `?all=true` | Clear progress |
@@ -159,6 +159,9 @@ deploy/  systemd units, install and update scripts
 | `POST /api/submit` `{slug, code}` | Run every test |
 | `GET /api/submissions?slug=` | Your submissions |
 | `GET /api/health` | `ok`, `db`, `judge`, certificate expiry; 503 when the database is down |
+
+Errors are `{"error": "..."}` with the status: 400 for invalid input (malformed JSON included),
+404 for an unknown problem or endpoint, 415 for a body not sent as `application/json`.
 
 ## Keys
 

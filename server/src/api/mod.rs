@@ -54,6 +54,7 @@ pub fn routes() -> Router<Shared> {
         .layer(security::timeout(security::REQUEST_TIMEOUT))
         .merge(judged)
         .fallback(|| async { ApiError::no_endpoint() })
+        .layer(axum::middleware::map_response(crate::error::json_errors))
 }
 
 /// A request's query string.

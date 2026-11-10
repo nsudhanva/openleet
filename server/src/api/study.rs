@@ -203,9 +203,13 @@ pub async fn problem(State(state): State<Shared>, Path(slug): Path<String>) -> A
     Ok(Json(&card).into_response())
 }
 
-/// `?q=&limit=`: ranked search hits.
+/// `?q=&limit=`: ranked search hits. `q` is what the endpoint is for, so leaving it out (or
+/// blank) is a 400, like a bad `limit`; the list filters elsewhere are lenient instead.
 pub async fn search(State(state): State<Shared>, Query(params): Params) -> ApiResult<Response> {
-    let q = param(&params, "q").unwrap_or_default();
+    let q = param(&params, "q")
+        .map(str::trim)
+        .filter(|q| !q.is_empty())
+        .ok_or_else(|| ApiError::BadRequest("q is required".into()))?;
     let limit = match param(&params, "limit") {
         Some(text) => text
             .parse::<usize>()
@@ -390,5 +394,19 @@ mod tests {
         .await;
         assert_ne!(lc.len(), 0);
         assert!(lc.iter().all(|r| r["id"].as_u64() <= Some(1000)));
+    }
+
+    #[tokio::test]
+    async fn search_needs_a_query() {
+        let dir = TempDir::new("api-search");
+        let state = state(&dir);
+        let hits = search(State(Arc::clone(&state)), query(&[("q", " two sum ")]))
+            .await
+            .expect("hits");
+        assert_eq!(json(hits).await[0]["slug"], "two-sum");
+        for pairs in [&[][..], &[("q", "  ")], &[("q", "x"), ("limit", "many")]] {
+            let error = search(State(Arc::clone(&state)), query(pairs)).await;
+            assert!(matches!(error, Err(ApiError::BadRequest(_))), "{pairs:?}");
+        }
     }
 }

@@ -27,7 +27,11 @@ describe("HTTP API, end to end", () => {
 		expect(statement.body.map((h: { slug: string }) => h.slug)).toContain(
 			"course-schedule",
 		);
-		expect((await api("/api/search")).status).toBe(400);
+		expect(await api("/api/search")).toEqual({
+			status: 400,
+			body: { error: "q is required" },
+		});
+		expect((await api("/api/search?q=%20")).status).toBe(400);
 	});
 
 	it("lists companies and one list's problems without topics, and serves one full card", async () => {
@@ -113,8 +117,19 @@ describe("HTTP API, end to end", () => {
 			(await send("POST", "/api/attempts", { slug: "nope", grade: "good" }))
 				.status,
 		).toBe(404);
-		const badJson = await api("/api/attempts", { method: "POST", body: "{" });
+		// Every rejection is a JSON error: malformed JSON is a 400, a body that is not
+		// declared as JSON (a form or text/plain post) a 415.
+		const badJson = await api("/api/attempts", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: "{",
+		});
 		expect(badJson.status).toBe(400);
+		expect(badJson.body.error).toMatch(/JSON/);
+		const notJson = await api("/api/attempts", { method: "POST", body: "{}" });
+		expect(notJson.status).toBe(415);
+		expect(notJson.body.error).toMatch(/Content-Type/);
+		expect((await api("/api/submissions/abc")).status).toBe(400);
 
 		expect((await api("/api/deck")).body.card.problem.slug).toBe(
 			"add-two-numbers",
