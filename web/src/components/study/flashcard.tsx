@@ -1,13 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { CodeXmlIcon, LightbulbIcon, RotateCcwIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { ActionButton } from "@/components/action-button";
 import { ConfirmClear } from "@/components/confirm-clear";
 import { FitPages } from "@/components/fit-pages";
 import { InlineCode } from "@/components/inline-code";
-import { CARD_SURFACE, ProblemHeader } from "@/components/problem-header";
-import { ProblemStatement } from "@/components/problem-statement";
-import { Segmented } from "@/components/segmented";
+import { type Pane, ProblemCard } from "@/components/problem-frame";
 import { Answer } from "@/components/study/answer";
 import { CardHistory } from "@/components/study/card-history";
 import { MyAnswer } from "@/components/study/my-answer";
@@ -15,7 +13,7 @@ import { TopicPicker } from "@/components/study/topic-picker";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useHotkeys } from "@/hooks/use-hotkeys";
 import { scoreTopics } from "@/lib/scorer";
-import type { Grade, StudyCard } from "@/lib/types";
+import type { AskedPeriod, Grade, StudyCard } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export interface Answered {
@@ -41,6 +39,7 @@ const GRADE_ACTIONS: {
  */
 export function Flashcard({
 	card,
+	period,
 	topics,
 	busy,
 	canGoBack,
@@ -50,6 +49,8 @@ export function Flashcard({
 	onClear,
 }: {
 	card: StudyCard;
+	/** The list whose ranks the header shows. */
+	period: AskedPeriod;
 	topics: string[];
 	busy: boolean;
 	canGoBack: boolean;
@@ -65,7 +66,7 @@ export function Flashcard({
 	const [guessed, setGuessed] = useState<string[]>([]);
 	const [hintsShown, setHintsShown] = useState(0);
 	const [revealed, setRevealed] = useState(false);
-	const [pane, setPane] = useState<"problem" | "answer">("problem");
+	const [pane, setPane] = useState<Pane>("problem");
 	const [note, setNote] = useState(card.note);
 	const [editing, setEditing] = useState(false);
 
@@ -77,15 +78,15 @@ export function Flashcard({
 		!busy && onAnswer({ grade, guessed, hints: hintsShown });
 	const showHint = () => {
 		setHintsShown((n) => Math.min(n + 1, hints.length));
-		setPane("answer");
+		setPane("aside");
 	};
 	const reveal = () => {
 		setRevealed(true);
-		setPane("answer");
+		setPane("aside");
 	};
 	const editNote = () => {
 		setEditing(true);
-		setPane("answer");
+		setPane("aside");
 	};
 	const saveNote = async (text: string) => {
 		setNote(await onSaveNote(text));
@@ -107,33 +108,29 @@ export function Flashcard({
 	});
 
 	return (
-		<article
-			aria-labelledby="problem-title"
-			className={cn(
-				"flex h-full min-h-0 flex-col overflow-hidden",
-				CARD_SURFACE,
-			)}
-		>
-			<ProblemHeader problem={problem}>
-				<CardHistory state={state} />
-				{state && (
-					<ConfirmClear
-						trigger={
-							<Button
-								variant="ghost"
-								size="icon-xs"
-								aria-label="Clear progress for this problem"
-								title="Clear progress"
-							/>
-						}
-						title={`Clear progress for ${problem.title}?`}
-						description="This deletes its grades and takes it off your lists. Your own answer stays."
-						onClear={onClear}
-					>
-						<RotateCcwIcon />
-					</ConfirmClear>
-				)}
-				{problem.description && (
+		<ProblemCard
+			problem={problem}
+			period={period}
+			actions={
+				<>
+					<CardHistory state={state} />
+					{state && (
+						<ConfirmClear
+							trigger={
+								<Button
+									variant="ghost"
+									size="icon-xs"
+									aria-label="Clear progress for this problem"
+									title="Clear progress"
+								/>
+							}
+							title={`Clear progress for ${problem.title}?`}
+							description="This deletes its grades and takes it off your lists. Your own answer stays."
+							onClear={onClear}
+						>
+							<RotateCcwIcon />
+						</ConfirmClear>
+					)}
 					<Link
 						to="/code/$slug"
 						params={{ slug: problem.slug }}
@@ -144,31 +141,16 @@ export function Flashcard({
 						title="Solve it in Python"
 					>
 						<CodeXmlIcon data-icon="inline-start" />
-						Code
+						<span className="max-sm:sr-only">Code</span>
 					</Link>
-				)}
-			</ProblemHeader>
-
-			<Segmented
-				label="Show"
-				className="mx-4 mt-2 lg:hidden"
-				value={pane}
-				onChange={setPane}
-				options={[
-					{ value: "problem", label: "Problem" },
-					{ value: "answer", label: revealed ? "Answer" : "Guess" },
-				]}
-			/>
-
-			<div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-				<Pane visible={pane === "problem"} className="px-4 py-3 sm:px-6">
-					<ProblemStatement problem={problem} arrowKeys />
-				</Pane>
-
-				<Pane
-					visible={pane === "answer"}
-					className="gap-3 px-4 py-3 sm:px-6 lg:border-l lg:border-dashed"
-				>
+				</>
+			}
+			pane={pane}
+			onPaneChange={setPane}
+			asideLabel={revealed ? "Answer" : "Guess"}
+			asideClassName="gap-3 px-4 py-3 sm:px-6"
+			aside={
+				<>
 					{revealed ? (
 						<FitPages>
 							<Answer
@@ -205,89 +187,67 @@ export function Flashcard({
 						onSave={saveNote}
 						onCancel={() => setEditing(false)}
 					/>
-				</Pane>
-			</div>
-
-			<footer className="flex flex-wrap items-center gap-2 border-t px-4 py-2 sm:px-6">
-				<ActionButton
-					variant="ghost"
-					label="Back"
-					shortcut="B"
-					onClick={back}
-					disabled={(!revealed && !canGoBack) || busy}
-				/>
-				<ActionButton
-					variant="ghost"
-					label="My answer"
-					shortcut="M"
-					onClick={editNote}
-					disabled={editing}
-				/>
-				{revealed ? (
-					<div className="ml-auto flex flex-wrap justify-end gap-2">
-						{GRADE_ACTIONS.map((a) => (
+				</>
+			}
+			footer={
+				<footer className="flex flex-wrap items-center gap-2 border-t px-4 py-2 sm:px-6">
+					<ActionButton
+						variant="ghost"
+						label="Back"
+						shortcut="B"
+						onClick={back}
+						disabled={(!revealed && !canGoBack) || busy}
+					/>
+					<ActionButton
+						variant="ghost"
+						label="My answer"
+						shortcut="M"
+						onClick={editNote}
+						disabled={editing}
+					/>
+					{revealed ? (
+						<div className="ml-auto flex flex-wrap justify-end gap-2">
+							{GRADE_ACTIONS.map((a) => (
+								<ActionButton
+									key={a.grade}
+									variant={a.variant}
+									label={a.label}
+									shortcut={a.key}
+									disabled={busy}
+									onClick={() => answer(a.grade)}
+								/>
+							))}
+						</div>
+					) : (
+						<>
 							<ActionButton
-								key={a.grade}
-								variant={a.variant}
-								label={a.label}
-								shortcut={a.key}
+								variant="ghost"
+								label="Skip"
+								shortcut="S"
+								onClick={() => answer("skip")}
 								disabled={busy}
-								onClick={() => answer(a.grade)}
 							/>
-						))}
-					</div>
-				) : (
-					<>
-						<ActionButton
-							variant="ghost"
-							label="Skip"
-							shortcut="S"
-							onClick={() => answer("skip")}
-							disabled={busy}
-						/>
-						<ActionButton
-							variant="outline"
-							label={
-								hints.length > 1
-									? `Hint ${Math.min(hintsShown + 1, hints.length)} of ${hints.length}`
-									: "Hint"
-							}
-							shortcut="H"
-							onClick={showHint}
-							disabled={hintsShown >= hints.length}
-						/>
-						<ActionButton
-							className="ml-auto"
-							label="Show answer"
-							shortcut="Enter"
-							onClick={reveal}
-						/>
-					</>
-				)}
-			</footer>
-		</article>
-	);
-}
-
-/** A column on wide screens; on a phone only the chosen pane shows. */
-function Pane({
-	visible,
-	className,
-	children,
-}: {
-	visible: boolean;
-	className?: string;
-	children: ReactNode;
-}) {
-	return (
-		<div
-			className={cn(
-				"min-h-0 flex-col lg:flex",
-				visible ? "flex" : "hidden",
-				className,
-			)}
-		>
-			{children}
-		</div>
+							<ActionButton
+								variant="outline"
+								label={
+									hints.length > 1
+										? `Hint ${Math.min(hintsShown + 1, hints.length)} of ${hints.length}`
+										: "Hint"
+								}
+								shortcut="H"
+								onClick={showHint}
+								disabled={hintsShown >= hints.length}
+							/>
+							<ActionButton
+								className="ml-auto"
+								label="Show answer"
+								shortcut="Enter"
+								onClick={reveal}
+							/>
+						</>
+					)}
+				</footer>
+			}
+		/>
 	);
 }

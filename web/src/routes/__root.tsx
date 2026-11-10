@@ -4,24 +4,43 @@ import {
 	HeadContent,
 	Link,
 	Outlet,
+	retainSearchParams,
+	stripSearchParams,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { SiteHeader } from "@/components/site-header";
 import { ThemeProvider } from "@/components/theme-provider";
 import { buttonVariants } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { DEFAULT_COMPANY, parseCompanySearch } from "@/lib/companies";
 import { pageTitle } from "@/lib/format";
 
 export const Route = createRootRoute({
-	// The header's readiness is a nicety: when it fails, the page's own loader reports the error.
-	loader: () => api.readiness().catch(() => null),
+	// The company is the one filter every page shares, so it follows you between pages.
+	validateSearch: parseCompanySearch,
+	search: {
+		middlewares: [
+			retainSearchParams(["company"]),
+			stripSearchParams({ company: DEFAULT_COMPANY }),
+		],
+	},
+	loaderDeps: ({ search: { company } }) => ({ company }),
+	// Awaited, so the page paints in one go (a Suspense fallback would hold back the content
+	// that follows it). Both are niceties: when they fail, the page's own loader reports it.
+	loader: async ({ deps: { company } }) => {
+		const [readiness, companies] = await Promise.all([
+			api.readiness(company).catch(() => null),
+			api.companies(),
+		]);
+		return { readiness, companies };
+	},
 	head: () => ({ meta: [{ title: pageTitle() }] }),
 	component: Root,
 	notFoundComponent: NotFound,
 });
 
 function Root() {
-	const readiness = Route.useLoaderData();
+	const { readiness } = Route.useLoaderData();
 	return (
 		<ThemeProvider>
 			<HeadContent />

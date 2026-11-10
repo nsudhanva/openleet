@@ -30,15 +30,26 @@ describe("HTTP API, end to end", () => {
 		expect((await api("/api/search")).status).toBe(400);
 	});
 
-	it("lists every problem without topics, and serves one full card", async () => {
+	it("lists companies and one list's problems without topics, and serves one full card", async () => {
+		const companies = await api("/api/companies");
+		expect(companies.body[0]).toMatchObject({ slug: "google", name: "Google" });
+		expect(companies.body.length).toBeGreaterThan(1);
+
+		// Google's 6 months is the default list.
 		const list = await api("/api/problems");
-		// 793 Google problems, then the free LeetCode 1–1000 problems Google did not ask.
-		expect(list.body).toHaveLength(1175);
-		expect(list.body.at(-1).asked).toEqual({});
+		expect(list.body).toHaveLength(793);
+		expect(list.body[0]).toMatchObject({ slug: "two-sum", rank: 1 });
+		expect(list.body[0].companies[0]).toBe("google");
 		expect(list.body[0]).not.toHaveProperty("topics");
+		const meta = await api("/api/problems?company=meta&period=30d");
+		expect(meta.body[0].slug).toBe("median-of-two-sorted-arrays");
+		const classic = await api("/api/problems?company=meta&period=lc1000");
+		expect(classic.body).toHaveLength(1000);
+		expect(classic.body[0]).toMatchObject({ id: 1, rank: 1 });
 
 		const card = await api("/api/problems/two-sum");
 		expect(card.body.problem.topics).toEqual(["Array", "Hash Table"]);
+		expect(card.body.problem.companies.google["6m"].rank).toBe(1);
 		expect(card.body.approach.hints.length).toBeGreaterThan(0);
 		expect(card.body.state).toBeNull();
 		expect((await api("/api/problems/not-a-problem")).status).toBe(404);
@@ -51,7 +62,10 @@ describe("HTTP API, end to end", () => {
 		expect(deck.body.topics.length).toBeGreaterThan(100);
 		const recent = await api("/api/deck?period=30d");
 		expect(recent.body.remaining).toBe(154);
-		expect(recent.body.card.problem.asked["30d"].rank).toBe(1);
+		expect(recent.body.card.problem.companies.google["30d"].rank).toBe(1);
+		const meta = await api("/api/deck?company=meta&period=30d");
+		expect(meta.body.remaining).toBe(27);
+		expect(meta.body.card.problem.slug).toBe("median-of-two-sorted-arrays");
 		const classic = await api("/api/deck?period=lc1000");
 		expect(classic.body.card.problem.id).toBe(1);
 		const stale = await api("/api/deck?slug=no-longer-listed");

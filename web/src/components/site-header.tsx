@@ -3,6 +3,8 @@ import { GalleryVerticalEndIcon } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
 import { SearchDialog } from "@/components/search-dialog";
 import { buttonVariants } from "@/components/ui/button";
+import { useCompanies, useCompany } from "@/hooks/use-companies";
+import { companyName } from "@/lib/companies";
 import { percent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +17,7 @@ const NAV: { to: LinkProps["to"]; label: string; exact?: boolean }[] = [
 
 /** `readiness` is null while the server cannot say; the header then leaves it out. */
 export function SiteHeader({ readiness }: { readiness: number | null }) {
+	const company = companyName(useCompanies(), useCompany());
 	return (
 		<header className="sticky top-0 z-40 h-12 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
 			<div className="mx-auto flex h-full max-w-7xl items-center gap-1 px-2 sm:gap-2 sm:px-5">
@@ -22,13 +25,13 @@ export function SiteHeader({ readiness }: { readiness: number | null }) {
 					to="/"
 					search={{}}
 					className="mr-1 flex items-center gap-2 font-bold tracking-tight sm:mr-2"
-					aria-label="Google LeetCode cards home"
+					aria-label="OpenLeet home"
 				>
 					<GalleryVerticalEndIcon
 						className="size-5 text-card-margin"
 						aria-hidden
 					/>
-					<span className="hidden xl:inline">Google LeetCode cards</span>
+					<span className="hidden md:inline">OpenLeet</span>
 				</Link>
 				<nav aria-label="Main" className="flex items-center gap-0.5">
 					{NAV.map(({ to, label, exact }) => (
@@ -51,7 +54,7 @@ export function SiteHeader({ readiness }: { readiness: number | null }) {
 						<Link
 							to="/progress"
 							className="hidden items-center gap-2 rounded-md px-2 py-1 text-sm text-muted-foreground hover:text-foreground lg:flex"
-							title="Readiness, updated by the background scorer"
+							title={`Readiness for ${company}, updated by the background scorer`}
 						>
 							Readiness
 							<span className="font-semibold text-foreground tabular-nums">

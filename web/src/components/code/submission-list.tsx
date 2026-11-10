@@ -1,5 +1,5 @@
 import { VerdictBadge } from "@/components/code/verdict";
-import { timeFrom } from "@/lib/format";
+import { cpuTime, timeFrom } from "@/lib/format";
 import type { SubmissionSummary } from "@/lib/types";
 
 /** Your submissions, newest first; choosing one loads its code into the editor. */
@@ -35,7 +35,7 @@ export function SubmissionList({
 							{s.passed} / {s.total}
 						</span>
 						<span className="text-muted-foreground tabular-nums">
-							{s.cpuMs} ms
+							{cpuTime(s.cpuMs)}
 						</span>
 						<span className="ml-auto text-xs text-muted-foreground">
 							{loading === s.id ? "Loading…" : timeFrom(s.at)}

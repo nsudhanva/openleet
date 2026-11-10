@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import type { CardList } from "@/lib/types";
 
-export const LIST_LABEL: Record<CardList, string> = {
+const LIST_LABEL: Record<CardList, string> = {
 	again: "Visit again",
 	less: "Visit less often",
 };

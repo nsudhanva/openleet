@@ -15,13 +15,18 @@ export function timeFrom(at: number, now = Date.now()): string {
 	return "now";
 }
 
+/** "17 ms": a CPU time as the judge reports it. */
+export function cpuTime(ms: number): string {
+	return `${ms} ms`;
+}
+
 export function percent(value: number, digits = 0): string {
 	return `${(value * 100).toFixed(digits)}%`;
 }
 
-const SITE = "Google LeetCode cards";
+const SITE = "OpenLeet";
 
-/** "Problems | Google LeetCode cards"; the site name alone without parts. */
+/** "Problems | OpenLeet"; the site name alone without parts. */
 export function pageTitle(...parts: string[]): string {
 	return [...parts, SITE].join(" | ");
 }

@@ -1,4 +1,3 @@
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import {
 	type CSSProperties,
 	type ReactNode,
@@ -6,8 +5,8 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { Button } from "@/components/ui/button";
-import { useHotkeys } from "@/hooks/use-hotkeys";
+import { PagerControls } from "@/components/pager";
+import { usePager } from "@/hooks/use-pager";
 import { cn } from "@/lib/utils";
 
 /** Font sizes to try, largest first; below the last one the content pages instead. */
@@ -46,15 +45,20 @@ export function FitPages({
 		width: 0,
 		height: 0,
 	});
-	const [page, setPage] = useState(0);
+	const pager = usePager(layout.pages, arrowKeys);
+	const { page } = pager;
 
 	useLayoutEffect(() => {
 		const box = viewport.current;
 		const inner = content.current;
 		if (!box || !inner) return;
 
+		// The box size the layout was last measured for.
+		let measured = { width: -1, height: -1 };
+
 		function measure() {
 			if (!box || !inner) return;
+			measured = { width: box.clientWidth, height: box.clientHeight };
 			const fits = (fontSize: number) => {
 				Object.assign(inner.style, {
 					fontSize: `${fontSize}px`,
@@ -63,12 +67,20 @@ export function FitPages({
 				});
 				return inner.scrollHeight <= box.clientHeight;
 			};
-			const fontSize = FONT_SIZES.find(fits);
+			// Each try is a layout, so after the largest size try the smallest: when even that
+			// is too big, the sizes between need no try.
+			const largest = FONT_SIZES[0];
+			const smallest = FONT_SIZES[FONT_SIZES.length - 1];
+			const fontSize = fits(largest)
+				? largest
+				: fits(smallest)
+					? (FONT_SIZES.slice(1, -1).find(fits) ?? smallest)
+					: undefined;
 			if (fontSize) {
+				inner.style.fontSize = `${fontSize}px`;
 				setLayout({ fontSize, pages: 1, width: 0, height: 0 });
 				return;
 			}
-			const smallest = FONT_SIZES[FONT_SIZES.length - 1];
 			const width = box.clientWidth;
 			const height = box.clientHeight - PAGER_HEIGHT;
 			Object.assign(inner.style, {
@@ -82,11 +94,17 @@ export function FitPages({
 				Math.round((inner.scrollWidth + COLUMN_GAP) / (width + COLUMN_GAP)),
 			);
 			setLayout({ fontSize: smallest, pages, width, height });
-			setPage((p) => Math.min(p, pages - 1));
 		}
 
 		measure();
-		const observer = new ResizeObserver(measure);
+		// Its first callback, and any after a change that kept the size, would redo the same work.
+		const observer = new ResizeObserver(() => {
+			if (
+				box.clientWidth !== measured.width ||
+				box.clientHeight !== measured.height
+			)
+				measure();
+		});
 		observer.observe(box);
 		// Images and fonts load late and change the content height.
 		for (const img of inner.querySelectorAll("img")) {
@@ -96,13 +114,6 @@ export function FitPages({
 	}, []);
 
 	const paged = layout.pages > 1;
-	const turn = (by: number) =>
-		setPage((p) => Math.min(layout.pages - 1, Math.max(0, p + by)));
-	useHotkeys(
-		arrowKeys && paged
-			? { ArrowLeft: () => turn(-1), ArrowRight: () => turn(1) }
-			: {},
-	);
 
 	const style: CSSProperties = paged
 		? {
@@ -130,27 +141,13 @@ export function FitPages({
 				{children}
 			</div>
 			{paged && (
-				<div className="absolute right-0 bottom-0 flex h-7 items-center gap-1 bg-card text-xs text-muted-foreground tabular-nums">
-					<Button
-						variant="ghost"
-						size="icon-xs"
-						aria-label="Previous page"
-						disabled={page === 0}
-						onClick={() => turn(-1)}
-					>
-						<ChevronLeftIcon />
-					</Button>
+				<PagerControls
+					pager={pager}
+					size="xs"
+					className="absolute right-0 bottom-0 h-7 gap-1 bg-card text-xs"
+				>
 					Page {page + 1} of {layout.pages}
-					<Button
-						variant="ghost"
-						size="icon-xs"
-						aria-label="Next page"
-						disabled={page === layout.pages - 1}
-						onClick={() => turn(1)}
-					>
-						<ChevronRightIcon />
-					</Button>
-				</div>
+				</PagerControls>
 			)}
 		</div>
 	);

@@ -6,18 +6,26 @@
 export const DIFFICULTIES = ["Easy", "Medium", "Hard"] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
 
-/** How recently Google asked a problem; each list is a subset of the next. */
-export const ASKED_PERIODS = ["30d", "3m", "6m"] as const;
+/** How recently a company asked a problem; each list is a subset of the next. */
+export const ASKED_PERIODS = ["30d", "3m", "6m", "all"] as const;
 export type AskedPeriod = (typeof ASKED_PERIODS)[number];
 
-/** The problem lists: Google's three periods, then the free LeetCode problems 1 to 1000. */
+/** The problem lists: a company's periods, then the free LeetCode problems 1 to 1000. */
 export const PERIODS = [...ASKED_PERIODS, "lc1000"] as const;
 export type Period = (typeof PERIODS)[number];
 export const PERIOD_LABEL: Record<Period, string> = {
 	"30d": "30 days",
 	"3m": "3 months",
 	"6m": "6 months",
+	all: "All time",
 	lc1000: "LC 1–1000",
+};
+/** "in the last 6 months", "at any time": how a sentence names an asked period. */
+export const PERIOD_PHRASE: Record<AskedPeriod, string> = {
+	"30d": "in the last 30 days",
+	"3m": "in the last 3 months",
+	"6m": "in the last 6 months",
+	all: "at any time",
 };
 
 export function isAskedPeriod(period: Period): period is AskedPeriod {
@@ -30,19 +38,30 @@ export interface Asked {
 	frequency: number;
 }
 
-/** One row of data/problems.json (built by `uv run google ingest`). */
+/** A company with problem lists, in the picker's order (GET /api/companies). */
+export interface Company {
+	slug: string;
+	name: string;
+	/** Problems it asked, all time. */
+	problems: number;
+}
+
+/** One company's rank and frequency per period it asked a problem in. */
+export type CompanyAsked = Partial<Record<AskedPeriod, Asked>>;
+
+/** One problem of data/problems.json (built by `uv run google ingest`). */
 export interface Problem {
 	id: number;
 	slug: string;
 	title: string;
 	difficulty: Difficulty;
-	/** Google's lists; empty for a classic problem Google did not ask. */
-	asked: Partial<Record<AskedPeriod, Asked>>;
+	/** Every company that asked it, by slug; empty for a classic problem none of them asked. */
+	companies: Record<string, CompanyAsked>;
 	url: string;
 	topics: string[];
 	premium: boolean;
-	/** Sanitized HTML statement; null for premium problems. */
-	description: string | null;
+	/** Sanitized HTML statement (doocs/leetcode, CC BY-SA 4.0), premium problems included. */
+	description: string;
 }
 
 /** One entry of data/approaches.json, written in ASD-STE100 Simplified Technical English. */
@@ -59,11 +78,11 @@ export interface Approach {
  * What the learner did with a card. "again" adds it to the visit-again list, "less" to the
  * visit-less-often list, "good" clears both, and "skip" defers it without a grade.
  */
-export const GRADES = ["again", "good", "less", "skip"] as const;
+const GRADES = ["again", "good", "less", "skip"] as const;
 export type Grade = (typeof GRADES)[number];
 
 export type CardList = "again" | "less";
-export type CardStatus = "new" | "due" | "later";
+type CardStatus = "new" | "due" | "later";
 
 /** A card's Leitner state, replayed by the server from the attempt log. */
 export interface CardState {
@@ -75,8 +94,6 @@ export interface CardState {
 	lastScore: number | null;
 	lastGrade: Grade;
 }
-
-// ---- Study ----
 
 export interface StudyCard {
 	problem: Problem;
@@ -101,12 +118,18 @@ export interface AttemptInput {
 	hints: number;
 }
 
-/** Every problem with its progress. Topics stay off so browsing does not spoil guesses. */
+/**
+ * One problem of a list (GET /api/problems?company=&period=), in list order, with its
+ * progress. Topics stay off so browsing does not spoil guesses.
+ */
 export interface ProblemRow
-	extends Pick<
-		Problem,
-		"id" | "slug" | "title" | "difficulty" | "asked" | "premium"
-	> {
+	extends Pick<Problem, "id" | "slug" | "title" | "difficulty" | "premium"> {
+	/** Rank in the chosen list (LC 1–1000: the LeetCode number). */
+	rank: number;
+	/** Frequency (0-100) in the chosen list (LC 1–1000: the best of any company, or 0). */
+	frequency: number;
+	/** Slugs of every company that asked it in any period, in picker order. */
+	companies: string[];
 	status: CardStatus;
 	list: CardList | null;
 	reviews: number;
@@ -134,13 +157,11 @@ export interface SearchHit {
 	snippet: string | null;
 }
 
-// ---- Progress ----
-
-export interface ScoreReport {
+interface ScoreReport {
 	computedAt: number;
-	/** Mastery weighted by 6-month Google frequency, 0..1. */
+	/** Mastery weighted by the company's 6-month frequency, 0..1. */
 	readiness: number;
-	/** Share of Google problems graded at least once. */
+	/** Share of the company's 6-month problems graded at least once. */
 	coverage: number;
 	/** Mean topic score over the last 50 graded attempts. */
 	accuracy: number | null;
@@ -169,9 +190,7 @@ export interface Report {
 	history: DailyScore[];
 }
 
-// ---- Code ----
-
-export const VERDICTS = [
+const VERDICTS = [
 	"accepted",
 	"wrong_answer",
 	"time_limit_exceeded",
@@ -195,6 +214,8 @@ export interface CodeInfo {
 	slug: string;
 	starter: string | null;
 	draft: string | null;
+	/** The code Reset replaced, which Restore brings back. */
+	previous: string | null;
 	judge: {
 		supported: boolean;
 		reason: string | null;
@@ -205,6 +226,12 @@ export interface CodeInfo {
 	};
 	examples: CodeExample[];
 	solved: boolean;
+}
+
+/** The editor's code after Reset or Restore: `code` null means the starter. */
+export interface DraftVersions {
+	code: string | null;
+	previous: string | null;
 }
 
 export interface RunCase {

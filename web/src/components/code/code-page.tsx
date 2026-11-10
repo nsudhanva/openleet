@@ -1,22 +1,41 @@
 import { Link } from "@tanstack/react-router";
-import { NotebookTextIcon, RotateCcwIcon } from "lucide-react";
-import { type ReactNode, useMemo, useRef, useState } from "react";
-import { ActionButton } from "@/components/action-button";
 import {
-	CodeEditor,
-	type CodeEditorHandle,
-} from "@/components/code/code-editor";
+	ArrowLeftIcon,
+	CheckIcon,
+	HistoryIcon,
+	NotebookTextIcon,
+	RotateCcwIcon,
+} from "lucide-react";
+import {
+	type ComponentProps,
+	lazy,
+	type ReactNode,
+	Suspense,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { ActionButton } from "@/components/action-button";
+import type { CodeEditorHandle } from "@/components/code/code-editor";
 import { RunResultView, SubmitResultView } from "@/components/code/results";
+import { SubmissionChart } from "@/components/code/submission-chart";
 import { SubmissionList } from "@/components/code/submission-list";
-import { CARD_SURFACE, ProblemHeader } from "@/components/problem-header";
-import { ProblemStatement } from "@/components/problem-statement";
+import {
+	type Pane,
+	ProblemCard,
+	ProblemPage,
+} from "@/components/problem-frame";
 import { Segmented } from "@/components/segmented";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useAfterPaint } from "@/hooks/use-after-paint";
 import { type SaveStatus, useAutosave } from "@/hooks/use-autosave";
+import { useCompanies, useCompany } from "@/hooks/use-companies";
 import { useModKeys } from "@/hooks/use-hotkeys";
 import { api, messageOf } from "@/lib/api";
+import { companyName } from "@/lib/companies";
+import { cpuTime } from "@/lib/format";
 import { examplesToTestcase } from "@/lib/testcase";
 import { TONE } from "@/lib/tones";
 import type {
@@ -32,6 +51,25 @@ export interface CodePageData {
 	card: StudyCard;
 	code: CodeInfo;
 	submissions: SubmissionSummary[];
+}
+
+const CodeEditor = lazy(async () => ({
+	default: (await import("@/components/code/code-editor")).CodeEditor,
+}));
+
+/**
+ * CodeMirror is most of this page's code, so it loads once the statement is on screen; until
+ * then an empty box of the same size holds its place.
+ */
+function DeferredCodeEditor(props: ComponentProps<typeof CodeEditor>) {
+	const painted = useAfterPaint();
+	const placeholder = <div className={props.className} />;
+	if (!painted) return placeholder;
+	return (
+		<Suspense fallback={placeholder}>
+			<CodeEditor {...props} />
+		</Suspense>
+	);
 }
 
 type Tab = "testcase" | "result" | "submissions";
@@ -55,14 +93,37 @@ const SAVE_TEXT: Record<SaveStatus, string> = {
 	failed: "Draft not saved",
 };
 
+/** Restore's tooltip: what it brings back, by the first two lines the starter lacks. */
+function restoreTitle(previous: string | null, starter: string): string {
+	if (previous === null)
+		return "Nothing to restore: Reset keeps your code here";
+	const known = new Set(starter.split("\n").map((line) => line.trim()));
+	const own = previous
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line && !known.has(line));
+	const title = "Bring back your code from before the last reset";
+	if (!own.length) return title;
+	return [
+		`${title}:`,
+		...own.slice(0, 2),
+		...(own.length > 2 ? ["…"] : []),
+	].join("\n");
+}
+
+/** "3 examples · 34 hidden · 2 stress tests · 9630 ms CPU limit". */
 function judgeSummary({
 	examples,
 	hidden,
 	stress,
 	timeLimitMs,
-}: CodeInfo["judge"]) {
-	const limit = timeLimitMs ? `, ${timeLimitMs} ms CPU limit` : "";
-	return `Submit runs ${examples} examples, ${hidden} hidden and ${stress} stress tests${limit}.`;
+}: CodeInfo["judge"]): string {
+	return [
+		`${examples} examples`,
+		`${hidden} hidden`,
+		`${stress} stress tests`,
+		...(timeLimitMs ? [`${cpuTime(timeLimitMs)} CPU limit`] : []),
+	].join(" · ");
 }
 
 /**
@@ -76,12 +137,17 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 	const starter = code.starter ?? "";
 	const supported = code.judge.supported;
 
+	const companies = useCompanies();
+	const company = useCompany();
 	const editor = useRef<CodeEditorHandle>(null);
 	const source = useRef(code.draft ?? starter);
+	// Code back at the starter is no draft at all: the API takes it as ''.
+	const asDraft = (text: string) => (text === starter ? "" : text);
 	const draft = useAutosave((text: string, keepalive) =>
-		// Code back at the starter is no draft at all.
-		api.saveDraft(slug, text === starter ? "" : text, keepalive),
+		api.saveDraft(slug, asDraft(text), keepalive),
 	);
+	const [previous, setPrevious] = useState(code.previous);
+	const [swapping, setSwapping] = useState(false);
 
 	const examples = useMemo(
 		() => examplesToTestcase(code.examples),
@@ -91,6 +157,7 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 	const custom = testcase.trim() !== examples.trim();
 
 	const [tab, setTab] = useState<Tab>("testcase");
+	const [pane, setPane] = useState<Pane>("problem");
 	const [busy, setBusy] = useState<Job | null>(null);
 	const [outcome, setOutcome] = useState<Outcome | null>(null);
 	const [runs, setRuns] = useState(0);
@@ -103,10 +170,19 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 		draft.schedule(text);
 	}
 
+	/** Puts `code` in the editor as one undoable change, or keeps it for the editor to start with. */
+	function replaceCode(code: string) {
+		if (editor.current) {
+			editor.current.setValue(code);
+			editor.current.focus();
+		} else edit(code);
+	}
+
 	async function judge(job: Job) {
 		if (!supported || busy) return;
 		setBusy(job);
 		setTab("result");
+		setPane("aside");
 		try {
 			if (job === "run") {
 				const input = custom ? testcase : undefined;
@@ -133,13 +209,33 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 	async function openSubmission(id: number) {
 		setOpening(id);
 		try {
-			editor.current?.setValue((await api.submission(id)).code);
-			editor.current?.focus();
+			replaceCode((await api.submission(id)).code);
 		} catch (error) {
 			setOutcome({ kind: "error", message: messageOf(error) });
 			setTab("result");
 		} finally {
 			setOpening(null);
+		}
+	}
+
+	/** Reset to the starter or Restore the previous version; the server keeps both. */
+	async function swapVersion(action: "reset" | "restore") {
+		setSwapping(true);
+		try {
+			// A pending save must land first, or it could overwrite the new version.
+			await draft.flush();
+			const current = asDraft(source.current);
+			const next = await (action === "reset"
+				? api.resetDraft(slug, current)
+				: api.restoreDraft(slug, current));
+			setPrevious(next.previous);
+			// One undoable change, so ⌘Z still brings the replaced code back.
+			replaceCode(next.code ?? starter);
+		} catch (error) {
+			setOutcome({ kind: "error", message: messageOf(error) });
+			setTab("result");
+		} finally {
+			setSwapping(false);
 		}
 	}
 
@@ -149,125 +245,153 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 	});
 
 	return (
-		<article
-			aria-labelledby="problem-title"
-			className={cn(
-				"flex min-h-0 flex-col lg:h-full lg:overflow-hidden",
-				CARD_SURFACE,
-			)}
-		>
-			<ProblemHeader problem={problem}>
-				{solved && (
-					<Badge className={cn("font-semibold", TONE.success)}>Solved</Badge>
-				)}
-				<Link
-					to="/"
-					search={{ set: "all", slug }}
-					className={cn(
-						buttonVariants({ variant: "ghost", size: "xs" }),
-						"text-muted-foreground",
-					)}
-					title="Back to the flashcard"
-				>
-					<NotebookTextIcon data-icon="inline-start" />
-					Card
-				</Link>
-			</ProblemHeader>
-
-			<div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-				<section
-					aria-label="Statement"
-					className="flex h-[60dvh] min-h-0 flex-col px-4 py-3 sm:px-6 lg:h-auto"
-				>
-					<ProblemStatement problem={problem} arrowKeys />
-				</section>
-
-				<section
-					aria-label="Solution"
-					className="flex min-h-0 flex-col border-t border-dashed lg:border-t-0 lg:border-l"
-				>
-					<CodeEditor
-						ref={editor}
-						initial={source.current}
-						onChange={edit}
-						label="Python 3 solution"
-						className="h-[55dvh] min-h-0 lg:h-auto lg:flex-[3]"
-					/>
-					<div className="flex h-96 min-h-0 flex-col gap-2 border-t border-dashed px-4 py-2 sm:px-6 lg:h-auto lg:flex-[2]">
-						<Segmented
-							label="Panel"
-							value={tab}
-							options={TABS}
-							onChange={setTab}
-						/>
-						{!supported && (
-							<p
-								role="note"
-								className="rounded-md border border-warning/40 bg-warning-wash px-3 py-2 text-sm text-warning"
-							>
-								Run and Submit are off for this problem
-								{code.judge.reason ? `: ${code.judge.reason}` : "."}
-							</p>
+		<ProblemPage
+			toolbar={
+				<>
+					<Link
+						to="/"
+						className={cn(
+							buttonVariants({ variant: "ghost", size: "sm" }),
+							"text-muted-foreground",
 						)}
-						<div className="min-h-0 flex-1 overflow-y-auto">
-							{tab === "testcase" && (
-								<TestcasePanel
-									value={testcase}
-									onChange={setTestcase}
-									custom={custom}
-									onUseExamples={() => setTestcase(examples)}
-									summary={supported ? judgeSummary(code.judge) : null}
-								/>
+						title="Back to the study queue"
+					>
+						<ArrowLeftIcon data-icon="inline-start" />
+						Study · {companyName(companies, company)}
+					</Link>
+					<span className="text-sm text-muted-foreground">
+						Python 3{supported && ` · ${judgeSummary(code.judge)}`}
+					</span>
+				</>
+			}
+		>
+			<ProblemCard
+				problem={problem}
+				actions={
+					<>
+						{solved && (
+							<Badge className={cn("font-semibold", TONE.success)}>
+								<CheckIcon className="sm:hidden" aria-hidden />
+								<span className="max-sm:sr-only">Solved</span>
+							</Badge>
+						)}
+						<Link
+							to="/"
+							search={{ set: "all", slug }}
+							className={cn(
+								buttonVariants({ variant: "ghost", size: "xs" }),
+								"text-muted-foreground",
 							)}
-							{tab === "result" && (
-								<ResultPanel key={runs} busy={busy} outcome={outcome} />
+							title="Back to the flashcard"
+						>
+							<NotebookTextIcon data-icon="inline-start" />
+							<span className="max-sm:sr-only">Card</span>
+						</Link>
+					</>
+				}
+				period="6m"
+				pane={pane}
+				onPaneChange={setPane}
+				asideLabel="Code"
+				aside={
+					<>
+						<DeferredCodeEditor
+							ref={editor}
+							initial={source.current}
+							onChange={edit}
+							label="Python 3 solution"
+							className="min-h-0 flex-[3]"
+						/>
+						<div className="flex min-h-0 flex-[2] flex-col gap-2 border-t border-dashed px-4 py-2 sm:px-6">
+							<Segmented
+								label="Panel"
+								value={tab}
+								options={TABS}
+								onChange={setTab}
+							/>
+							{!supported && (
+								<p
+									role="note"
+									className="rounded-md border border-warning/40 bg-warning-wash px-3 py-2 text-sm text-warning"
+								>
+									Run and Submit are off for this problem
+									{code.judge.reason ? `: ${code.judge.reason}` : "."}
+								</p>
 							)}
-							{tab === "submissions" && (
-								<SubmissionList
-									submissions={submissions}
-									loading={opening}
-									onOpen={openSubmission}
-								/>
-							)}
+							<div className="min-h-0 flex-1 overflow-y-auto">
+								{tab === "testcase" && (
+									<TestcasePanel
+										value={testcase}
+										onChange={setTestcase}
+										custom={custom}
+										onUseExamples={() => setTestcase(examples)}
+									/>
+								)}
+								{tab === "result" && (
+									<ResultPanel key={runs} busy={busy} outcome={outcome} />
+								)}
+								{tab === "submissions" && (
+									<div className="space-y-2">
+										<SubmissionChart
+											submissions={submissions}
+											timeLimitMs={code.judge.timeLimitMs}
+											onOpen={openSubmission}
+										/>
+										<SubmissionList
+											submissions={submissions}
+											loading={opening}
+											onOpen={openSubmission}
+										/>
+									</div>
+								)}
+							</div>
 						</div>
-					</div>
-				</section>
-			</div>
-
-			<footer className="flex flex-wrap items-center gap-2 border-t px-4 py-2 sm:px-6">
-				<span className="text-xs font-medium text-muted-foreground">
-					Python 3
-				</span>
-				<span className="text-xs text-muted-foreground" aria-live="polite">
-					{SAVE_TEXT[draft.status]}
-				</span>
-				<Button
-					variant="ghost"
-					size="sm"
-					disabled={!code.starter}
-					onClick={() => editor.current?.setValue(starter)}
-					title="Replace your code with the starter code (⌘Z undoes it)"
-				>
-					<RotateCcwIcon data-icon="inline-start" />
-					Reset to starter
-				</Button>
-				<div className="ml-auto flex gap-2">
-					<ActionButton
-						variant="outline"
-						label={busy === "run" ? "Running…" : "Run"}
-						shortcut="⌘↵"
-						disabled={!supported || busy !== null}
-						onClick={() => judge("run")}
-					/>
-					<ActionButton
-						label={busy === "submit" ? "Submitting…" : "Submit"}
-						shortcut="⌘⇧↵"
-						disabled={!supported || busy !== null}
-						onClick={() => judge("submit")}
-					/>
-				</div>
-			</footer>
-		</article>
+					</>
+				}
+				footer={
+					<footer className="flex flex-wrap items-center gap-2 border-t px-4 py-2 sm:px-6">
+						<span className="text-xs text-muted-foreground" aria-live="polite">
+							{SAVE_TEXT[draft.status]}
+						</span>
+						<Button
+							variant="ghost"
+							size="sm"
+							disabled={!code.starter || swapping}
+							onClick={() => swapVersion("reset")}
+							title="Replace your code with the starter code; Restore previous brings it back"
+						>
+							<RotateCcwIcon data-icon="inline-start" />
+							Reset
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							disabled={previous === null || swapping}
+							onClick={() => swapVersion("restore")}
+							title={restoreTitle(previous, starter)}
+						>
+							<HistoryIcon data-icon="inline-start" />
+							Restore previous
+						</Button>
+						<div className="ml-auto flex gap-2">
+							<ActionButton
+								variant="outline"
+								label={busy === "run" ? "Running…" : "Run"}
+								shortcut="⌘↵"
+								disabled={!supported || busy !== null}
+								onClick={() => judge("run")}
+							/>
+							<ActionButton
+								label={busy === "submit" ? "Submitting…" : "Submit"}
+								shortcut="⌘⇧↵"
+								disabled={!supported || busy !== null}
+								onClick={() => judge("submit")}
+							/>
+						</div>
+					</footer>
+				}
+			/>
+		</ProblemPage>
 	);
 }
 
@@ -276,13 +400,11 @@ function TestcasePanel({
 	onChange,
 	custom,
 	onUseExamples,
-	summary,
 }: {
 	value: string;
 	onChange: (value: string) => void;
 	custom: boolean;
 	onUseExamples: () => void;
-	summary: string | null;
 }) {
 	return (
 		<div className="flex h-full min-h-40 flex-col gap-1.5">
@@ -307,7 +429,6 @@ function TestcasePanel({
 				onChange={(event) => onChange(event.target.value)}
 				className="min-h-0 flex-1 resize-none bg-transparent font-mono text-xs [field-sizing:fixed] md:text-xs"
 			/>
-			{summary && <p className="text-xs text-muted-foreground">{summary}</p>}
 		</div>
 	);
 }

@@ -1,117 +1,42 @@
 import {
+	cloneElement,
+	lazy,
 	type ReactElement,
 	type ReactNode,
-	useEffect,
-	useRef,
-	useState,
+	Suspense,
 } from "react";
-import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-	AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { useLoadOnUse } from "@/hooks/use-load-on-use";
 
-/**
- * Clears progress only after you confirm twice. Both steps open with "Keep progress"
- * focused, and the second step puts it where "Continue" was, so Enter, Space or a double
- * click never clears anything.
- */
-export function ConfirmClear({
-	trigger,
-	children,
-	title,
-	description,
-	onClear,
-}: {
+const loadDialog = () => import("@/components/confirm-clear-dialog");
+const ConfirmClearDialog = lazy(async () => ({
+	default: (await loadDialog()).ConfirmClearDialog,
+}));
+
+export interface ConfirmClearProps {
 	/** The trigger element, for example `<Button variant="destructive" />`. */
-	trigger: ReactElement;
+	trigger: ReactElement<{ onClick?: () => void; children?: ReactNode }>;
 	/** What the trigger shows. */
 	children: ReactNode;
 	title: string;
 	description: string;
 	onClear: () => Promise<void>;
-}) {
-	const [open, setOpen] = useState(false);
-	const [sure, setSure] = useState(false);
-	const [busy, setBusy] = useState(false);
-	const [failed, setFailed] = useState(false);
-	const keep = useRef<HTMLButtonElement>(null);
+}
 
-	// The second question replaces the first in the same box; focus goes back to "Keep".
-	useEffect(() => {
-		if (sure) keep.current?.focus();
-	}, [sure]);
-
-	function onOpenChange(next: boolean) {
-		setOpen(next);
-		if (!next) {
-			setSure(false);
-			setFailed(false);
-		}
-	}
-
-	async function clear() {
-		setBusy(true);
-		setFailed(false);
-		try {
-			await onClear();
-			onOpenChange(false);
-		} catch {
-			setFailed(true);
-		} finally {
-			setBusy(false);
-		}
-	}
-
+/**
+ * Clears progress only after you confirm twice. The dialog loads on first use, so until
+ * then the trigger is all there is.
+ */
+export function ConfirmClear(props: ConfirmClearProps) {
+	const { used, use, prefetchProps } = useLoadOnUse(loadDialog);
+	const placeholder = cloneElement(props.trigger, {
+		...prefetchProps,
+		onClick: use,
+		children: props.children,
+	});
+	if (!used) return placeholder;
 	return (
-		<AlertDialog open={open} onOpenChange={onOpenChange}>
-			<AlertDialogTrigger render={trigger}>{children}</AlertDialogTrigger>
-			<AlertDialogContent initialFocus={keep}>
-				<AlertDialogHeader>
-					<AlertDialogTitle>{sure ? "Are you sure?" : title}</AlertDialogTitle>
-					<AlertDialogDescription>
-						{sure
-							? "This is the last check. Cleared progress cannot be brought back."
-							: description}
-					</AlertDialogDescription>
-					{failed && (
-						<p role="alert" className="text-sm text-destructive">
-							Not cleared. Try again.
-						</p>
-					)}
-				</AlertDialogHeader>
-				{/* "Keep progress" moves to where "Continue" was, so a double click keeps. */}
-				<AlertDialogFooter>
-					{sure ? (
-						<>
-							<AlertDialogAction
-								variant="destructive"
-								disabled={busy}
-								onClick={clear}
-							>
-								Yes, clear it
-							</AlertDialogAction>
-							<AlertDialogCancel ref={keep}>Keep progress</AlertDialogCancel>
-						</>
-					) : (
-						<>
-							<AlertDialogCancel ref={keep}>Keep progress</AlertDialogCancel>
-							<AlertDialogAction
-								variant="outline"
-								onClick={() => setSure(true)}
-							>
-								Continue
-							</AlertDialogAction>
-						</>
-					)}
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
+		<Suspense fallback={placeholder}>
+			<ConfirmClearDialog {...props} defaultOpen />
+		</Suspense>
 	);
 }

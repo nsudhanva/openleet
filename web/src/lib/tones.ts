@@ -14,3 +14,11 @@ export const TONE_TEXT: Record<Tone, string> = {
 	destructive: "text-destructive",
 	muted: "text-muted-foreground",
 };
+
+/** The same tones as SVG fills, for chart marks. */
+export const TONE_FILL: Record<Tone, string> = {
+	success: "fill-success",
+	warning: "fill-warning",
+	destructive: "fill-destructive",
+	muted: "fill-muted-foreground",
+};

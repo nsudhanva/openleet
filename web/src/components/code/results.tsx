@@ -2,6 +2,7 @@ import { CheckIcon, MinusIcon, XIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { VerdictBadge } from "@/components/code/verdict";
 import { Button } from "@/components/ui/button";
+import { cpuTime } from "@/lib/format";
 import type {
 	FailingCase,
 	RunCase,
@@ -12,7 +13,7 @@ import type {
 import { cn } from "@/lib/utils";
 
 /** A labeled monospace block: input, output, stdout or a traceback. */
-export function CodeBlock({
+function CodeBlock({
 	label,
 	text,
 	danger = false,
@@ -94,7 +95,9 @@ export function RunResultView({ result }: { result: RunResult }) {
 	const current = result.cases[Math.min(index, result.cases.length - 1)];
 	return (
 		<div className="space-y-3">
-			<Summary verdict={result.verdict}>Runtime {result.cpuMs} ms</Summary>
+			<Summary verdict={result.verdict}>
+				Runtime {cpuTime(result.cpuMs)}
+			</Summary>
 			{result.error && <CodeBlock label="Error" text={result.error} danger />}
 			{result.cases.length > 0 && (
 				<div
@@ -146,7 +149,7 @@ export function SubmitResultView({ result }: { result: SubmitResult }) {
 		<div className="space-y-3">
 			<Summary verdict={result.verdict}>
 				{result.passed} / {result.total} tests passed · CPU {result.cpuMs} ms of{" "}
-				{result.limitMs} ms limit
+				{cpuTime(result.limitMs)} limit
 			</Summary>
 			{result.error && <CodeBlock label="Error" text={result.error} danger />}
 			{result.failing && <FailingTest test={result.failing} />}

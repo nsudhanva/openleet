@@ -1,8 +1,12 @@
 import { notFound } from "@tanstack/react-router";
+import type { CompanySearch } from "@/lib/companies";
 import type { StudySearch } from "@/lib/schemas";
 import type {
 	AttemptInput,
 	CodeInfo,
+	Company,
+	DraftVersions,
+	Period,
 	ProblemRow,
 	Report,
 	RunResult,
@@ -99,10 +103,24 @@ async function empty(
 const problemPath = (base: string, slug: string) =>
 	`${base}/${encodeURIComponent(slug)}`;
 
+/** The company list is fixed for a build: fetched once per page load. */
+let companies: Promise<Company[]> | undefined;
+
 /** Typed client for the JSON API under /api (see the README's API table). */
 export const api = {
-	deck: (filter: StudySearch) =>
+	deck: (filter: StudySearch & CompanySearch) =>
 		json<StudyDeck>("GET", "/api/deck", { query: filter }),
+	/** Fetched once per page load; a failure gives an empty list and the next call retries. */
+	companies: () => {
+		companies ??= json<Company[]>("GET", "/api/companies").catch(
+			(error: unknown) => {
+				console.error("Could not load the companies", error);
+				companies = undefined; // the next call retries
+				return [];
+			},
+		);
+		return companies;
+	},
 	recordAttempt: (attempt: AttemptInput) =>
 		json<{ score: number | null }>("POST", "/api/attempts", { body: attempt }),
 	/** Empty text deletes the note. */
@@ -112,19 +130,35 @@ export const api = {
 		}),
 	clearProgress: (target: { slug: string } | { all: true }) =>
 		empty("DELETE", "/api/progress", { query: target }),
-	problems: () => json<ProblemRow[]>("GET", "/api/problems"),
+	/** One list's problems, in its order. */
+	problems: (list: CompanySearch & { period: Period }) =>
+		json<ProblemRow[]>("GET", "/api/problems", { query: list }),
 	problem: (slug: string) =>
 		json<StudyCard>("GET", problemPath("/api/problems", slug)),
 	search: (q: string, limit: number, signal?: AbortSignal) =>
 		json<SearchHit[]>("GET", "/api/search", { query: { q, limit }, signal }),
-	report: () => json<Report>("GET", "/api/report"),
-	readiness: async () =>
-		(await json<{ readiness: number }>("GET", "/api/readiness")).readiness,
+	/** Readiness, coverage and difficulty for one company's list; the rest is global. */
+	report: (company: string) =>
+		json<Report>("GET", "/api/report", { query: { company } }),
+	readiness: async (company: string) =>
+		(
+			await json<{ readiness: number }>("GET", "/api/readiness", {
+				query: { company },
+			})
+		).readiness,
 
 	code: (slug: string) => json<CodeInfo>("GET", problemPath("/api/code", slug)),
 	/** Empty code deletes the draft. */
 	saveDraft: (slug: string, code: string, keepalive = false) =>
 		empty("PUT", "/api/drafts", { body: { slug, code }, keepalive }),
+	/** Back to the starter; `code` (the editor's, '' for the starter) becomes the previous version. */
+	resetDraft: (slug: string, code: string) =>
+		json<DraftVersions>("POST", "/api/drafts/reset", { body: { slug, code } }),
+	/** Brings the previous version back; `code` becomes the previous one, so it swaps. */
+	restoreDraft: (slug: string, code: string) =>
+		json<DraftVersions>("POST", "/api/drafts/restore", {
+			body: { slug, code },
+		}),
 	/** Runs the examples, or `input` (one JSON value per line, per parameter) when given. */
 	run: (slug: string, code: string, input?: string) =>
 		json<RunResult>("POST", "/api/run", { body: { slug, code, input } }),

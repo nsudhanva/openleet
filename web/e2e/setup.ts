@@ -8,11 +8,11 @@ declare module "vitest" {
 
 /**
  * Points the end-to-end suite at a running app: E2E_BASE_URL, or the local docker compose
- * stack at http://google.localhost. The suite clears all progress, so use a throwaway database.
+ * stack at http://openleet.localhost. The suite clears all progress, so use a throwaway database.
  */
 export default async function setup(project: TestProject) {
 	const baseUrl = (
-		process.env.E2E_BASE_URL ?? "http://google.localhost"
+		process.env.E2E_BASE_URL ?? "http://openleet.localhost"
 	).replace(/\/$/, "");
 	try {
 		await fetch(`${baseUrl}/api/readiness`);

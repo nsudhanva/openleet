@@ -1,17 +1,20 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import type { SearchSchemaInput } from "@tanstack/react-router";
 import {
-	ChevronLeftIcon,
-	ChevronRightIcon,
-	CodeXmlIcon,
-	LockIcon,
-	RotateCcwIcon,
-	SearchIcon,
-} from "lucide-react";
+	createFileRoute,
+	Link,
+	stripSearchParams,
+	useRouter,
+} from "@tanstack/react-router";
+import { CodeXmlIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
 import { useRef, useState } from "react";
+import { CompanyPicker } from "@/components/company-picker";
+import { CompanyChip } from "@/components/company-tags";
 import { ConfirmClear } from "@/components/confirm-clear";
 import { DifficultyBadge } from "@/components/difficulty-badge";
 import { ListBadge } from "@/components/list-badge";
 import { PageHeader } from "@/components/page-header";
+import { PagerControls } from "@/components/pager";
+import { PremiumBadge } from "@/components/premium-badge";
 import { Segmented } from "@/components/segmented";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,29 +26,46 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { useFitCount } from "@/hooks/use-fit-count";
-import { useHotkeys } from "@/hooks/use-hotkeys";
+import { useCompanies } from "@/hooks/use-companies";
+import { useFitRows } from "@/hooks/use-fit-rows";
+import { usePager } from "@/hooks/use-pager";
 import { useSearch } from "@/hooks/use-search";
 import { api } from "@/lib/api";
+import { ANY_COMPANY, companyName } from "@/lib/companies";
 import { pageTitle, percent, timeFrom } from "@/lib/format";
-import { askedIn, inList } from "@/lib/problem-list";
 import {
-	type Asked,
 	isAskedPeriod,
 	PERIOD_LABEL,
+	PERIOD_PHRASE,
 	PERIODS,
 	type Period,
 	type ProblemRow,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+const DEFAULT_PERIOD: Period = "6m";
+
+/** The list shown: `period` here, the company from the root route. */
+function parsePeriod(search: { period?: Period } & SearchSchemaInput): {
+	period: Period;
+} {
+	const period = PERIODS.find((p) => p === search.period) ?? DEFAULT_PERIOD;
+	return { period };
+}
+
 export const Route = createFileRoute("/problems")({
+	validateSearch: parsePeriod,
+	search: { middlewares: [stripSearchParams({ period: DEFAULT_PERIOD })] },
+	loaderDeps: ({ search: { company, period } }) => ({ company, period }),
 	head: () => ({ meta: [{ title: pageTitle("Problems") }] }),
-	loader: () => api.problems(),
+	// The server returns the list already in its order.
+	loader: ({ deps }) => api.problems(deps),
 	component: Problems,
 });
 
-const ROW_HEIGHT = 37;
+/** Company tags a row shows before folding the rest into "+n". */
+const ROW_TAGS = 3;
+
 /** The API's largest page; a query rarely matches more, so the pager counts all matches. */
 const SEARCH_LIMIT = 1000;
 
@@ -54,8 +74,16 @@ const PERIOD_OPTIONS = PERIODS.map((value) => ({
 	label: PERIOD_LABEL[value],
 }));
 
-function formatFrequency(asked: Asked | undefined): string {
-	return asked ? String(Math.round(asked.frequency)) : "";
+function formatFrequency(row: ProblemRow): string {
+	return row.frequency ? String(Math.round(row.frequency)) : "";
+}
+
+/** "Meta asked in the last 30 days", "LC 1–1000": what the list holds, for its summary. */
+function describeList(count: number, company: string, period: Period): string {
+	if (!isAskedPeriod(period))
+		return `${count} LeetCode problems numbered 1 to 1000, in order; frequency is the highest any company gives.`;
+	const who = company === ANY_COMPANY ? "any listed company" : company;
+	return `${count} problems ${who} asked ${PERIOD_PHRASE[period]}, most frequent first.`;
 }
 
 function statusText(row: ProblemRow): string {
@@ -66,31 +94,31 @@ function statusText(row: ProblemRow): string {
 
 function Problems() {
 	const rows = Route.useLoaderData();
+	const { company, period } = Route.useSearch();
+	const navigate = Route.useNavigate();
+	const companies = useCompanies();
 	const router = useRouter();
 	const [query, setQuery] = useState("");
-	const [period, setPeriod] = useState<Period>("6m");
-	const [page, setPage] = useState(0);
 	const tableArea = useRef<HTMLDivElement>(null);
-	// One row of the box holds the table header.
-	const pageSize = useFitCount(tableArea, ROW_HEIGHT) - 1;
+	const pageSize = useFitRows(tableArea);
 
 	const hits = useSearch(query, SEARCH_LIMIT);
-	// Only problems in the chosen list, in its order.
-	const inPeriod = inList(rows, period);
-	const bySlug = new Map(inPeriod.map((r) => [r.slug, r]));
+	// A search shows only problems in the chosen list.
+	const bySlug = new Map(rows.map((r) => [r.slug, r]));
 	const results = query.trim()
 		? hits.flatMap((hit) => {
 				const row = bySlug.get(hit.slug);
 				return row ? [{ row, snippet: hit.snippet }] : [];
 			})
-		: inPeriod.map((row) => ({ row, snippet: null }));
+		: rows.map((row) => ({ row, snippet: null }));
+	const choose = (next: { company?: string; period?: Period }) => {
+		pager.reset();
+		navigate({ search: (prev) => ({ ...prev, ...next }) });
+	};
 
-	const pages = Math.max(1, Math.ceil(results.length / pageSize));
-	const current = Math.min(page, pages - 1);
-	const visible = results.slice(current * pageSize, (current + 1) * pageSize);
-	const turn = (by: number) =>
-		setPage(Math.min(pages - 1, Math.max(0, current + by)));
-	useHotkeys({ ArrowLeft: () => turn(-1), ArrowRight: () => turn(1) });
+	const pager = usePager(Math.ceil(results.length / pageSize), true);
+	const first = pager.page * pageSize;
+	const visible = results.slice(first, first + pageSize);
 
 	async function reset(slug: string) {
 		await api.clearProgress({ slug });
@@ -103,14 +131,17 @@ function Problems() {
 				title="Problems"
 				actions={
 					<div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+						<CompanyPicker
+							value={company}
+							disabled={!isAskedPeriod(period)}
+							onChange={(next) => choose({ company: next })}
+						/>
 						<Segmented
 							label="Problem list"
 							value={period}
 							options={PERIOD_OPTIONS}
-							onChange={(next) => {
-								setPeriod(next);
-								setPage(0);
-							}}
+							onChange={(next) => choose({ period: next })}
+							className="flex-wrap"
 						/>
 						<div className="relative w-full sm:w-72">
 							<SearchIcon
@@ -121,7 +152,7 @@ function Problems() {
 								value={query}
 								onChange={(e) => {
 									setQuery(e.target.value);
-									setPage(0);
+									pager.reset();
 								}}
 								placeholder="Number, title, topic, or problem text"
 								aria-label="Search problems"
@@ -131,9 +162,7 @@ function Problems() {
 					</div>
 				}
 			>
-				{isAskedPeriod(period)
-					? `${inPeriod.length} problems Google asked in the last ${PERIOD_LABEL[period]}, most frequent first.`
-					: `${inPeriod.length} free LeetCode problems numbered 1 to 1000, in order; ranks are Google's for 6 months.`}{" "}
+				{describeList(rows.length, companyName(companies, company), period)}{" "}
 				Topics stay hidden unless you search for one.
 			</PageHeader>
 
@@ -151,6 +180,7 @@ function Problems() {
 							<TableHead className="w-16">LC</TableHead>
 							<TableHead>Problem</TableHead>
 							<TableHead className="hidden sm:table-cell">Difficulty</TableHead>
+							<TableHead className="hidden xl:table-cell">Asked by</TableHead>
 							<TableHead className="hidden md:table-cell">Status</TableHead>
 							<TableHead className="hidden text-right md:table-cell">
 								Last topics
@@ -165,12 +195,16 @@ function Problems() {
 					</TableHeader>
 					<TableBody>
 						{visible.map(({ row, snippet }) => (
-							<TableRow key={row.slug} className="h-[37px]">
+							<TableRow
+								key={row.slug}
+								// As tall as the icon buttons, so every row is the same height.
+								className="h-10"
+							>
 								<TableCell className="text-right text-muted-foreground tabular-nums">
-									{askedIn(row, period)?.rank}
+									{row.rank}
 								</TableCell>
 								<TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">
-									{formatFrequency(askedIn(row, period))}
+									{formatFrequency(row)}
 								</TableCell>
 								<TableCell className="text-muted-foreground tabular-nums">
 									{row.id}
@@ -184,12 +218,7 @@ function Problems() {
 										<span className="max-w-full shrink-0 truncate">
 											{row.title}
 										</span>
-										{row.premium && (
-											<LockIcon
-												className="size-3.5 shrink-0 self-center text-muted-foreground"
-												aria-label="Premium"
-											/>
-										)}
+										{row.premium && <PremiumBadge />}
 										{snippet && (
 											<span className="hidden min-w-0 truncate text-xs font-normal text-muted-foreground md:inline">
 												{snippet}
@@ -199,6 +228,9 @@ function Problems() {
 								</TableCell>
 								<TableCell className="hidden sm:table-cell">
 									<DifficultyBadge difficulty={row.difficulty} />
+								</TableCell>
+								<TableCell className="hidden xl:table-cell">
+									<RowCompanies slugs={row.companies} selected={company} />
 								</TableCell>
 								<TableCell className="hidden md:table-cell">
 									<div className="flex items-center gap-2 text-muted-foreground">
@@ -210,20 +242,18 @@ function Problems() {
 									{row.lastScore === null ? "—" : percent(row.lastScore)}
 								</TableCell>
 								<TableCell>
-									{!row.premium && (
-										<Link
-											to="/code/$slug"
-											params={{ slug: row.slug }}
-											className={cn(
-												buttonVariants({ variant: "ghost", size: "icon-xs" }),
-												"text-muted-foreground",
-											)}
-											aria-label={`Code ${row.title}`}
-											title="Solve it in Python"
-										>
-											<CodeXmlIcon />
-										</Link>
-									)}
+									<Link
+										to="/code/$slug"
+										params={{ slug: row.slug }}
+										className={cn(
+											buttonVariants({ variant: "ghost", size: "icon-xs" }),
+											"text-muted-foreground",
+										)}
+										aria-label={`Code ${row.title}`}
+										title="Solve it in Python"
+									>
+										<CodeXmlIcon />
+									</Link>
 								</TableCell>
 								<TableCell>
 									{row.lastAt && (
@@ -260,26 +290,43 @@ function Problems() {
 				className="flex items-center justify-end gap-2 pt-2 text-sm text-muted-foreground tabular-nums"
 			>
 				{results.length > 0 &&
-					`${current * pageSize + 1}–${current * pageSize + visible.length} of ${results.length}`}
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					aria-label="Previous page"
-					disabled={current === 0}
-					onClick={() => turn(-1)}
-				>
-					<ChevronLeftIcon />
-				</Button>
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					aria-label="Next page"
-					disabled={current >= pages - 1}
-					onClick={() => turn(1)}
-				>
-					<ChevronRightIcon />
-				</Button>
+					`${first + 1}–${first + visible.length} of ${results.length}`}
+				<PagerControls pager={pager} className="gap-2" />
 			</nav>
+		</div>
+	);
+}
+
+/** A row's companies, compact: the first few (the selected one first) and "+n". */
+function RowCompanies({
+	slugs,
+	selected,
+}: {
+	slugs: string[];
+	selected: string;
+}) {
+	const companies = useCompanies();
+	const ordered = slugs.includes(selected)
+		? [selected, ...slugs.filter((s) => s !== selected)]
+		: slugs;
+	const rest = ordered.slice(ROW_TAGS);
+	return (
+		<div className="flex items-center gap-1">
+			{ordered.slice(0, ROW_TAGS).map((slug) => (
+				<CompanyChip
+					key={slug}
+					name={companyName(companies, slug)}
+					selected={slug === selected}
+				/>
+			))}
+			{rest.length > 0 && (
+				<span
+					className="text-xs text-muted-foreground tabular-nums"
+					title={rest.map((slug) => companyName(companies, slug)).join(", ")}
+				>
+					+{rest.length}
+				</span>
+			)}
 		</div>
 	);
 }

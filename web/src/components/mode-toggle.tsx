@@ -1,44 +1,28 @@
-import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
-import { type Theme, useTheme } from "@/components/theme-provider";
+import { MoonIcon, SunIcon } from "lucide-react";
+import { type ComponentProps, lazy, Suspense } from "react";
 import { Button } from "@/components/ui/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuRadioGroup,
-	DropdownMenuRadioItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { useLoadOnUse } from "@/hooks/use-load-on-use";
 
-const OPTIONS: { value: Theme; label: string; Icon: typeof SunIcon }[] = [
-	{ value: "light", label: "Light", Icon: SunIcon },
-	{ value: "dark", label: "Dark", Icon: MoonIcon },
-	{ value: "system", label: "System", Icon: MonitorIcon },
-];
+const loadMenu = () => import("@/components/theme-menu");
+const ThemeMenu = lazy(async () => ({ default: (await loadMenu()).ThemeMenu }));
 
-export function ModeToggle() {
-	const { theme, setTheme } = useTheme();
-
+/** The theme button: a sun in light mode, a moon in dark mode. */
+export function ThemeButton(props: ComponentProps<typeof Button>) {
 	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger
-				render={<Button variant="ghost" size="icon" aria-label="Theme" />}
-			>
-				<SunIcon className="dark:hidden" />
-				<MoonIcon className="hidden dark:block" />
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-36">
-				<DropdownMenuRadioGroup
-					value={theme}
-					onValueChange={(value) => setTheme(value as Theme)}
-				>
-					{OPTIONS.map(({ value, label, Icon }) => (
-						<DropdownMenuRadioItem key={value} value={value}>
-							<Icon />
-							{label}
-						</DropdownMenuRadioItem>
-					))}
-				</DropdownMenuRadioGroup>
-			</DropdownMenuContent>
-		</DropdownMenu>
+		<Button variant="ghost" size="icon" aria-label="Theme" {...props}>
+			<SunIcon className="dark:hidden" />
+			<MoonIcon className="hidden dark:block" />
+		</Button>
+	);
+}
+
+/** Light, dark or system theme; the menu loads on first use and opens at once. */
+export function ModeToggle() {
+	const { used, use, prefetchProps } = useLoadOnUse(loadMenu);
+	if (!used) return <ThemeButton {...prefetchProps} onClick={use} />;
+	return (
+		<Suspense fallback={<ThemeButton disabled />}>
+			<ThemeMenu defaultOpen />
+		</Suspense>
 	);
 }

@@ -1,10 +1,13 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { CompanyPicker } from "@/components/company-picker";
 import { ConfirmClear } from "@/components/confirm-clear";
 import { FitPages } from "@/components/fit-pages";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { useCompanies } from "@/hooks/use-companies";
 import { api } from "@/lib/api";
+import { ANY_COMPANY, companyName } from "@/lib/companies";
 import { pageTitle, percent } from "@/lib/format";
 import type { StudySet } from "@/lib/scheduler";
 import type { DailyScore, Difficulty } from "@/lib/types";
@@ -12,7 +15,8 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/progress")({
 	head: () => ({ meta: [{ title: pageTitle("Progress") }] }),
-	loader: () => api.report(),
+	loaderDeps: ({ search: { company } }) => ({ company }),
+	loader: ({ deps: { company } }) => api.report(company),
 	component: Progress,
 });
 
@@ -49,11 +53,27 @@ function Panel({
 
 function Progress() {
 	const { report, history } = Route.useLoaderData();
+	const { company } = Route.useSearch();
+	const navigate = Route.useNavigate();
+	const name = companyName(useCompanies(), company);
 	const total = report.byDifficulty.reduce((sum, d) => sum + d.total, 0);
 
 	return (
 		<div className="flex min-h-0 flex-col lg:h-full">
-			<PageHeader title="Progress" actions={<ResetAll />}>
+			<PageHeader
+				title="Progress"
+				actions={
+					<div className="flex flex-wrap items-center gap-2">
+						<CompanyPicker
+							value={company}
+							onChange={(next) =>
+								navigate({ search: (prev) => ({ ...prev, company: next }) })
+							}
+						/>
+						<ResetAll />
+					</div>
+				}
+			>
 				A background scorer recomputes this after every card and every 15
 				minutes, so mastery fades when reviews get old.
 			</PageHeader>
@@ -63,7 +83,11 @@ function Progress() {
 				<Panel
 					id="readiness"
 					title="Readiness"
-					note="Mastery of each problem, weighted by how often Google asks it."
+					note={
+						company === ANY_COMPANY
+							? "Mastery of each problem, weighted by how often the companies ask it, over the last 6 months."
+							: `Mastery of each problem ${name} asked in the last 6 months, weighted by how often it asks it.`
+					}
 				>
 					<p className="text-6xl leading-none font-bold tracking-tighter tabular-nums">
 						{percent(report.readiness, 1)}

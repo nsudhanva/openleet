@@ -16,14 +16,22 @@ function answer(status: number, body?: unknown, statusText = "") {
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
 });
 
 describe("api client", () => {
 	it("sends the query, skipping unset filters, and parses JSON", async () => {
 		const fetch = answer(200, { card: null, remaining: 0, topics: [] });
-		const deck = await api.deck({ set: "again", period: "lc1000" });
+		const deck = await api.deck({
+			set: "again",
+			period: "lc1000",
+			company: "meta",
+			topic: undefined,
+		});
 		expect(deck.remaining).toBe(0);
-		expect(fetch.mock.calls[0][0]).toBe("/api/deck?set=again&period=lc1000");
+		expect(fetch.mock.calls[0][0]).toBe(
+			"/api/deck?set=again&period=lc1000&company=meta",
+		);
 	});
 
 	it("sends JSON bodies and accepts 204 No Content", async () => {
@@ -56,7 +64,21 @@ describe("api client", () => {
 					}),
 			),
 		);
-		await expect(api.problems()).rejects.toThrow("502 Bad Gateway");
+		await expect(
+			api.problems({ company: "google", period: "6m" }),
+		).rejects.toThrow("502 Bad Gateway");
+	});
+
+	it("fetches the company list once, and again after a failure", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		answer(500, { error: "down" });
+		expect(await api.companies()).toEqual([]);
+		const fetch = answer(200, [
+			{ slug: "google", name: "Google", problems: 1 },
+		]);
+		expect(await api.companies()).toHaveLength(1);
+		await api.companies();
+		expect(fetch).toHaveBeenCalledTimes(1);
 	});
 
 	it("turns a 404 into the router's not-found in loaders", async () => {

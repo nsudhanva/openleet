@@ -3,7 +3,8 @@ import { TONE, TONE_TEXT, type Tone } from "@/lib/tones";
 import type { Verdict } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const VERDICT: Record<Verdict, { label: string; tone: Tone }> = {
+/** Every verdict's label and status tone (success, warning, destructive or muted). */
+export const VERDICT: Record<Verdict, { label: string; tone: Tone }> = {
 	accepted: { label: "Accepted", tone: "success" },
 	wrong_answer: { label: "Wrong Answer", tone: "destructive" },
 	time_limit_exceeded: { label: "Time Limit Exceeded", tone: "warning" },

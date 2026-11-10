@@ -5,15 +5,18 @@ import {
 	useRouter,
 } from "@tanstack/react-router";
 import { useState } from "react";
+import { ProblemPage } from "@/components/problem-frame";
 import { type Answered, Flashcard } from "@/components/study/flashcard";
 import { StudyBar } from "@/components/study/study-bar";
 import { buttonVariants } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import type { CompanySearch } from "@/lib/companies";
 import { STUDY_SETS } from "@/lib/scheduler";
-import { type StudySearch, studySearchSchema } from "@/lib/schemas";
+import { parseStudySearch, type StudySearch } from "@/lib/schemas";
+import { isAskedPeriod } from "@/lib/types";
 
 export const Route = createFileRoute("/")({
-	validateSearch: studySearchSchema,
+	validateSearch: parseStudySearch,
 	search: {
 		middlewares: [stripSearchParams({ set: "smart", period: "6m" })],
 	},
@@ -30,7 +33,7 @@ function Study() {
 	const [history, setHistory] = useState<string[]>([]);
 	const [busy, setBusy] = useState(false);
 
-	const go = (next: Partial<StudySearch>) =>
+	const go = (next: Partial<StudySearch & CompanySearch>) =>
 		navigate({ search: (prev) => ({ ...prev, ...next }) });
 
 	async function answer(answered: Answered) {
@@ -63,17 +66,21 @@ function Study() {
 	}
 
 	return (
-		<div className="flex h-full min-h-0 flex-col gap-3">
-			<StudyBar
-				search={search}
-				topics={topics}
-				remaining={remaining}
-				onChange={go}
-			/>
+		<ProblemPage
+			toolbar={
+				<StudyBar
+					search={search}
+					topics={topics}
+					remaining={remaining}
+					onChange={go}
+				/>
+			}
+		>
 			{card ? (
 				<Flashcard
 					key={`${card.problem.slug}:${card.state?.lastAt ?? 0}`}
 					card={card}
+					period={isAskedPeriod(search.period) ? search.period : "6m"}
 					topics={topics}
 					busy={busy}
 					canGoBack={history.length > 0}
@@ -87,7 +94,7 @@ function Study() {
 			) : (
 				<EmptySet setLabel={STUDY_SETS[search.set]} />
 			)}
-		</div>
+		</ProblemPage>
 	);
 }
 

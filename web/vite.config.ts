@@ -15,6 +15,33 @@ function themeBeforePaint(): Plugin {
 	};
 }
 
+/**
+ * Preloads the Latin subsets of the two fonts (both are on every page), so they arrive with
+ * the scripts and the first render already uses them: no reflow when they swap in.
+ */
+function preloadFonts(): Plugin {
+	return {
+		name: "preload-fonts",
+		transformIndexHtml: {
+			order: "post",
+			handler: (_html, { bundle = {} }) =>
+				Object.keys(bundle)
+					.filter((file) => /-latin-wght-normal-[\w-]+\.woff2$/.test(file))
+					.map((file) => ({
+						tag: "link",
+						attrs: {
+							rel: "preload",
+							href: `/${file}`,
+							as: "font",
+							type: "font/woff2",
+							crossorigin: "",
+						},
+						injectTo: "head" as const,
+					})),
+		},
+	};
+}
+
 /** Where `vite` and `vite preview` send /api: the Rust server (server/) by default. */
 const proxy = { "/api": process.env.API_URL ?? "http://127.0.0.1:8080" };
 
@@ -30,5 +57,6 @@ export default defineConfig({
 		viteReact(),
 		tailwindcss(),
 		themeBeforePaint(),
+		preloadFonts(),
 	],
 });
