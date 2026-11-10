@@ -20,8 +20,19 @@ export function cpuTime(ms: number): string {
 	return `${ms} ms`;
 }
 
+/**
+ * A share (0..1) as "42%", or "42.5%" with `digits` 1. A share above 0 that would round to 0
+ * shows as "<1%" ("<0.1%"), and one below 1 that would round to 100 as ">99%" (">99.9%"), so a
+ * little progress never reads as none and almost never as all. Text only: a CSS width needs
+ * the raw number.
+ */
 export function percent(value: number, digits = 0): string {
-	return `${(value * 100).toFixed(digits)}%`;
+	const text = (value * 100).toFixed(digits);
+	const step = (10 ** -digits).toFixed(digits);
+	if (value > 0 && Number(text) === 0) return `<${step}%`;
+	if (value < 1 && Number(text) === 100)
+		return `>${(100 - Number(step)).toFixed(digits)}%`;
+	return `${text}%`;
 }
 
 const SITE = "OpenLeet";

@@ -238,7 +238,7 @@ function Meter({
 				<div className="h-2 overflow-hidden rounded-full bg-muted">
 					<div
 						className="h-full rounded-full bg-primary"
-						style={{ width: percent(value) }}
+						style={{ width: `${value * 100}%` }}
 					/>
 				</div>
 			</Link>
