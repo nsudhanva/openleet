@@ -38,3 +38,5 @@ data/*.db-*
 data/*.duckdb
 data/*.duckdb.wal
 data/acme/
+# A release asset ("corpus"), named in data/judge/corpus.json: uv run openleet judge fetch
+data/judge/tests.duckdb

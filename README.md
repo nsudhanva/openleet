@@ -58,7 +58,8 @@ flowchart LR
 
 A reference counts only if it reproduces the statement's own example outputs. The time limit is
 at least 4× the fastest reference and 1.25× the slowest, so what LeetCode accepted passes here.
-Rebuild with `uv run openleet judge all`.
+Rebuild with `uv run openleet judge all`; `uv run openleet judge publish` uploads the new
+`tests.duckdb` to the `corpus` release and records it in `data/judge/corpus.json`.
 
 Sources: company lists from
 [liquidslr/leetcode-company-wise-problems](https://github.com/liquidslr/leetcode-company-wise-problems),
@@ -90,7 +91,7 @@ as the GitHub secret), run `sudo /opt/openleet/update.sh`.
 The judge needs Linux, so on macOS it runs in Docker:
 
 ```bash
-uv sync && bun install && bun run build
+uv sync && uv run openleet judge fetch && bun install && bun run build
 docker compose up -d judge
 JUDGE_SOCKET=tcp://127.0.0.1:7777 JUDGE_CPU_SCALE=1 cargo run --release -p openleet
 # http://localhost:8080   (bun run dev: web on :3000 with hot reload)

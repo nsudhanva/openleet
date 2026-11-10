@@ -64,6 +64,14 @@ jobs:
         run: |
           bun run test
           bun run build
+      - name: Test corpus
+        # tests.duckdb is too big for git; corpus.json names its asset on the "corpus" release.
+        run: |
+          asset=$(jq -r .asset data/judge/corpus.json)
+          sha256=$(jq -r .sha256 data/judge/corpus.json)
+          curl -fsSL --retry 3 -o data/judge/tests.duckdb \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/corpus/$asset"
+          echo "$sha256  data/judge/tests.duckdb" | sha256sum -c -
       - uses: Swatinem/rust-cache@v2
       - name: Test and build
         run: |
