@@ -45,4 +45,4 @@ def generate(rng):
             if depth[v] == zero_depth:
                 vals[v] = 0
         zero_depth += 1
-    return {"root": level_order(vals, left[:count], right[:count], 0)}
+    return {"root": level_order(vals, left[:count], right[:count])}

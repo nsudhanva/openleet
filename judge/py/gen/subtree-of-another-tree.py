@@ -1,28 +1,15 @@
 """Subtree of Another Tree at the maximum sizes (2000 and 1000 nodes): all-equal values where
 every candidate matches until a deep leaf, or a real copied subtree, punishing naive matching."""
 
-from _shapes import level_order
+from _shapes import level_order, random_tree
 
 SEEDS = 3
 N = 2000
 M = 1000
 
 
-def random_tree(rng, n):
-    left, right = [None] * n, [None] * n
-    slots = [(0, 0), (0, 1)]
-    for v in range(1, n):
-        j = rng.randrange(len(slots))
-        slots[j], slots[-1] = slots[-1], slots[j]
-        parent, side = slots.pop()
-        (left if side == 0 else right)[parent] = v
-        slots.append((v, 0))
-        slots.append((v, 1))
-    return left, right
-
-
 def chain(n, vals):
-    return level_order(vals, [i + 1 if i + 1 < n else None for i in range(n)], [None] * n, 0)
+    return level_order(vals, [*range(1, n), None], [None] * n)
 
 
 def generate(rng):

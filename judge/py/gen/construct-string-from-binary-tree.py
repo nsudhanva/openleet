@@ -1,7 +1,7 @@
 """Construct String from Binary Tree with 10^4 nodes: a random tree, or a single zigzag chain
 10^4 deep that punishes quadratic string concatenation and shallow recursion."""
 
-from _shapes import level_order
+from _shapes import level_order, random_tree, zigzag_path
 
 SEEDS = 2
 N = 10**4
@@ -9,16 +9,5 @@ N = 10**4
 
 def generate(rng):
     vals = [rng.randint(-1000, 1000) for _ in range(N)]
-    left, right = [-1] * N, [-1] * N
-    if rng.random() < 0.5:
-        for i in range(1, N):
-            (left if rng.random() < 0.5 else right)[i - 1] = i
-    else:
-        slots = [(0, 0), (0, 1)]
-        for i in range(1, N):
-            j = rng.randrange(len(slots))
-            slots[j], slots[-1] = slots[-1], slots[j]
-            p, side = slots.pop()
-            (left if side == 0 else right)[p] = i
-            slots += [(i, 0), (i, 1)]
+    left, right = zigzag_path(rng, N, -1) if rng.random() < 0.5 else random_tree(rng, N, -1)
     return {"root": level_order(vals, left, right, empty=-1)}

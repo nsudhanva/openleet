@@ -1,20 +1,9 @@
 """Search in a BST with 5000 distinct nodes: a random BST, or a 5000-deep chain (recursion
 depth worst case), searching for the deepest value or an absent one."""
 
+from _shapes import level_order
+
 SEEDS = 3
-
-
-def level_order(root, vals, left, right):
-    out, queue = [], [root]
-    for node in queue:
-        if node is None:
-            out.append(None)
-        else:
-            out.append(vals[node])
-            queue += [left[node], right[node]]
-    while out and out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):
@@ -53,4 +42,4 @@ def generate(rng):
         val = rng.randint(1, 10**7)
         while val in present:
             val = rng.randint(1, 10**7)
-    return {"root": level_order(0, vals, left, right), "val": val}
+    return {"root": level_order(vals, left, right), "val": val}
