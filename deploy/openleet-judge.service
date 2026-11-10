@@ -19,6 +19,11 @@ RuntimeDirectoryMode=0755
 # that needs too much memory fails fast as Memory Limit Exceeded instead of thrashing.
 MemoryMax=450M
 MemorySwapMax=0
+# The OOM killer takes only the solution (zygote.py gives it the highest score). Without
+# these, a memory hog's OOM kill went on to the zygote and the daemon (seen under Docker),
+# and systemd's default OOMPolicy=stop stops the whole service on any OOM kill: 503, not MLE.
+OOMScoreAdjust=-1000
+OOMPolicy=continue
 TasksMax=64
 # The web app stays responsive while a submission runs.
 CPUWeight=50

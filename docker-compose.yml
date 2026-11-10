@@ -13,4 +13,10 @@ services:
     security_opt:
       - no-new-privileges:true
     pids_limit: 64
+    # As in production (deploy/openleet-judge.service): no swap, so a memory hog fails fast;
+    # the kernel's OOM killer never picks the daemon or the zygote, only the solution
+    # (zygote.py raises its score); and an init reaps orphans, which the daemon does not.
     mem_limit: 512m
+    memswap_limit: 512m
+    oom_score_adj: -1000
+    init: true
