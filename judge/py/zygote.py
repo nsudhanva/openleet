@@ -30,6 +30,7 @@ import traceback
 from collections import OrderedDict
 from pathlib import Path
 from random import Random
+from types import ModuleType
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -49,7 +50,7 @@ TICKS = os.sysconf("SC_CLK_TCK")
 # Generated stress inputs, prepared once and reused across jobs. Children mutate their own
 # copy-on-write pages, never these.
 generated: OrderedDict[tuple[str, int], object] = OrderedDict()
-generators: dict[str, object] = {}
+generators: dict[str, ModuleType] = {}
 
 
 def emit(obj: dict) -> None:
@@ -57,15 +58,21 @@ def emit(obj: dict) -> None:
     sys.stdout.buffer.flush()
 
 
-def generator(slug: str):
+def generator(slug: str) -> ModuleType:
+    """gen/<slug>.py, loaded once: `generate(rng)` makes an input, `SEEDS` says how many."""
     if slug not in generators:
         spec = importlib.util.spec_from_file_location(f"gen_{slug}", GEN_DIR / f"{slug}.py")
         if spec is None or spec.loader is None:
             raise FileNotFoundError(f"No generator for {slug}")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        generators[slug] = module.generate
+        generators[slug] = module
     return generators[slug]
+
+
+def input_sha(data: object) -> str:
+    """The fingerprint stored with a generated test, so a changed generator is caught."""
+    return hashlib.sha256(harness.dumps(data).encode()).hexdigest()
 
 
 def generated_input(spec: dict, test: dict):
@@ -73,9 +80,8 @@ def generated_input(spec: dict, test: dict):
     if key in generated:
         generated.move_to_end(key)
         return generated[key]
-    data = generator(test["gen"])(Random(test["seed"]))
-    digest = hashlib.sha256(harness.dumps(data).encode()).hexdigest()
-    if test.get("sha") and digest != test["sha"]:
+    data = generator(test["gen"]).generate(Random(test["seed"]))
+    if test.get("sha") and input_sha(data) != test["sha"]:
         raise ValueError(f"Generator {key} no longer makes the stored input")
     prepared = harness.prepare(spec, data)
     generated[key] = prepared
@@ -147,7 +153,7 @@ def child(job: dict, prepared: list, out_fd: int) -> None:
     stream = os.fdopen(out_fd, "wb", buffering=1 << 16)
 
     def send(event: dict) -> None:
-        stream.write(json.dumps(event, separators=(",", ":"), ensure_ascii=False).encode())
+        stream.write(harness.dumps(event).encode())
         stream.write(b"\n")
         stream.flush()
 

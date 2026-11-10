@@ -6,8 +6,6 @@ Usage (inside the judge image, as root, without network):
     python stress.py WORK_DIR SPECS_JSON RESULTS_DIR [JOBS]
 """
 
-import hashlib
-import importlib.util
 import json
 import os
 import sys
@@ -15,45 +13,20 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from random import Random
 
-sys.path.insert(0, str(Path(__file__).parent))
+import vote
+from zygote import GEN_DIR, generator, input_sha
 
-import harness
-from vote import outcomes, zygote
-
-GEN_DIR = Path(__file__).with_name("gen")
 # Reference solutions get far more time than submissions: their times set the limits.
-LIMITS = {"cpu_s": 120, "as_mb": 3072, "out_bytes": 512 << 20, "stdout_bytes": 0}
-
-
-def module(slug: str):
-    spec = importlib.util.spec_from_file_location(f"gen_{slug}", GEN_DIR / f"{slug}.py")
-    loaded = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(loaded)
-    return loaded
+LIMITS = {**vote.LIMITS, "cpu_s": 120}
 
 
 def stress(slug: str, item: dict, entry: dict, results_dir: Path) -> None:
-    gen = module(slug)
+    gen = generator(slug)
     seeds = list(range(getattr(gen, "SEEDS", 3)))
-    tests, shas = [], []
-    for seed in seeds:
-        data = gen.generate(Random(seed))
-        shas.append(hashlib.sha256(harness.dumps(data).encode()).hexdigest())
-        tests.append({"gen": slug, "seed": seed, "sha": shas[-1]})
-    voters = {}
-    for name in entry["voters"]:
-        job = {
-            "spec": entry["spec"],
-            "code": item["voters"][name],
-            "tests": tests,
-            "limits": LIMITS,
-            "keep_going": True,
-        }
-        try:
-            results, cpu, error = outcomes(zygote().run(job), len(tests))
-        except (RuntimeError, OSError, ValueError) as failure:
-            results, cpu, error = [None] * len(tests), 0, repr(failure)
-        voters[name] = {"results": results, "cpuMs": cpu, "error": error}
+    shas = [input_sha(gen.generate(Random(seed))) for seed in seeds]
+    tests = [{"gen": slug, "seed": seed, "sha": sha} for seed, sha in zip(seeds, shas, strict=True)]
+    codes = {name: item["voters"][name] for name in entry["voters"]}
+    voters = vote.ballots(entry["spec"], codes, tests, LIMITS)
     out = {"slug": slug, "seeds": seeds, "shas": shas, "voters": voters}
     (results_dir / f"{slug}.json").write_text(json.dumps(out))
 
