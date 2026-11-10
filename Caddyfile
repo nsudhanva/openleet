@@ -1,0 +1,10 @@
+# Local proxy for docker compose: http://openleet.localhost. The app already sends its assets
+# precompressed (Brotli, zstd) with their own Content-Encoding; `encode` skips those responses.
+{
+	admin off
+}
+
+http://openleet.localhost {
+	encode zstd gzip
+	reverse_proxy app:8080
+}
