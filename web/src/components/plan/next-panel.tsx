@@ -1,12 +1,13 @@
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowRightIcon } from "lucide-react";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { KeyHint } from "@/components/action-button";
 import { DifficultyBadge } from "@/components/difficulty-badge";
 import { PlanLink, remember } from "@/components/plan/plan-link";
 import { ProgressBar } from "@/components/progress-bar";
 import { buttonVariants } from "@/components/ui/button";
 import { useHotkeys } from "@/hooks/use-hotkeys";
+import { useFitScreen } from "@/hooks/use-media";
 import { api } from "@/lib/api";
 import {
 	type Plan,
@@ -43,6 +44,15 @@ export function NextPanel({ plan, slug }: { plan: Plan; slug: string }) {
 
 	const ready = page !== null && page !== "error" ? page : null;
 	const next = ready?.next;
+
+	// Where the page scrolls, the offer comes into view once it is known (on a fit: screen the
+	// panel is in view already).
+	const section = useRef<HTMLElement>(null);
+	const fit = useFitScreen();
+	useEffect(() => {
+		if (ready && !fit)
+			section.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+	}, [ready, fit]);
 	useHotkeys(
 		ready && next
 			? {
@@ -61,9 +71,10 @@ export function NextPanel({ plan, slug }: { plan: Plan; slug: string }) {
 
 	return (
 		<section
+			ref={section}
 			aria-labelledby="next-heading"
 			aria-busy={page === null}
-			className="space-y-2.5 rounded-md border border-dashed border-primary/40 p-3"
+			className="scroll-mb-16 space-y-2.5 rounded-md border border-dashed border-primary/40 p-3"
 		>
 			<div className="flex flex-wrap items-baseline justify-between gap-x-3">
 				<h3 id="next-heading" className="text-sm font-semibold">

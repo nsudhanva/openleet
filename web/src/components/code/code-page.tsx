@@ -341,7 +341,7 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 						/>
 						<div
 							ref={panel}
-							className="flex scroll-mt-16 flex-col gap-2 border-t border-dashed px-4 py-2 sm:px-6 fit:min-h-0 fit:flex-[2]"
+							className="flex scroll-mt-16 scroll-mb-16 flex-col gap-2 border-t border-dashed px-4 py-2 sm:px-6 fit:min-h-0 fit:flex-[2]"
 						>
 							<Segmented
 								label="Panel"
