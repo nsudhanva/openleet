@@ -153,6 +153,22 @@ def front_matter(markdown: str) -> tuple[str, list[str]]:
     return difficulty, tags
 
 
+# doocs' older names for LeetCode's topic tags, mapped to the names the company lists use.
+TOPIC_ALIASES = {
+    "Dijkstra": "Dijkstra's Algorithm",
+    "Graph": "Graph Theory",
+    "Heap": "Heap (Priority Queue)",
+    "Nearest Pair of Points": "Closest Pair of Points",
+    "Sort": "Sorting",
+    "Union Find": "Union-Find",
+}
+
+
+def canonical_topics(tags: list[str]) -> list[str]:
+    """Tags under LeetCode's current names, each once, in their original order."""
+    return list(dict.fromkeys(TOPIC_ALIASES.get(tag, tag) for tag in tags))
+
+
 def slug_from_url(url: str) -> str:
     return urllib.parse.urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
 
@@ -197,7 +213,7 @@ def build_problem(entry: DoocsEntry, listed: dict[str, Listing] | None) -> Probl
         difficulty=difficulty,
         companies={c: dict(listing.asked) for c, listing in (listed or {}).items()},
         url=url,
-        topics=tags,
+        topics=canonical_topics(tags),
         premium=entry.premium,
         description=statement(markdown),
     )
