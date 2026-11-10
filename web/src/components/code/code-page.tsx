@@ -424,6 +424,7 @@ function TestcasePanel({
 			</p>
 			<Textarea
 				aria-label="Test case input"
+				name="testcase"
 				value={value}
 				spellCheck={false}
 				onChange={(event) => onChange(event.target.value)}
