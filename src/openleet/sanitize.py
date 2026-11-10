@@ -38,6 +38,8 @@ VOID_TAGS = frozenset({"br", "hr", "img"})
 DROP_CONTENT_TAGS = frozenset({"script", "style", "iframe", "object"})
 ALLOWED_ATTRS = {"img": frozenset({"src", "alt"})}
 TAG = re.compile(r"<[^>]+>")
+CSS_PX = re.compile(r"(?:^|;)\s*(width|height)\s*:\s*(\d+(?:\.\d+)?)px\s*(?=;|$)")
+NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
 
 class _Sanitizer(HTMLParser):
@@ -57,6 +59,8 @@ class _Sanitizer(HTMLParser):
             for name, value in attrs
             if name in allowed and value is not None and _safe_attr(name, value)
         )
+        if tag == "img" and (size := _image_size(attrs)):
+            kept += ' style="--w: {}; --h: {}"'.format(*size)
         self.out.append(f"<{tag}{kept}>")
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -78,6 +82,21 @@ class _Sanitizer(HTMLParser):
 
 def _safe_attr(name: str, value: str) -> bool:
     return name != "src" or value.startswith("https://")
+
+
+def _image_size(attrs: list[tuple[str, str | None]]) -> tuple[int, int] | None:
+    """An image's displayed size in CSS pixels, from its width and height attributes or its
+    inline style, when the source gives both. The app sizes the image box from it (--w, --h),
+    so the statement does not move when the image loads."""
+    sizes: dict[str, float] = {}
+    for name, value in attrs:
+        if name in ("width", "height") and value and NUMBER.fullmatch(value.strip()):
+            sizes[name] = float(value)
+    style = next((value for name, value in attrs if name == "style" and value), "")
+    for name, value in CSS_PX.findall(style):
+        sizes.setdefault(name, float(value))
+    width, height = round(sizes.get("width", 0)), round(sizes.get("height", 0))
+    return (width, height) if width > 0 and height > 0 else None
 
 
 def sanitize_html(raw: str) -> str:

@@ -206,10 +206,16 @@
 	.statement ol {
 		@apply list-decimal;
 	}
+	/*
+	 * At most 11rem tall. Ingest records the source's size as --w and --h, so the box is known
+	 * before the image loads (nothing moves when it does): the source's shape, as wide as fits.
+	 */
 	.statement img {
 		@apply h-auto max-w-full rounded-md bg-white;
 		max-height: 11rem;
 		margin-block: 0.6em;
+		aspect-ratio: var(--w) / var(--h);
+		width: min(100%, var(--w) * 1px, 11rem * var(--w) / var(--h));
 	}
 	.statement table {
 		@apply border-collapse;
