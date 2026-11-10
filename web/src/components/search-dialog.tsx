@@ -34,10 +34,11 @@ export function SearchDialog() {
 				className="w-9 justify-start text-muted-foreground sm:w-56"
 				onClick={() => toggle(() => true)}
 				{...prefetchProps}
-				aria-label="Search problems"
+				// The name is the visible text, the shortcut included, so they never disagree.
+				aria-keyshortcuts="Meta+K Control+K /"
 			>
-				<SearchIcon />
-				<span className="hidden sm:inline">Search problems</span>
+				<SearchIcon aria-hidden />
+				<span className="max-sm:sr-only">Search problems</span>
 				<KeyHint className="ml-auto">⌘K</KeyHint>
 			</Button>
 			{used && (
