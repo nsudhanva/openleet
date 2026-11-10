@@ -2,14 +2,13 @@
 LeetCodeDataset's `check` function (inputs only; its expected values are not trusted)."""
 
 import ast
-import html
 import json
 import re
 from typing import Any
 
 from openleet.judging.signature import parse
+from openleet.sanitize import html_text
 
-TAG = re.compile(r"<[^>]+>")
 # "Input: ... Output: ..." up to the explanation, the next example or the end of the block.
 EXAMPLE = re.compile(
     r"Input:?\s*(.*?)\s*Output:?\s*(.*?)\s*(?=Explanation|Example \d|Constraints|Follow|Note:|$)",
@@ -20,7 +19,7 @@ NODE_HELPERS = ("list_node", "tree_node")
 
 
 class Unparsable(ValueError):
-    pass
+    """Example text that is not the expected `name = <JSON>` form."""
 
 
 def json_value(text: str) -> Any:
@@ -48,9 +47,8 @@ def statement_examples(description: str | None) -> list[dict]:
     [{'input': {'ops': [...], 'args': [...]}, 'output': [...]}] for design problems."""
     if not description:
         return []
-    text = html.unescape(TAG.sub(" ", description)).replace("\xa0", " ")
     examples = []
-    for raw_in, raw_out in EXAMPLE.findall(text):
+    for raw_in, raw_out in EXAMPLE.findall(html_text(description)):
         raw_in, raw_out = raw_in.strip(), raw_out.strip()
         try:
             if raw_in.startswith("["):
@@ -66,7 +64,7 @@ def statement_examples(description: str | None) -> list[dict]:
                 )
             else:
                 examples.append({"input": assignments(raw_in), "output": json_value(raw_out)})
-        except Unparsable, ValueError:
+        except ValueError:  # Unparsable, or a design example without two lines
             continue
     return examples
 
