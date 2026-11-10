@@ -1,13 +1,17 @@
 """Similar String Groups with 300 anagrams of length 300: chains of single swaps (few large
 groups) or random permutations, so the O(n^2 * L) pairwise check runs in full."""
 
+from string import ascii_lowercase
+
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     L = 300
-    base = [rng.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(L)]
+    base = [rng.choice(ascii_lowercase) for _ in range(L)]
     strs = []
     if shape == 0:
         cur = list(base)

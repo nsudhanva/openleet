@@ -1,12 +1,14 @@
 """Remove All Occurrences at length 1000: copies of part nested inside each other, so every
 removal exposes another and the string collapses in a long cascade."""
 
+from _shapes import random_string
+
 SEEDS = 2
 
 
 def generate(rng):
     m = rng.choice([2, 3, 5])
-    part = "".join(rng.choice("abc") for _ in range(m))
+    part = random_string(rng, "abc", m)
     s = part
     while len(s) + m <= 1000:
         if rng.random() < 0.8:

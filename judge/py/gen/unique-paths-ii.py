@@ -1,6 +1,8 @@
 """Unique Paths II on grids up to 100 x 100 with obstacles, path counts kept within the
 guaranteed 2 * 10^9 (thin 100 x 7 strips, or a full grid thickened until it fits)."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 CAP = 2 * 10**9
 
@@ -19,7 +21,7 @@ def paths(grid):
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         m, n = 100, 7  # C(105, 6) < 2 * 10^9 even with no obstacles
     elif shape == 1:

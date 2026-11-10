@@ -1,13 +1,15 @@
 """The Skyline Problem at 10^4 buildings sorted by left edge: deeply nested buildings, a dense
 run where each building overlaps hundreds of others, or random spans up to 2^31 - 1."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**4
 TOP = 2**31 - 1
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     buildings = []
     if shape == 0:
         # Nested: each building inside the previous one but taller.

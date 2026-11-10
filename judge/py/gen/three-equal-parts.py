@@ -1,12 +1,14 @@
 """Three Equal Parts at n = 3 * 10^4: a pattern repeated three times with differing leading
 zero gaps (answer exists), all zeros, or random bits (usually [-1, -1])."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 3 * 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         plen = rng.randint(1000, 9000)
         pattern = [1] + [rng.randint(0, 1) for _ in range(plen - 1)]

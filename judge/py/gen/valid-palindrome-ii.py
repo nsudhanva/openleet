@@ -1,12 +1,14 @@
 """Valid Palindrome II at n = 10^5: a palindrome with one extra char inserted where both
 skip choices look plausible, so solutions that try only one branch fail."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**5
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         # 'a'-heavy palindrome plus one inserted letter: skipping the wrong side looks fine
         # for a long stretch before failing.

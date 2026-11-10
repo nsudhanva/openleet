@@ -1,13 +1,15 @@
 """All Three Characters at length 5 * 10^4: random abc, or long single-letter runs so a
 substring must stretch far to contain all three."""
 
+from _shapes import random_string
+
 SEEDS = 2
 N = 5 * 10**4
 
 
 def generate(rng):
     if rng.random() < 0.5:
-        s = "".join(rng.choice("abc") for _ in range(N))
+        s = random_string(rng, "abc", N)
     else:
         parts, total = [], 0
         while total < N:

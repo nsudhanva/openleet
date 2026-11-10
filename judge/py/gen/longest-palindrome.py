@@ -1,9 +1,12 @@
 """Longest Palindrome (letter counts) on 2000 mixed-case letters."""
 
+from string import ascii_letters
+
+from _shapes import random_string
+
 SEEDS = 2
-LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 def generate(rng):
-    alphabet = rng.choice([LETTERS, "aA"])
-    return {"s": "".join(rng.choice(alphabet) for _ in range(2000))}
+    alphabet = rng.choice([ascii_letters, "aA"])
+    return {"s": random_string(rng, alphabet, 2000)}

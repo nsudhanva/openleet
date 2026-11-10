@@ -1,9 +1,11 @@
 """Longest Palindromic Substring at length 1000 with a unique answer: one letter repeated
 (cubic checks time out), or random text with one long palindrome planted inside."""
 
+from string import ascii_letters, digits
+
 SEEDS = 2
 N = 1000
-CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+CHARS = ascii_letters + digits
 
 
 def generate(rng):

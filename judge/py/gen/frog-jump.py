@@ -8,7 +8,7 @@ N = 2000
 def generate(rng):
     shape = rng.randrange(3)
     if shape == 0:
-        stones = [*list(range(N - 1)), N - 2 + rng.choice([1, 60, 64])]
+        stones = [*range(N - 1), N - 2 + rng.choice([1, 60, 64])]
     elif shape == 1:
         stones = sorted({0, 1} | set(rng.sample(range(2, 3 * N), N - 2)))
         while len(stones) < N:

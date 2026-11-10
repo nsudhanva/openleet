@@ -16,6 +16,7 @@ from random import Random
 import vote
 from zygote import GEN_DIR, generator, input_sha
 
+# The zygote module puts GEN_DIR on sys.path, so generators can import _shapes.
 # Reference solutions get far more time than submissions: their times set the limits.
 LIMITS = {**vote.LIMITS, "cpu_s": 120}
 

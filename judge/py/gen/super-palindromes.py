@@ -1,12 +1,14 @@
 """Super Palindromes over ranges spanning up to 10^18 - 1, so only enumerating palindromic
 roots (not the range) is fast."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 TOP = 10**18 - 1
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         left, right = 1, TOP
     elif shape == 1:

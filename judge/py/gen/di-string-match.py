@@ -1,12 +1,14 @@
 """DI String Match at length 10^5: random I/D, or long runs of one letter."""
 
+from _shapes import random_string
+
 SEEDS = 2
 N = 10**5
 
 
 def generate(rng):
     if rng.random() < 0.5:
-        s = "".join(rng.choice("ID") for _ in range(N))
+        s = random_string(rng, "ID", N)
     else:
         parts, total = [], 0
         while total < N:

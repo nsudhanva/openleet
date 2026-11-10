@@ -1,12 +1,14 @@
 """Verify Preorder Serialization near 10^4 chars: a valid serialization of a random or
 left-deep tree, with an extra or missing '#' at the very end."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 LIMIT = 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     deep = rng.random() < 0.5
     tokens, size, slots = [], -1, 1  # size counts the joined string (commas included)
     while slots:

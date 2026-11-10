@@ -1,6 +1,8 @@
 """Uncommon Words at the 200-char limit with a small vocabulary, so words repeat within and
 across the sentences."""
 
+from _shapes import random_string
+
 SEEDS = 2
 LETTERS = "abcde"
 
@@ -16,7 +18,5 @@ def sentence(rng, vocab):
 
 
 def generate(rng):
-    vocab = sorted(
-        {"".join(rng.choice(LETTERS) for _ in range(rng.randint(1, 3))) for _ in range(60)}
-    )
+    vocab = sorted({random_string(rng, LETTERS, rng.randint(1, 3)) for _ in range(60)})
     return {"s1": sentence(rng, vocab), "s2": sentence(rng, vocab)}

@@ -1,28 +1,17 @@
 """Smallest String From Leaf with 8500 nodes: a deep chain with side leaves (long strings to
 compare), or a random tree of mostly equal letters so leaf strings tie for a long time."""
 
+from _shapes import level_order, pick_shape, random_tree
+
 SEEDS = 3
 
 
-def level_order(vals, left, right):
-    out, queue = [], [0]
-    for node in queue:
-        if node is None:
-            out.append(None)
-        else:
-            out.append(vals[node])
-            queue += [left[node], right[node]]
-    while out and out[-1] is None:
-        out.pop()
-    return out
-
-
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     n = 8500
-    left, right = [None] * n, [None] * n
     if shape == 0:
         # Spine of length n/2, each spine node with a leaf hanging off.
+        left, right = [None] * n, [None] * n
         spine = n // 2
         for i in range(spine - 1):
             left[i] = i + 1
@@ -31,10 +20,6 @@ def generate(rng):
         for i in range(spine, n):
             vals[i] = rng.randint(0, 1)
     else:
-        free = [(0, 0), (0, 1)]
-        for i in range(1, n):
-            parent, side = free.pop(rng.randrange(len(free)))
-            free += [(i, 0), (i, 1)]
-            (left if side == 0 else right)[parent] = i
+        left, right = random_tree(rng, n, swap=False)
         vals = [rng.choice([0, 0, 0, 1]) if shape == 1 else rng.randint(0, 25) for _ in range(n)]
     return {"root": level_order(vals, left, right)}

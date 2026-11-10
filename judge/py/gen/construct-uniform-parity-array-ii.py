@@ -13,6 +13,6 @@ def generate(rng):
         nums = [2 * v for v in rng.sample(range(1, 5 * 10**8 + 1), N - 1)]
         nums.append(2 * rng.randint(0, 5 * 10**8 - 1) + 1)
     else:
-        nums = [2 * v + 1 for v in rng.sample(range(0, 5 * 10**8), N - 1)]
+        nums = [2 * v + 1 for v in rng.sample(range(5 * 10**8), N - 1)]
         nums.append(2 * rng.randint(1, 5 * 10**8))
     return {"nums1": nums}

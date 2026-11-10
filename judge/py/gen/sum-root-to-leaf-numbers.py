@@ -1,26 +1,12 @@
 """Sum Root to Leaf Numbers at up to 1000 nodes and 10 levels, with digits chosen so the
 total still fits in 32 bits."""
 
+from _shapes import level_order
+
 SEEDS = 2
 N = 1000
 LEVELS = 10
 LIMIT = 2**31 - 1
-
-
-def serialize(vals, left, right, root):
-    out, queue, i = [], [root], 0
-    while i < len(queue):
-        node = queue[i]
-        i += 1
-        if node is None:
-            out.append(None)
-            continue
-        out.append(vals[node])
-        queue.append(left[node])
-        queue.append(right[node])
-    while out and out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):
@@ -59,4 +45,4 @@ def generate(rng):
             if depth[v] == zero_depth:
                 vals[v] = 0
         zero_depth += 1
-    return {"root": serialize(vals, left[:count], right[:count], 0)}
+    return {"root": level_order(vals, left[:count], right[:count])}

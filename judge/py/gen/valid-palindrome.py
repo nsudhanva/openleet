@@ -1,14 +1,18 @@
 """Valid Palindrome at 2 * 10^5 printable ASCII chars: an alphanumeric palindrome buried in
 punctuation and mixed case, sometimes with one mismatch in the middle."""
 
+from string import ascii_lowercase, digits
+
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 2 * 10**5
-ALNUM = "abcdefghijklmnopqrstuvwxyz0123456789"
+ALNUM = ascii_lowercase + digits
 JUNK = " ,.:;!?'\"-_()[]{}@#$%^&*/\\|`~<>+="
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 2:
         return {"s": "".join(chr(rng.randint(32, 126)) for _ in range(N))}
     half = [rng.choice(ALNUM) for _ in range(N // 4)]

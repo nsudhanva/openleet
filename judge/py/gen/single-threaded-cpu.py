@@ -1,12 +1,14 @@
 """Single-Threaded CPU with 10^5 tasks: all enqueued at once (heap ordering by time then index),
 random arrivals with idle gaps, or many equal processing times."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**5
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     if shape == 0:
         tasks = [[1, rng.randint(1, 10**9)] for _ in range(N)]
     elif shape == 1:

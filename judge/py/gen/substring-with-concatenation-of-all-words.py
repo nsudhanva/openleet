@@ -2,17 +2,19 @@
 (every window is a match), or s stitched from a small vocabulary with many words, punishing
 per-index rescans."""
 
+from _shapes import pick_shape, random_string
+
 SEEDS = 3
 N = 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         return {"s": "a" * N, "words": ["a"] * rng.randint(2000, 5000)}
     width = rng.randint(1, 3) if shape == 1 else rng.randint(5, 30)
     letters = "ab" if shape == 1 else "abc"
-    vocab = sorted({"".join(rng.choice(letters) for _ in range(width)) for _ in range(6)})
+    vocab = sorted({random_string(rng, letters, width) for _ in range(6)})
     count = rng.randint(N // width // 4, N // width // 2)
     count = max(1, min(count, 5000))
     words = [rng.choice(vocab) for _ in range(count)]

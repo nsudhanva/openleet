@@ -1,4 +1,4 @@
-"""A 100 x 100 matrix reshaped to a legal r x c (r * c = 10^4), or to an illegal size."""
+"""Reshape the Matrix on a 100 x 100 matrix with a legal r x c (r * c = 10^4) or an illegal one."""
 
 SEEDS = 3
 

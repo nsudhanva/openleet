@@ -1,6 +1,8 @@
 """Solve the Equation at ~1000 characters with many x and constant terms on both sides: a unique
 integer solution, infinite solutions, or no solution."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
@@ -17,7 +19,7 @@ def side(terms):
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     left, length = [], 0
     while length < 300:
         c = rng.randint(1, 100) * rng.choice([1, -1])

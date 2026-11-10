@@ -1,13 +1,15 @@
 """Count Binary Substrings at length 10^5: random bits, or a few huge runs where expanding
 around every boundary is quadratic."""
 
+from _shapes import random_string
+
 SEEDS = 2
 N = 10**5
 
 
 def generate(rng):
     if rng.random() < 0.5:
-        s = "".join(rng.choice("01") for _ in range(N))
+        s = random_string(rng, "01", N)
     else:
         parts, total, bit = [], 0, rng.randint(0, 1)
         while total < N:

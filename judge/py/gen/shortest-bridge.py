@@ -1,6 +1,8 @@
 """Shortest Bridge on a 100 x 100 grid with exactly two islands on opposite sides of an empty
 diagonal band: two huge triangles, two random blobs, or two single cells in far corners."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 100
 
@@ -23,7 +25,7 @@ def blob(rng, start, allowed, size):
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     grid = [[0] * N for _ in range(N)]
     if shape == 0:
         for r in range(N):

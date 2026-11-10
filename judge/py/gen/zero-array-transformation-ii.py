@@ -1,12 +1,14 @@
 """Zero Array Transformation II at 10^5 numbers and 10^5 queries: the answer lands near the
 last query (punishing a linear scan with full re-application), or never (-1)."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**5
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     queries = []
     for _ in range(N):
         left = rng.randrange(N)

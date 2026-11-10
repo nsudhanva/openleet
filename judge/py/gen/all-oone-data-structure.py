@@ -1,16 +1,19 @@
 """All O`one at 5 * 10^4 calls: many inc/dec on a key pool so counts climb high and keys keep
 moving between buckets, with frequent max/min queries; dec only on keys present."""
 
+from string import ascii_lowercase
+
+from _shapes import random_string
+
 SEEDS = 2
 CALLS = 5 * 10**4
-LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def generate(rng):
     pool = set()
     size = rng.choice([20, 2000])
     while len(pool) < size:
-        pool.add("".join(rng.choice(LETTERS) for _ in range(rng.randint(1, 10))))
+        pool.add(random_string(rng, ascii_lowercase, rng.randint(1, 10)))
     pool = sorted(pool)
     counts = {}
     present = []  # keys with count > 0, in insertion order, for deterministic choice

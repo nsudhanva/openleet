@@ -8,6 +8,6 @@ N = 10**5
 def generate(rng):
     peak = rng.choice([rng.randint(1, 50), rng.randint(N - 50, N - 2)])
     top = 10**6
-    up = sorted(rng.sample(range(0, top), peak))
-    down = sorted(rng.sample(range(0, top), N - 1 - peak), reverse=True)
+    up = sorted(rng.sample(range(top), peak))
+    down = sorted(rng.sample(range(top), N - 1 - peak), reverse=True)
     return {"arr": [*up, top, *down]}

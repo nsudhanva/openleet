@@ -2,12 +2,14 @@
 answer exists), with the median value repeated about half the time, the case that breaks
 naive interleaving."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 5 * 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     n = N if shape != 1 else N - 1
     mid = rng.randint(1, 5000)
     lows, highs = (n + 1) // 2, n // 2

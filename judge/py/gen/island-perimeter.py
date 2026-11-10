@@ -1,8 +1,7 @@
-"""Island Perimeter on a 100 x 100 grid holding one large, ragged, lake-free island (grown at
-random, then any enclosed water filled in)."""
+"""Island Perimeter on grids up to 100 x 100 (also 100 x 37 and 1 x 100) holding one large, ragged,
+lake-free island (grown at random, then any enclosed water filled in)."""
 
 SEEDS = 3
-N = 100
 
 
 def generate(rng):

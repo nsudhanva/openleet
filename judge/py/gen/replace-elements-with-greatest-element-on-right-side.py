@@ -1,5 +1,5 @@
-"""Arrays of length 10^4 with values in [1, 10^5]: random, or strictly increasing so the
-maximum to the right changes at every step."""
+"""Replace Elements with Greatest Element on Right Side at length 10^4 with values in [1, 10^5]:
+random, or strictly increasing so the maximum to the right changes at every step."""
 
 SEEDS = 2
 N = 10**4

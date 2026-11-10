@@ -1,12 +1,14 @@
 """Sum of Square Numbers with c near 2^31 - 1, so an O(c) scan or a hash of all squares up to
 c is punished; mixes true (built as a^2 + b^2) and arbitrary values."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 LIMIT = 2**31 - 1
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         return {"c": LIMIT}
     if shape == 1:

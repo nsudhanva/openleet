@@ -1,13 +1,15 @@
 """Longest Word Through Deleting with s of length 1000 and 1000 dictionary words, many of them
 long subsequences of s (checking each costs up to 1000 steps)."""
 
+from _shapes import random_string
+
 SEEDS = 2
 N = 1000
 
 
 def generate(rng):
     alphabet = rng.choice(["ab", "abcde"])
-    s = "".join(rng.choice(alphabet) for _ in range(N))
+    s = random_string(rng, alphabet, N)
     dictionary = []
     total = 0
     for _ in range(N):
@@ -16,7 +18,7 @@ def generate(rng):
             idx = sorted(rng.sample(range(N), min(keep, N)))
             word = "".join(s[i] for i in idx[: rng.randint(1, len(idx))])
         else:
-            word = "".join(rng.choice(alphabet) for _ in range(rng.randint(1, N)))
+            word = random_string(rng, alphabet, rng.randint(1, N))
         if total + len(word) > 6 * 10**5:
             word = word[:20]
         total += len(word)

@@ -10,7 +10,7 @@ EDGES = 4 * 10**4
 
 def generate(rng):
     edges = set()
-    # A Hamiltonian-ish chain gives deep DFS paths.
+    # A path through every node in random order gives deep DFS paths.
     order = list(range(N))
     rng.shuffle(order)
     for a, b in itertools.pairwise(order):

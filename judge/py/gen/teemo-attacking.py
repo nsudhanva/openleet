@@ -1,13 +1,15 @@
 """Teemo Attacking at 10^4 attacks with durations up to 10^7: heavy overlap, repeated times,
 or widely spaced, punishing per-second simulation."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**4
 TOP = 10**7
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         times = sorted(rng.randint(0, TOP) for _ in range(N))
         duration = TOP

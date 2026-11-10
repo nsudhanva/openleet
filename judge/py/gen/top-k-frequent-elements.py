@@ -1,12 +1,14 @@
 """Top K Frequent Elements at n = 10^5 with up to all 20001 possible values in play and a strict
 frequency gap at the k boundary, so the answer is unique."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**5
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     values = list(range(-(10**4), 10**4 + 1))
     rng.shuffle(values)
     if shape == 0:

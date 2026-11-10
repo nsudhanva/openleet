@@ -1,11 +1,13 @@
 """Shortest Path Visiting All Nodes at the maximum n = 12 (2^12 masks): a path, a sparse random
 connected graph, or a dense one."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     n = 12
     adj = [set() for _ in range(n)]
     order = list(range(n))

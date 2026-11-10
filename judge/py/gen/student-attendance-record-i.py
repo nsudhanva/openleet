@@ -1,12 +1,14 @@
 """Student Attendance Record I at the maximum length of 1000, with late runs of length 2 and
 absences rare enough that the answer is not trivially false."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 1000
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         s = ["P" if rng.random() < 0.6 else "L" for _ in range(N)]
         # Break every run of 3 L's so the record can pass, then add at most one A.

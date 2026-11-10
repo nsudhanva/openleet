@@ -1,13 +1,15 @@
 """Latest Time to Catch a Bus at 10^5 buses and passengers: passengers on consecutive times so
 every candidate slot is taken, or a random spread, punishing a per-minute search."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**5
 TOP = 10**9
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         base = rng.randint(2, 1000)
         passengers = list(range(base, base + N))

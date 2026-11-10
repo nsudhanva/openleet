@@ -1,12 +1,14 @@
 """Surrounded Regions on a 200 x 200 board: a serpentine 'O' corridor touching the border (one
 40,000-step DFS chain), all 'O', or random."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 SIZE = 200
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         board = [["X"] * SIZE for _ in range(SIZE)]
         for r in range(0, SIZE, 2):

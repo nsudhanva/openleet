@@ -1,6 +1,8 @@
 """Scramble String at length 30 over a tiny alphabet: a genuine random scramble (true), or an
 anagram of s1 that defeats character-count pruning, so unmemoized recursion explodes."""
 
+from _shapes import random_string
+
 SEEDS = 3
 
 
@@ -14,7 +16,7 @@ def scramble(rng, s):
 
 def generate(rng):
     alphabet = rng.choice(["ab", "abc", "a"])
-    s1 = "".join(rng.choice(alphabet) for _ in range(30))
+    s1 = random_string(rng, alphabet, 30)
     if rng.random() < 0.5:
         s2 = scramble(rng, s1)
     else:

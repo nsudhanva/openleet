@@ -1,12 +1,14 @@
 """X of a Kind at 10^4 cards: group counts sharing a gcd greater than 1 (true), or counts whose
 gcd drops to 1 only through the last value."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     g = rng.choice([2, 3, 6, 7])
     values = rng.sample(range(10**4), 2000)
     deck = []

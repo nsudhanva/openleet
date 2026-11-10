@@ -1,12 +1,14 @@
 """Sum of Distances in Tree at n = 3 * 10^4: a path (deep recursion, worst for per-node BFS)
 or a random tree, with shuffled labels and edge orientation."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 3 * 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     labels = list(range(N))
     rng.shuffle(labels)
     edges = []

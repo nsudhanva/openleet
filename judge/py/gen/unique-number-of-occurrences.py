@@ -1,5 +1,5 @@
-"""Unique Number of Occurrences at n = 1000: counts built as 1, 2, 3, ... (all unique) or with
-one collision."""
+"""Unique Number of Occurrences at n = 1000 with counts 1, 2, 3, ... (all unique) or with one
+collision."""
 
 SEEDS = 2
 N = 1000

@@ -1,12 +1,14 @@
 """Validate Stack Sequences at the maximum 1000 elements: popped order produced by a real
 push/pop run (true), its reverse-ish variant, or a random permutation (almost surely false)."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 1000
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     pushed = rng.sample(range(1001), N)
     if shape == 2:
         popped = pushed[:]

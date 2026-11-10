@@ -1,6 +1,8 @@
 """Walking Robot Simulation with 10^4 commands and 10^4 obstacles, many of them on the robot's
 own path so it keeps bumping; total travel capped so the answer stays below 2^31."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**4
 TRAVEL = 46000  # 46000^2 < 2^31
@@ -8,7 +10,7 @@ DIRS = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     commands, travel = [], 0
     for _ in range(N):
         if rng.random() < (0.2 if shape == 0 else 0.4):

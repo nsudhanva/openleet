@@ -1,11 +1,13 @@
 """Total Waviness II over ranges spanning up to [1, 10^15], so only a digit DP is fast."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 TOP = 10**15
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         return {"num1": 1, "num2": TOP}
     if shape == 1:

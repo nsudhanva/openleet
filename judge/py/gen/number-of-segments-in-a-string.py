@@ -1,7 +1,9 @@
 """Number of Segments at the maximum length 300, with runs of spaces and every allowed symbol."""
 
+from string import ascii_letters, digits
+
 SEEDS = 2
-ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=',.:"
+ALPHABET = ascii_letters + digits + "!@#$%^&*()_+-=',.:"
 
 
 def generate(rng):

@@ -1,10 +1,12 @@
 """Multiply Strings at 200 x 200 digits with no leading zeros (one seed multiplies by 0)."""
 
+from _shapes import random_string
+
 SEEDS = 3
 
 
 def number(rng, length):
-    return str(rng.randint(1, 9)) + "".join(rng.choice("0123456789") for _ in range(length - 1))
+    return str(rng.randint(1, 9)) + random_string(rng, "0123456789", length - 1)
 
 
 def generate(rng):

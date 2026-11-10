@@ -2,14 +2,18 @@
 block comments, "/*/" openers, and comment markers hidden inside other comments; every block
 comment is closed."""
 
+from string import ascii_lowercase, digits
+
+from _shapes import random_string
+
 SEEDS = 2
-CODE = "abcdefghijklmnopqrstuvwxyz0123456789 ;=+-(){}[],.<>!&|"
+CODE = ascii_lowercase + digits + " ;=+-(){}[],.<>!&|"
 INNER = CODE + "/"
 LINE_TEXT = CODE + "/*"
 
 
 def filler(rng, alphabet, n):
-    return "".join(rng.choice(alphabet) for _ in range(n))
+    return random_string(rng, alphabet, n)
 
 
 def generate(rng):
