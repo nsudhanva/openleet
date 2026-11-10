@@ -1,8 +1,13 @@
-//! Wire types shared by the web server (`cards`) and the judge daemon.
+//! Wire types shared by the web server and the judge daemon.
 //!
 //! One job per Unix-socket connection: the client writes a [`Job`] as one line of JSON, the
 //! judge answers with one [`Outcome`] line. Test inputs and outputs travel as raw JSON so the
 //! judge forwards them to Python without parsing them.
+
+use std::convert::Infallible;
+use std::fmt;
+use std::path::PathBuf;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
@@ -35,7 +40,7 @@ pub struct Job {
     pub expected: Option<Vec<Box<RawValue>>>,
     #[serde(default)]
     pub checker: Checker,
-    /// Compare numbers with LeetCode's 1e-5 tolerance.
+    /// Compare numbers with the official judge's 1e-5 tolerance.
     #[serde(default)]
     pub floats: bool,
     /// Total CPU time for all tests together.
@@ -47,6 +52,7 @@ pub struct Job {
     pub capture_stdout: bool,
 }
 
+/// The judge's ruling on a whole job.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Verdict {
@@ -61,7 +67,7 @@ pub enum Verdict {
 }
 
 impl Verdict {
-    /// The name the API and the database use.
+    /// The name the API and the database use (the same as the wire name).
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -140,12 +146,12 @@ where
 /// development on machines where the judge runs in a Linux container.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Endpoint {
-    Unix(std::path::PathBuf),
+    Unix(PathBuf),
     Tcp(String),
 }
 
-impl std::str::FromStr for Endpoint {
-    type Err = std::convert::Infallible;
+impl FromStr for Endpoint {
+    type Err = Infallible;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         Ok(text.strip_prefix("tcp://").map_or_else(
@@ -155,11 +161,91 @@ impl std::str::FromStr for Endpoint {
     }
 }
 
-impl std::fmt::Display for Endpoint {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Endpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Unix(path) => write!(f, "{}", path.display()),
             Self::Tcp(address) => write!(f, "tcp://{address}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endpoint_parses_and_displays() {
+        let unix: Endpoint = DEFAULT_SOCKET.parse().unwrap();
+        assert_eq!(unix, Endpoint::Unix(DEFAULT_SOCKET.into()));
+        assert_eq!(unix.to_string(), DEFAULT_SOCKET);
+
+        let tcp: Endpoint = "tcp://127.0.0.1:7777".parse().unwrap();
+        assert_eq!(tcp, Endpoint::Tcp("127.0.0.1:7777".into()));
+        assert_eq!(tcp.to_string(), "tcp://127.0.0.1:7777");
+
+        let relative: Endpoint = "judge.sock".parse().unwrap();
+        assert_eq!(relative, Endpoint::Unix("judge.sock".into()));
+    }
+
+    #[test]
+    fn verdict_names_match_the_wire() {
+        for verdict in [
+            Verdict::Accepted,
+            Verdict::WrongAnswer,
+            Verdict::TimeLimitExceeded,
+            Verdict::MemoryLimitExceeded,
+            Verdict::RuntimeError,
+            Verdict::CompileError,
+            Verdict::OutputLimitExceeded,
+            Verdict::InternalError,
+        ] {
+            let wire = serde_json::to_string(&verdict).unwrap();
+            assert_eq!(wire, format!("\"{}\"", verdict.as_str()));
+        }
+    }
+
+    #[test]
+    fn job_optional_fields_default() {
+        let job: Job = serde_json::from_str(
+            r#"{"spec":{"kind":"function"},"code":"x","tests":[{"input":{}}],"expected":null,"cpu_limit_ms":1000,"stop_on_failure":true}"#,
+        )
+        .unwrap();
+        assert_eq!(job.checker, Checker::Exact);
+        assert!(!job.floats);
+        assert!(!job.capture_stdout);
+        assert!(job.expected.is_none());
+        assert_eq!(job.tests[0].get(), r#"{"input":{}}"#);
+    }
+
+    #[test]
+    fn checker_names() {
+        let checker: Checker = serde_json::from_str(r#""unordered_nested""#).unwrap();
+        assert_eq!(checker, Checker::UnorderedNested);
+    }
+
+    #[test]
+    fn case_keeps_null_output_apart_from_none() {
+        let null: Case = serde_json::from_str(r#"{"output":null,"ok":true,"cpu_ms":5}"#).unwrap();
+        assert_eq!(null.output.as_deref().map(RawValue::get), Some("null"));
+        let absent: Case = serde_json::from_str(r#"{"ok":null,"cpu_ms":5}"#).unwrap();
+        assert!(absent.output.is_none());
+
+        assert_eq!(
+            serde_json::to_string(&null).unwrap(),
+            r#"{"output":null,"ok":true,"cpu_ms":5}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&absent).unwrap(),
+            r#"{"ok":null,"cpu_ms":5}"#
+        );
+    }
+
+    #[test]
+    fn internal_outcome_shape() {
+        assert_eq!(
+            serde_json::to_string(&Outcome::internal("boom")).unwrap(),
+            r#"{"verdict":"internal_error","cases":[],"failed":null,"cpu_ms":0,"max_rss_kb":0,"error":"boom"}"#
+        );
     }
 }
