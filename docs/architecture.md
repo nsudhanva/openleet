@@ -16,9 +16,10 @@ flowchart LR
     end
 ```
 
-The server keeps the attempt log, card states, notes, the solved and tried problems and the
-practice plans in memory and writes every change through to DuckDB. A plan's next problem is
-computed from memory on each request (`server/src/plan.rs`).
+The server keeps the attempt log, card states, notes, a log of every submission's verdict
+(`server/src/coding.rs`) and the practice plans in memory and writes every change through to
+DuckDB. A plan's next problem and the progress page's analytics (`server/src/insights.rs`) are
+computed from memory on each request.
 
 A page loads in one round trip. `web/index.html` inlines the stylesheet and a static shell, and the
 server adds preload links for the route's code and its first API calls (`server/src/preload.rs`),
