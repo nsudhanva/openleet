@@ -39,6 +39,7 @@ import {
 	PROBLEMS_DEFAULTS,
 	type ProblemsSearch,
 	parseProblemsSearch,
+	problemsQuery,
 } from "@/lib/schemas";
 import {
 	isAskedPeriod,
@@ -54,13 +55,7 @@ export const Route = createFileRoute("/problems")({
 	validateSearch: parseProblemsSearch,
 	search: { middlewares: [stripSearchParams(PROBLEMS_DEFAULTS)] },
 	// The server filters, searches and orders; a newer navigation aborts the older request.
-	loaderDeps: ({ search: { company, period, topic, difficulty, q } }) => ({
-		company,
-		period,
-		topic,
-		difficulty,
-		q,
-	}),
+	loaderDeps: ({ search }) => problemsQuery(search),
 	head: () => ({ meta: [{ title: pageTitle("Problems") }] }),
 	loader: ({ deps, abortController }) =>
 		api.problems(deps, abortController.signal),

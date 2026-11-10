@@ -1,4 +1,5 @@
 import type { SearchSchemaInput } from "@tanstack/react-router";
+import { type CompanySearch, parseCompanySearch } from "@/lib/companies";
 import { STUDY_SETS, type StudySet } from "@/lib/scheduler";
 import {
 	DIFFICULTIES,
@@ -102,4 +103,27 @@ export function parseProblemsSearch(
 ): ProblemsSearch {
 	const raw: Record<string, unknown> = search;
 	return compact({ ...parseListFilters(raw), q: text(raw.q, MAX_QUERY) });
+}
+
+/*
+ * The queries the page loaders send: only the validated filters (the router's search object
+ * also keeps the URL's other and invalid params), in a fixed order, so the same filters give
+ * the same URL. The server preloads these URLs when it serves the page (server/src/preload.rs;
+ * lib/page-loads.json holds the cases both sides are tested against).
+ */
+
+/** GET /api/deck's query on the study page. */
+export function deckQuery(search: object): StudySearch & CompanySearch {
+	const raw = search as SearchSchemaInput;
+	const { company } = parseCompanySearch(raw);
+	const { set, period, topic, difficulty, slug } = parseStudySearch(raw);
+	return { company, set, period, topic, difficulty, slug };
+}
+
+/** GET /api/problems's query on the problem table. */
+export function problemsQuery(search: object): ProblemsSearch & CompanySearch {
+	const raw = search as SearchSchemaInput;
+	const { company } = parseCompanySearch(raw);
+	const { period, topic, difficulty, q } = parseProblemsSearch(raw);
+	return { company, period, topic, difficulty, q };
 }

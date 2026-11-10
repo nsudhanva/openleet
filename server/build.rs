@@ -1,6 +1,9 @@
 //! Embeds the built web app (web/dist) in the binary, compressed ahead of time with Brotli
 //! (quality 11) and zstd (level 19), so serving a file costs no CPU at all, and hashes the
 //! inline scripts of its index.html for the Content-Security-Policy (src/security.rs).
+//!
+//! index.html is also cut where each page's preloads go (src/assets.rs): the part before is
+//! compressed here too, as a stream left open for the page to finish.
 
 #[path = "src/csp.rs"]
 mod csp;
@@ -8,6 +11,7 @@ mod csp;
 mod fingerprint;
 
 use std::fmt::Write as _;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
@@ -23,6 +27,9 @@ const COMPRESSIBLE: &[&str] = &[
 ];
 /// Below this, compression headers cost more than they save.
 const MIN_COMPRESS_BYTES: usize = 512;
+/// Where src/assets.rs adds a page's preloads to index.html: at the end of the body, so all
+/// of the page before it is the same for every page.
+const PRELOADS_AT: &[u8] = b"</body>";
 
 fn files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else {
@@ -119,4 +126,49 @@ fn main() {
     let hashes = csp::inline_script_hashes(&index);
     fs::write(out_dir.join("script_hashes.rs"), format!("&{hashes:?}"))
         .expect("write script_hashes.rs");
+    fs::write(out_dir.join("page.rs"), page(&out_dir, index.as_bytes())).expect("write page.rs");
+}
+
+/// index.html cut before `</body>`, with the first part compressed but left open: flushed, so
+/// it ends on a byte boundary, and not finished, so a response can append the rest of the
+/// page as stored data and end the stream.
+fn page(out_dir: &Path, html: &[u8]) -> String {
+    let Some(at) = html
+        .windows(PRELOADS_AT.len())
+        .position(|w| w == PRELOADS_AT)
+    else {
+        return "None".to_owned();
+    };
+    let (head, tail) = html.split_at(at);
+
+    let mut brotli = brotli::CompressorWriter::new(Vec::new(), 4096, 11, 22);
+    brotli.write_all(head).expect("brotli");
+    brotli.flush().expect("brotli flush");
+    let br_head = brotli.get_ref().clone();
+
+    let mut zstd = zstd::stream::write::Encoder::new(Vec::new(), 19).expect("zstd");
+    // The frame's length is unknown here, and a checksum would cover the appended part too.
+    zstd.include_contentsize(false).expect("zstd");
+    zstd.include_checksum(false).expect("zstd");
+    zstd.write_all(head).expect("zstd");
+    zstd.flush().expect("zstd flush");
+    let zstd_head = zstd.get_ref().clone();
+
+    let mut fields = String::new();
+    for (name, bytes) in [
+        ("head", head),
+        ("tail", tail),
+        ("br_head", &br_head[..]),
+        ("zstd_head", &zstd_head[..]),
+    ] {
+        let file = out_dir.join(format!("page-{name}"));
+        fs::write(&file, bytes).expect("write page part");
+        write!(
+            fields,
+            "{name}: include_bytes!({:?}), ",
+            file.display().to_string()
+        )
+        .expect("write code");
+    }
+    format!("Some(Page {{ {fields}}})")
 }

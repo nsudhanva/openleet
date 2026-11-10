@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
 import type { CompanySearch } from "@/lib/companies";
 import { STUDY_SETS } from "@/lib/scheduler";
 import {
+	deckQuery,
 	parseStudySearch,
 	STUDY_DEFAULTS,
 	type StudySearch,
@@ -22,8 +23,8 @@ import { isAskedPeriod } from "@/lib/types";
 export const Route = createFileRoute("/")({
 	validateSearch: parseStudySearch,
 	search: { middlewares: [stripSearchParams(STUDY_DEFAULTS)] },
-	// Every param picks the card; a newer navigation aborts the older request.
-	loaderDeps: ({ search }) => search,
+	// Every filter picks the card; a newer navigation aborts the older request.
+	loaderDeps: ({ search }) => deckQuery(search),
 	loader: ({ deps, abortController }) => api.deck(deps, abortController.signal),
 	component: Study,
 });
