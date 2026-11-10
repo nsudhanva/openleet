@@ -29,6 +29,7 @@ pub fn routes() -> Router<Shared> {
         .layer(security::timeout(security::JUDGE_TIMEOUT));
     Router::new()
         .route("/companies", get(study::companies))
+        .route("/topics", get(study::topics))
         .route("/deck", get(study::deck))
         .route("/attempts", post(study::record_attempt))
         .route("/notes", put(study::save_note))

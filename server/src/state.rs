@@ -157,7 +157,13 @@ impl AppState {
 #[cfg(test)]
 pub fn test_state(dir: &std::path::Path, judge: &str) -> Shared {
     let none = dir.join("none.json");
-    let content = Content::load(&none, &none).expect("content");
+    test_state_with(dir, judge, Content::load(&none, &none).expect("content"))
+}
+
+/// [`test_state`] over the given content.
+#[cfg(test)]
+pub fn test_state_with(dir: &std::path::Path, judge: &str, content: Content) -> Shared {
+    let none = dir.join("none.json");
     let (store, _) =
         Store::open(&dir.join("openleet.duckdb"), &dir.join("none.duckdb")).expect("database");
     let judge = Judge::load(&none, judge.parse().expect("endpoint"), 1.0).expect("judge");

@@ -55,6 +55,30 @@ describe("HTTP API, end to end", () => {
 		expect((await api("/api/problems/not-a-problem")).status).toBe(404);
 	});
 
+	it("filters lists by topic and difficulty, searches within them, and counts topics", async () => {
+		const topics = await api("/api/topics");
+		expect(topics.body[0]).toEqual({
+			topic: "Array",
+			problems: expect.any(Number),
+		});
+		const hard = await api("/api/problems?difficulty=Hard&topic=Array");
+		expect(hard.body.length).toBeGreaterThan(0);
+		for (const row of hard.body) expect(row.difficulty).toBe("Hard");
+		const hardTopics = await api("/api/topics?difficulty=Hard");
+		expect(hardTopics.body[0]).toEqual({
+			topic: "Array",
+			problems: hard.body.length,
+		});
+		// Unknown values filter nothing, like an unknown company or period.
+		const lenient = await api("/api/problems?topic=Nope&difficulty=Impossible");
+		expect(lenient.body).toHaveLength(793);
+		const search = await api("/api/problems?q=two%20sum&difficulty=Easy");
+		expect(search.body[0].slug).toBe("two-sum");
+		const deck = await api("/api/deck?topic=Array&difficulty=Hard");
+		expect(deck.body.remaining).toBe(hard.body.length);
+		expect(deck.body.card.problem.difficulty).toBe("Hard");
+	});
+
 	it("deals the most frequent new card first, ignoring an unknown pinned slug", async () => {
 		const deck = await api("/api/deck");
 		expect(deck.body.card.problem.slug).toBe("two-sum");

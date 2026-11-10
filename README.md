@@ -144,9 +144,10 @@ deploy/  systemd units, install and update scripts
 | Method and path | Does |
 | --- | --- |
 | `GET /api/companies` | Companies and their problem counts |
-| `GET /api/problems?company=meta&period=3m` | One list with your progress |
+| `GET /api/problems?company=meta&period=3m&topic=&difficulty=&q=` | One list with your progress, filtered; `q` searches within it |
+| `GET /api/topics?company=&period=&difficulty=` | The list's topics and their problem counts, most first |
 | `GET /api/problems/:slug` | One card: statement, topics, companies, approach |
-| `GET /api/deck?company=&period=&set=&topic=&difficulty=` | Next card (`period`: `30d`, `3m`, `6m`, `all`, `lc1000`) |
+| `GET /api/deck?company=&period=&set=&topic=&difficulty=` | Next card (`period`: `30d`, `3m`, `6m`, `all`, `lc1000`; `topic` by name, `difficulty` `Easy`, `Medium` or `Hard`; unknown values filter nothing) |
 | `GET /api/search?q=two+sum` | Search by number, title, topic or statement |
 | `POST /api/attempts` `{slug, grade, guessed, hints}` | Grade or skip a card |
 | `PUT /api/notes` `{slug, text}` | Save your answer |

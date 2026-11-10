@@ -6,13 +6,13 @@ use std::io::ErrorKind;
 use std::path::Path;
 
 use anyhow::Context as _;
-use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
-use crate::lists::{ListEntry, ListId, Lists};
+use crate::lists::{ListEntry, ListId, Lists, ProblemFilter};
 use crate::model::{
-    Approach, Asked, Companies, Company, CompanyAsked, CompanyFilter, Difficulty, PERIOD_SLOTS,
-    Problem, ProblemView,
+    Approach, Asked, Companies, Company, CompanyAsked, CompanyFilter, Difficulty, MAX_TOPICS,
+    PERIOD_SLOTS, Problem, ProblemView, TopicId, TopicSet,
 };
 use crate::search::{SearchHit, SearchIndex};
 
@@ -30,7 +30,8 @@ pub struct Content {
     pub companies: Companies,
     /// Worked approach per slug.
     pub approaches: HashMap<String, Approach>,
-    /// Every topic, most common first (ties in order of first use).
+    /// Every topic, most common first (ties in order of first use). A topic's [`TopicId`] is
+    /// its index here.
     pub topics: Vec<String>,
     /// Search index over `problems`.
     pub search_index: SearchIndex,
@@ -40,6 +41,17 @@ pub struct Content {
     companies_json: Box<str>,
     /// Position in `problems` per slug.
     by_slug: HashMap<String, usize>,
+    /// [`TopicId`] per topic name.
+    topic_ids: HashMap<String, TopicId>,
+}
+
+/// How many problems of a list carry one topic (`GET /api/topics`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct TopicCount<'a> {
+    /// The topic tag.
+    pub topic: &'a str,
+    /// Problems of the list with it.
+    pub problems: u32,
 }
 
 /// The shape of a problems file. `sources` is not needed at run time.
@@ -113,6 +125,7 @@ fn compact(file: RawFile) -> anyhow::Result<(Companies, Vec<Problem>)> {
             companies: asked.into_boxed_slice(),
             url: raw.url,
             topics: raw.topics,
+            topic_set: TopicSet::default(),
             premium: raw.premium,
             description: raw.description,
         });
@@ -144,22 +157,30 @@ impl Content {
     /// are added at the end of the picker, named after their slug.
     ///
     /// # Errors
-    /// When a file exists but cannot be read or parsed, or names more than 255 companies.
+    /// When a file exists but cannot be read or parsed, names more than 255 companies or more
+    /// than [`MAX_TOPICS`] topics.
     pub fn load(problems: &Path, approaches: &Path) -> anyhow::Result<Self> {
         let (companies, problems) = match read_json::<RawFile>(problems)? {
             Some(file) => compact(file)?,
             None => (Companies::default(), Vec::new()),
         };
         let approaches = read_json(approaches)?.unwrap_or_default();
-        Ok(Self::new(companies, problems, approaches))
+        let content = Self::new(companies, problems, approaches);
+        anyhow::ensure!(
+            content.topics.len() <= MAX_TOPICS,
+            "{} topics, but at most {MAX_TOPICS} are supported",
+            content.topics.len()
+        );
+        Ok(content)
     }
 
     /// Builds the indexes and lists over parsed content. Company problem counts are
-    /// recomputed from the problems.
+    /// recomputed from the problems, and topics are interned (most common first) into each
+    /// problem's [`TopicSet`]; topics past [`MAX_TOPICS`] get no id and match no filter.
     #[must_use]
     pub fn new(
         mut companies: Companies,
-        problems: Vec<Problem>,
+        mut problems: Vec<Problem>,
         approaches: HashMap<String, Approach>,
     ) -> Self {
         let mut counts = vec![0_u32; companies.len()];
@@ -179,8 +200,22 @@ impl Content {
             .enumerate()
             .map(|(i, p)| (p.slug.clone(), i))
             .collect();
+        let topics = topics_by_count(&problems);
+        let topic_ids: HashMap<String, TopicId> = (0..=TopicId::MAX)
+            .zip(&topics)
+            .map(|(id, topic)| (topic.clone(), id))
+            .collect();
+        for problem in &mut problems {
+            problem.topic_set = TopicSet::default();
+            for topic in &problem.topics {
+                if let Some(&id) = topic_ids.get(topic) {
+                    problem.topic_set.insert(id);
+                }
+            }
+        }
         Self {
-            topics: topics_by_count(&problems),
+            topics,
+            topic_ids,
             search_index: SearchIndex::new(&problems),
             lists: Lists::build(&problems, companies.len()),
             companies_json,
@@ -261,6 +296,52 @@ impl Content {
         self.lists.get(id)
     }
 
+    /// The id of a topic name.
+    #[must_use]
+    pub fn topic_id(&self, name: &str) -> Option<TopicId> {
+        self.topic_ids.get(name).copied()
+    }
+
+    /// The filter of a request, leniently: a missing or unknown topic or difficulty (or an
+    /// empty one) means no filter on it, as an unknown company or period means the default.
+    #[must_use]
+    pub fn problem_filter(&self, topic: Option<&str>, difficulty: Option<&str>) -> ProblemFilter {
+        ProblemFilter {
+            topic: topic.and_then(|t| self.topic_id(t)),
+            difficulty: difficulty.and_then(|d| d.parse().ok()),
+        }
+    }
+
+    /// The topics of a list's problems of `difficulty` (or every difficulty) with how many
+    /// problems carry each, most first, ties by name. One pass over the list, counting into
+    /// a fixed array by topic bit.
+    #[must_use]
+    pub fn topic_counts(
+        &self,
+        list: ListId,
+        difficulty: Option<Difficulty>,
+    ) -> Vec<TopicCount<'_>> {
+        let filter = ProblemFilter {
+            topic: None,
+            difficulty,
+        };
+        let mut counts = [0_u32; MAX_TOPICS];
+        for problem in self.list_problems(list).filter(|p| filter.matches(p)) {
+            for id in problem.topic_set.iter() {
+                counts[usize::from(id)] += 1;
+            }
+        }
+        let mut result: Vec<TopicCount<'_>> = self
+            .topics
+            .iter()
+            .zip(counts)
+            .filter(|&(_, problems)| problems > 0)
+            .map(|(topic, problems)| TopicCount { topic, problems })
+            .collect();
+        result.sort_unstable_by(|a, b| b.problems.cmp(&a.problems).then(a.topic.cmp(b.topic)));
+        result
+    }
+
     /// A list's problems, in new-card order.
     pub fn list_problems(&self, id: ListId) -> impl Iterator<Item = &Problem> + Clone {
         self.list(id).iter().map(|e| self.problem_at(e))
@@ -336,6 +417,71 @@ mod tests {
         );
         assert_eq!(content.default_company(), google);
         assert_eq!(Content::default().default_company(), CompanyFilter::Any);
+    }
+
+    #[test]
+    fn interns_topics_into_bitsets_and_counts_them_per_list() {
+        let mut a = problem(1);
+        a.topics = vec!["Graph".into(), "Array".into()];
+        let mut b = problem(2);
+        b.topics = vec!["Tree".into(), "Array".into()];
+        b.difficulty = Difficulty::Hard;
+        let mut c = problem(3);
+        c.topics = vec!["Tree".into()];
+        let content = Content::new(companies(), vec![a, b, c], HashMap::new());
+        // Ids follow the most-common-first order.
+        assert_eq!(content.topics, ["Array", "Tree", "Graph"]);
+        assert_eq!(
+            ["Array", "Tree", "Graph", "Heap"].map(|t| content.topic_id(t)),
+            [Some(0), Some(1), Some(2), None]
+        );
+        let p1 = content.problem("p1").expect("p1");
+        assert_eq!(p1.topic_set.iter().collect::<Vec<_>>(), [0, 2]);
+
+        let list = content.list_id(None, None);
+        let counts = |difficulty| {
+            content
+                .topic_counts(list, difficulty)
+                .into_iter()
+                .map(|c| (c.topic, c.problems))
+                .collect::<Vec<_>>()
+        };
+        // Ties by name: Array and Tree both 2.
+        assert_eq!(counts(None), [("Array", 2), ("Tree", 2), ("Graph", 1)]);
+        assert_eq!(counts(Some(Difficulty::Hard)), [("Array", 1), ("Tree", 1)]);
+        assert_eq!(counts(Some(Difficulty::Easy)), []);
+
+        let filter = content.problem_filter(Some("Tree"), Some("Hard"));
+        assert_eq!(
+            (filter.topic, filter.difficulty),
+            (Some(1), Some(Difficulty::Hard))
+        );
+        let lenient = content.problem_filter(Some("Nope"), Some("Impossible"));
+        assert!(lenient.is_empty());
+        assert!(content.problem_filter(Some(""), Some("")).is_empty());
+        let json = serde_json::to_string(&content.topic_counts(list, None)).expect("serialize");
+        assert!(
+            json.starts_with(r#"[{"topic":"Array","problems":2},"#),
+            "{json}"
+        );
+    }
+
+    #[test]
+    fn real_topics_fit_the_bitset() {
+        let content = &*testdata::CONTENT;
+        assert!(content.topics.len() <= MAX_TOPICS);
+        for problem in &content.problems {
+            assert_eq!(
+                problem.topic_set.iter().count(),
+                problem.topics.len(),
+                "{}",
+                problem.slug
+            );
+            for topic in &problem.topics {
+                let id = content.topic_id(topic).expect("interned");
+                assert!(problem.has_topic_id(id) && problem.has_topic(topic));
+            }
+        }
     }
 
     #[test]

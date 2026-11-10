@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use openleet::content::Content;
 use openleet::scorer::ScoreReport;
-use openleet::service::{self, AttemptInput, DeckParams, DeckQuery};
+use openleet::service::{self, AttemptInput, DeckParams, DeckQuery, ProblemParams, ProblemQuery};
 
 use super::{Params, param};
 use crate::db::DailyScore;
@@ -30,22 +30,49 @@ pub fn companies_response(content: &Content) -> (Bytes, HeaderValue) {
     (Bytes::copy_from_slice(body), etag)
 }
 
-/// Companies change only with the data, so clients revalidate with the `ETag`.
-pub async fn companies(State(state): State<Shared>, headers: HeaderMap) -> Response {
-    let (body, etag) = &state.companies;
+/// JSON that changes only with the data: sent with its `ETag` and `no-cache`, so clients
+/// revalidate and get a 304 when they already hold it.
+fn revalidated(headers: &HeaderMap, body: Bytes, etag: HeaderValue) -> Response {
+    let fresh = headers.get(header::IF_NONE_MATCH) == Some(&etag);
     let head = [
         (
             header::CONTENT_TYPE,
             HeaderValue::from_static("application/json"),
         ),
         (header::CACHE_CONTROL, HeaderValue::from_static("no-cache")),
-        (header::ETAG, etag.clone()),
+        (header::ETAG, etag),
     ];
-    if headers.get(header::IF_NONE_MATCH) == Some(etag) {
+    if fresh {
         (StatusCode::NOT_MODIFIED, head).into_response()
     } else {
-        (head, body.clone()).into_response()
+        (head, body).into_response()
     }
+}
+
+/// Companies change only with the data, so clients revalidate with the `ETag`.
+pub async fn companies(State(state): State<Shared>, headers: HeaderMap) -> Response {
+    let (body, etag) = &state.companies;
+    revalidated(&headers, body.clone(), etag.clone())
+}
+
+/// `?company=&period=&difficulty=`: the topics of that list's problems (of that difficulty)
+/// with their counts, most first. Counts depend only on the data and the query, so the
+/// response carries an `ETag`.
+pub async fn topics(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Query(params): Params,
+) -> ApiResult<Response> {
+    let content = &state.content;
+    let list = content.list_id(param(&params, "company"), param(&params, "period"));
+    let difficulty = content
+        .problem_filter(None, param(&params, "difficulty"))
+        .difficulty;
+    let body = serde_json::to_vec(&content.topic_counts(list, difficulty))
+        .map_err(|e| ApiError::Internal(e.into()))?;
+    let etag = HeaderValue::from_str(&fingerprint::etag(&body))
+        .map_err(|e| ApiError::Internal(e.into()))?;
+    Ok(revalidated(&headers, body.into(), etag))
 }
 
 /// `?set=&company=&period=&topic=&difficulty=&slug=`: the next card and the cards left.
@@ -150,13 +177,21 @@ pub async fn reset_progress(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `?company=&period=`: the rows of one list, in list order.
+/// `?company=&period=&topic=&difficulty=&q=`: the rows of one list that pass the filter, in
+/// list order, or best match first with a search.
 pub async fn problems(State(state): State<Shared>, Query(params): Params) -> Response {
-    let list = state
-        .content
-        .list_id(param(&params, "company"), param(&params, "period"));
+    let query = ProblemQuery::parse(
+        &state.content,
+        &ProblemParams {
+            company: param(&params, "company"),
+            period: param(&params, "period"),
+            topic: param(&params, "topic"),
+            difficulty: param(&params, "difficulty"),
+            q: param(&params, "q"),
+        },
+    );
     let progress = state.progress.read();
-    let rows = service::problem_rows(&state.content, list, &progress.states, now_ms());
+    let rows = service::problem_rows(&state.content, &query, &progress.states, now_ms());
     Json(&rows).into_response()
 }
 
@@ -208,4 +243,152 @@ pub async fn readiness(State(state): State<Shared>, Query(params): Params) -> Re
     let mut progress = state.progress.write();
     let readiness = progress.report(&state.content, company, now_ms()).readiness;
     Json(Readiness { readiness }).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::path::Path;
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::db::testing::TempDir;
+    use crate::state::test_state_with;
+
+    fn state(dir: &TempDir) -> Shared {
+        let data = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
+        let content = Content::load(&data.join("problems.json"), &data.join("approaches.json"))
+            .expect("load the problems file");
+        test_state_with(dir.root(), "tcp://127.0.0.1:1", content)
+    }
+
+    fn query(pairs: &[(&str, &str)]) -> Params {
+        Query(
+            pairs
+                .iter()
+                .map(|&(k, v)| (k.to_owned(), v.to_owned()))
+                .collect::<HashMap<_, _>>(),
+        )
+    }
+
+    async fn json(response: Response) -> serde_json::Value {
+        let body = axum::body::to_bytes(response.into_body(), 1 << 24)
+            .await
+            .expect("body");
+        serde_json::from_slice(&body).expect("json")
+    }
+
+    async fn topic_list(state: &Shared, pairs: &[(&str, &str)]) -> Vec<(String, u64)> {
+        let response = topics(State(Arc::clone(state)), HeaderMap::new(), query(pairs))
+            .await
+            .expect("topics");
+        json(response)
+            .await
+            .as_array()
+            .expect("array")
+            .iter()
+            .map(|t| {
+                (
+                    t["topic"].as_str().expect("topic").to_owned(),
+                    t["problems"].as_u64().expect("count"),
+                )
+            })
+            .collect()
+    }
+
+    async fn rows(state: &Shared, pairs: &[(&str, &str)]) -> Vec<serde_json::Value> {
+        let response = problems(State(Arc::clone(state)), query(pairs)).await;
+        json(response).await.as_array().expect("array").clone()
+    }
+
+    #[tokio::test]
+    async fn topics_count_the_list_most_first_and_revalidate() {
+        let dir = TempDir::new("api-topics");
+        let state = state(&dir);
+        let all = topic_list(&state, &[]).await;
+        assert_eq!(all[0].0, "Array");
+        assert!(
+            all.windows(2)
+                .all(|w| w[0].1 > w[1].1 || (w[0].1 == w[1].1 && w[0].0 < w[1].0))
+        );
+        assert!(all.iter().all(|t| t.1 > 0));
+        let total = rows(&state, &[]).await.len();
+        assert_eq!(
+            all[0].1,
+            rows(&state, &[("topic", "Array")]).await.len() as u64
+        );
+        assert!(all[0].1 < total as u64);
+
+        // After the difficulty filter: every count shrinks or stays.
+        let hard = topic_list(&state, &[("difficulty", "Hard")]).await;
+        for (topic, count) in &hard {
+            let full = all.iter().find(|t| &t.0 == topic).expect("listed").1;
+            assert!(*count <= full, "{topic}");
+        }
+        let graph = hard
+            .iter()
+            .find(|t| t.0 == "Graph Theory")
+            .expect("Graph Theory")
+            .1;
+        let filtered = rows(&state, &[("topic", "Graph Theory"), ("difficulty", "Hard")]).await;
+        assert_eq!(filtered.len() as u64, graph);
+        assert!(filtered.iter().all(|r| r["difficulty"] == "Hard"));
+        assert!(filtered.iter().all(|r| r.get("topics").is_none()));
+        // An unknown difficulty is no filter.
+        assert_eq!(
+            topic_list(&state, &[("difficulty", "Impossible")]).await,
+            all
+        );
+
+        // The ETag answers a revalidation with 304.
+        let first = topics(State(Arc::clone(&state)), HeaderMap::new(), query(&[]))
+            .await
+            .expect("topics");
+        assert_eq!(first.headers()[header::CACHE_CONTROL], "no-cache");
+        let etag = first.headers()[header::ETAG].clone();
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let again = topics(State(Arc::clone(&state)), headers, query(&[]))
+            .await
+            .expect("topics");
+        assert_eq!(again.status(), StatusCode::NOT_MODIFIED);
+    }
+
+    #[tokio::test]
+    async fn problems_compose_list_filters_and_search() {
+        let dir = TempDir::new("api-problems");
+        let state = state(&dir);
+        let all = rows(&state, &[]).await;
+        let medium = rows(&state, &[("difficulty", "Medium")]).await;
+        assert!(!medium.is_empty() && medium.len() < all.len());
+        // Filtering keeps list order.
+        let ranks: Vec<_> = medium.iter().map(|r| r["rank"].as_u64()).collect();
+        assert!(ranks.windows(2).all(|w| w[0] <= w[1]));
+        // Unknown values filter nothing.
+        assert_eq!(
+            rows(&state, &[("topic", "Nope"), ("difficulty", "x")])
+                .await
+                .len(),
+            all.len()
+        );
+
+        let hits = rows(
+            &state,
+            &[("q", "two sum"), ("company", "meta"), ("period", "all")],
+        )
+        .await;
+        assert_eq!(hits[0]["slug"], "two-sum");
+        let none = rows(&state, &[("q", "two sum"), ("difficulty", "Hard")]).await;
+        assert!(
+            none.iter()
+                .all(|r| r["slug"] != "two-sum" && r["difficulty"] == "Hard")
+        );
+        let lc = rows(
+            &state,
+            &[("period", "lc1000"), ("topic", "Trie"), ("q", "word")],
+        )
+        .await;
+        assert_ne!(lc.len(), 0);
+        assert!(lc.iter().all(|r| r["id"].as_u64() <= Some(1000)));
+    }
 }

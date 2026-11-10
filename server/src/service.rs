@@ -6,7 +6,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::content::Content;
-use crate::lists::ListId;
+use crate::lists::ListEntry;
+use crate::lists::{ListId, ProblemFilter};
 use crate::model::{Approach, Attempt, CompanySlugs, Difficulty, Grade, Problem, ProblemView};
 use crate::scheduler::{
     CardList, CardState, CardStates, CardStatus, QueueFilter, card_status, queue_head,
@@ -80,6 +81,9 @@ pub struct ProblemRow<'a> {
     pub last_at: Option<i64>,
     /// When it is next due.
     pub due: Option<i64>,
+    /// With a search: the statement excerpt of a statement-only hit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
 }
 
 /// Raw query-string values of the deck endpoint.
@@ -112,19 +116,55 @@ pub struct DeckQuery {
 
 impl DeckQuery {
     /// Builds a query leniently: an unknown set falls back to "smart", an unknown company to
-    /// the default one, an unknown period to "6m", and an unknown difficulty or empty strings
-    /// to no filter.
+    /// the default one, an unknown period to "6m", and an unknown topic or difficulty or
+    /// empty strings to no filter.
     #[must_use]
     pub fn parse(content: &Content, params: &DeckParams<'_>) -> Self {
-        let non_empty = |v: Option<&str>| v.filter(|s| !s.is_empty()).map(str::to_owned);
         Self {
             list: content.list_id(params.company, params.period),
             filter: QueueFilter {
                 set: params.set.and_then(|s| s.parse().ok()).unwrap_or_default(),
-                topic: non_empty(params.topic),
-                difficulty: params.difficulty.and_then(|d| d.parse().ok()),
+                problems: content.problem_filter(params.topic, params.difficulty),
             },
-            slug: non_empty(params.slug),
+            slug: params.slug.filter(|s| !s.is_empty()).map(str::to_owned),
+        }
+    }
+}
+
+/// Raw query-string values of the problem table endpoint.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ProblemParams<'a> {
+    /// Company slug or "any".
+    pub company: Option<&'a str>,
+    /// Period.
+    pub period: Option<&'a str>,
+    /// Topic tag.
+    pub topic: Option<&'a str>,
+    /// Difficulty.
+    pub difficulty: Option<&'a str>,
+    /// Free-text search.
+    pub q: Option<&'a str>,
+}
+
+/// Query of the problem table: a list, a filter over it and an optional search.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProblemQuery<'a> {
+    /// Which list.
+    pub list: ListId,
+    /// Which problems of it.
+    pub filter: ProblemFilter,
+    /// Only problems matching this search, best match first; `None` keeps list order.
+    pub q: Option<&'a str>,
+}
+
+impl<'a> ProblemQuery<'a> {
+    /// Builds a query leniently, like [`DeckQuery::parse`]; a blank search means none.
+    #[must_use]
+    pub fn parse(content: &Content, params: &ProblemParams<'a>) -> Self {
+        Self {
+            list: content.list_id(params.company, params.period),
+            filter: content.problem_filter(params.topic, params.difficulty),
+            q: params.q.filter(|q| !q.trim().is_empty()),
         }
     }
 }
@@ -230,36 +270,66 @@ pub fn deck<'a>(
     }
 }
 
-/// The problems of one list with their progress, in list order.
+fn row<'a>(
+    content: &'a Content,
+    entry: &ListEntry,
+    states: &CardStates,
+    now: i64,
+    snippet: Option<String>,
+) -> ProblemRow<'a> {
+    let p = content.problem_at(entry);
+    let state = states.get(&p.slug);
+    ProblemRow {
+        id: p.id,
+        slug: &p.slug,
+        title: &p.title,
+        difficulty: p.difficulty,
+        premium: p.premium,
+        rank: entry.rank,
+        frequency: entry.frequency,
+        companies: p.company_slugs(&content.companies),
+        status: card_status(state, now),
+        list: state.and_then(|s| s.list),
+        reviews: state.map_or(0, |s| s.reviews),
+        last_score: state.and_then(|s| s.last_score),
+        last_at: state.map(|s| s.last_at),
+        due: state.map(|s| s.due),
+        snippet,
+    }
+}
+
+/// The problems of one list that pass the filter, with their progress: in list order, or
+/// best match first with a search. Without a search this is one pass over the list.
 #[must_use]
 pub fn problem_rows<'a>(
     content: &'a Content,
-    list: ListId,
+    query: &ProblemQuery<'_>,
     states: &CardStates,
     now: i64,
 ) -> Vec<ProblemRow<'a>> {
+    let list = content.list(query.list);
+    let Some(q) = query.q else {
+        return list
+            .iter()
+            .filter(|entry| query.filter.matches(content.problem_at(entry)))
+            .map(|entry| row(content, entry, states, now, None))
+            .collect();
+    };
+    // Where each problem sits in the list, so the search scores only the list's problems.
+    let mut position = vec![u32::MAX; content.problems.len()];
+    for (i, entry) in (0_u32..).zip(list) {
+        position[entry.problem as usize] = i;
+    }
+    let entry_of = |problem: u32| list.get(position[problem as usize] as usize);
     content
-        .list(list)
-        .iter()
-        .map(|entry| {
-            let p = content.problem_at(entry);
-            let state = states.get(&p.slug);
-            ProblemRow {
-                id: p.id,
-                slug: &p.slug,
-                title: &p.title,
-                difficulty: p.difficulty,
-                premium: p.premium,
-                rank: entry.rank,
-                frequency: entry.frequency,
-                companies: p.company_slugs(&content.companies),
-                status: card_status(state, now),
-                list: state.and_then(|s| s.list),
-                reviews: state.map_or(0, |s| s.reviews),
-                last_score: state.and_then(|s| s.last_score),
-                last_at: state.map(|s| s.last_at),
-                due: state.map(|s| s.due),
-            }
+        .search_index
+        .matches(q, |problem| {
+            entry_of(problem).is_some_and(|e| query.filter.matches(content.problem_at(e)))
+        })
+        .into_iter()
+        .filter_map(|hit| {
+            let entry = entry_of(hit.problem)?;
+            Some(row(content, entry, states, now, hit.snippet))
         })
         .collect()
 }
@@ -332,7 +402,11 @@ mod tests {
         assert_eq!(q.list.period, Period::Months6);
         assert_eq!(q.list.company, CompanyFilter::Company(GOOGLE));
         assert_eq!(
-            (q.filter.topic, q.filter.difficulty, q.slug),
+            (
+                q.filter.problems.topic,
+                q.filter.problems.difficulty,
+                q.slug
+            ),
             (None, Some(Difficulty::Hard), None)
         );
         let q = DeckQuery::parse(
@@ -404,12 +478,20 @@ mod tests {
         assert_eq!(due.card.map(|c| c.problem.id), Some(2));
     }
 
+    fn rows<'a>(
+        content: &'a Content,
+        params: &ProblemParams<'_>,
+        states: &CardStates,
+        now: i64,
+    ) -> Vec<ProblemRow<'a>> {
+        problem_rows(content, &ProblemQuery::parse(content, params), states, now)
+    }
+
     #[test]
     fn builds_rows_for_one_list_with_progress() {
         let content = content();
         let states = card_states(&[attempt("p2", Grade::Again, T0)]);
-        let list = content.list_id(None, None);
-        let rows = problem_rows(&content, list, &states, T0 + 1);
+        let rows = rows(&content, &ProblemParams::default(), &states, T0 + 1);
         let json: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&rows).expect("serialize")).expect("parse");
         assert_eq!(json.as_array().map(Vec::len), Some(2));
@@ -422,14 +504,121 @@ mod tests {
                 "lastAt": T0, "due": T0 + 600_000,
             })
         );
-        let lc = problem_rows(
+        let lc = super::problem_rows(
             &content,
-            content.list_id(Some("any"), Some("lc1000")),
+            &ProblemQuery {
+                list: content.list_id(Some("any"), Some("lc1000")),
+                filter: ProblemFilter::default(),
+                q: None,
+            },
             &states,
             T0,
         );
         let lc: Vec<_> = lc.iter().map(|r| (r.id, r.rank, r.frequency)).collect();
         assert_eq!(lc, [(2, 2, 30.0), (3, 3, 0.0)]);
+    }
+
+    /// p1 Easy [Graph], p2 Hard [Graph, Array], p3 Hard [Array]: all Google 6 months.
+    fn tagged() -> Content {
+        let mut p1 = problem(1);
+        p1.difficulty = Difficulty::Easy;
+        p1.topics = vec!["Graph".into()];
+        let mut p2 = problem(2);
+        p2.difficulty = Difficulty::Hard;
+        p2.topics = vec!["Graph".into(), "Array".into()];
+        let mut p3 = problem(3);
+        p3.difficulty = Difficulty::Hard;
+        Content::new(companies(), vec![p1, p2, p3], HashMap::new())
+    }
+
+    #[test]
+    fn filters_rows_by_topic_and_difficulty_in_list_order() {
+        let content = tagged();
+        let states = CardStates::new();
+        let ids = |topic, difficulty| {
+            let params = ProblemParams {
+                topic,
+                difficulty,
+                ..ProblemParams::default()
+            };
+            rows(&content, &params, &states, T0)
+                .iter()
+                .map(|r| r.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(None, None), [1, 2, 3]);
+        assert_eq!(ids(Some("Graph"), None), [1, 2]);
+        assert_eq!(ids(None, Some("Hard")), [2, 3]);
+        assert_eq!(ids(Some("Graph"), Some("Hard")), [2]);
+        assert_eq!(ids(Some("Array"), Some("Easy")), Vec::<u32>::new());
+        // Unknown values filter nothing, like an unknown company or period.
+        assert_eq!(ids(Some("Nope"), Some("Impossible")), [1, 2, 3]);
+        assert_eq!(ids(Some(""), Some("")), [1, 2, 3]);
+    }
+
+    #[test]
+    fn deals_only_cards_of_the_topic_and_difficulty() {
+        let content = tagged();
+        let states = CardStates::new();
+        let deal = |topic, difficulty| {
+            let query = DeckQuery::parse(
+                &content,
+                &DeckParams {
+                    topic,
+                    difficulty,
+                    ..DeckParams::default()
+                },
+            );
+            let deck = deck(&content, &states, &query, T0, |_| None);
+            (deck.card.map(|c| c.problem.id), deck.remaining)
+        };
+        assert_eq!(deal(None, None), (Some(1), 3));
+        assert_eq!(deal(Some("Graph"), Some("Hard")), (Some(2), 1));
+        assert_eq!(deal(None, Some("Hard")), (Some(2), 2));
+        assert_eq!(deal(Some("Array"), Some("Easy")), (None, 0));
+    }
+
+    #[test]
+    fn searches_within_the_filtered_list_best_match_first() {
+        let content = &*crate::content::testdata::CONTENT;
+        let states = CardStates::new();
+        let search = |q, topic, difficulty| {
+            let params = ProblemParams {
+                topic,
+                difficulty,
+                q: Some(q),
+                ..ProblemParams::default()
+            };
+            rows(content, &params, &states, T0)
+        };
+        let all = search("tree", None, None);
+        assert_ne!(all.len(), 0);
+        let google: Vec<_> = rows(content, &ProblemParams::default(), &states, T0)
+            .into_iter()
+            .map(|r| r.slug)
+            .collect();
+        assert!(all.iter().all(|r| google.contains(&r.slug)));
+        let hard = search("tree", Some("Depth-First Search"), Some("Hard"));
+        assert!(!hard.is_empty() && hard.len() < all.len());
+        for row in &hard {
+            let p = content.problem(row.slug).expect("known");
+            assert!(p.difficulty == Difficulty::Hard && p.has_topic("Depth-First Search"));
+        }
+        // Same order as the unfiltered search: filtering never reorders.
+        let order: Vec<_> = all
+            .iter()
+            .map(|r| r.slug)
+            .filter(|s| hard.iter().any(|h| h.slug == *s))
+            .collect();
+        assert_eq!(order, hard.iter().map(|r| r.slug).collect::<Vec<_>>());
+        assert_eq!(search("two sum", None, None)[0].slug, "two-sum");
+        // A blank search is no search: list order.
+        assert_eq!(search("  ", None, None).len(), google.len());
+        // Statement hits carry a snippet; the rest leave it out of the JSON.
+        let statement = search("prerequisites", None, None);
+        assert!(statement.iter().any(|r| r.snippet.is_some()));
+        let json = serde_json::to_string(&search("two sum", None, None)[0]).expect("serialize");
+        assert!(!json.contains("snippet"), "{json}");
     }
 
     #[test]

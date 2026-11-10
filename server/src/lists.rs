@@ -2,7 +2,7 @@
 //! and for "LC 1–1000", the problems in new-card order. Requests walk one list instead of
 //! scanning and sorting every problem.
 
-use crate::model::{CompanyFilter, PERIOD_SLOTS, Period, Problem};
+use crate::model::{CompanyFilter, Difficulty, PERIOD_SLOTS, Period, Problem, TopicId};
 
 /// One problem of a list, with its rank and frequency in that list.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -24,6 +24,31 @@ pub struct ListId {
     pub company: CompanyFilter,
     /// Which period.
     pub period: Period,
+}
+
+/// Which problems of a list to keep. A check is one bit test and one byte compare, so a
+/// filtered request is a single pass over the list with no allocation per problem.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct ProblemFilter {
+    /// Only problems with this topic.
+    pub topic: Option<TopicId>,
+    /// Only problems of this difficulty.
+    pub difficulty: Option<Difficulty>,
+}
+
+impl ProblemFilter {
+    /// Whether a problem passes.
+    #[must_use]
+    pub fn matches(self, problem: &Problem) -> bool {
+        self.topic.is_none_or(|t| problem.has_topic_id(t))
+            && self.difficulty.is_none_or(|d| problem.difficulty == d)
+    }
+
+    /// Whether the filter keeps every problem.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.topic.is_none() && self.difficulty.is_none()
+    }
 }
 
 /// Every list, flat: "LC 1–1000" first, then per period "any", then per company.
@@ -166,6 +191,20 @@ mod tests {
         assert_eq!(ids(&problems, six), [3, 5, 2]);
         assert_eq!(six.iter().map(|e| e.rank).collect::<Vec<_>>(), [1, 2, 3]);
         assert_eq!(six[0].frequency, 90.0);
+    }
+
+    #[test]
+    fn filters_by_topic_bit_and_difficulty() {
+        let mut p = classic(1);
+        p.topic_set.insert(3);
+        p.difficulty = Difficulty::Hard;
+        let filter = |topic, difficulty| ProblemFilter { topic, difficulty };
+        assert!(ProblemFilter::default().matches(&p) && ProblemFilter::default().is_empty());
+        assert!(filter(Some(3), None).matches(&p));
+        assert!(filter(Some(3), Some(Difficulty::Hard)).matches(&p));
+        assert!(!filter(Some(4), None).matches(&p));
+        assert!(!filter(Some(3), Some(Difficulty::Easy)).matches(&p));
+        assert!(!filter(None, Some(Difficulty::Medium)).is_empty());
     }
 
     #[test]

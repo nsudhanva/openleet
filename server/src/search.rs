@@ -41,6 +41,15 @@ pub struct SearchHit<'a> {
     pub snippet: Option<String>,
 }
 
+/// A hit as a problem index, for callers that already hold the problem (the problem table).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchMatch {
+    /// Index into the problems the index was built over.
+    pub problem: u32,
+    /// Statement excerpt around the match, for statement-only hits.
+    pub snippet: Option<String>,
+}
+
 /// One problem, preprocessed for matching.
 #[derive(Debug)]
 struct Doc {
@@ -303,6 +312,8 @@ fn number_query(raw: &str) -> Option<u32> {
 
 /// One scored document before hits are built.
 struct Scored<'d, 'q> {
+    /// Index of `doc`, which is the problem's index.
+    index: u32,
     doc: &'d Doc,
     score: u32,
     field: SearchField,
@@ -356,6 +367,41 @@ impl SearchIndex {
     /// the problem with the better 6-month rank. At most `limit` hits.
     #[must_use]
     pub fn search(&self, query: &str, limit: usize) -> Vec<SearchHit<'_>> {
+        self.scored(
+            query,
+            |_| true,
+            limit,
+            |hit| SearchHit {
+                slug: &hit.doc.slug,
+                id: hit.doc.id,
+                rank: hit.doc.rank,
+                title: &hit.doc.display_title,
+                difficulty: hit.doc.difficulty,
+                field: hit.field,
+                snippet: hit.snippet(),
+            },
+        )
+    }
+
+    /// Like [`Self::search`], but only over the problems `keep` accepts (by index), every
+    /// hit, as problem indexes. Rejected problems are skipped before any matching.
+    #[must_use]
+    pub fn matches(&self, query: &str, keep: impl FnMut(u32) -> bool) -> Vec<SearchMatch> {
+        self.scored(query, keep, usize::MAX, |hit| SearchMatch {
+            problem: hit.index,
+            snippet: hit.snippet(),
+        })
+    }
+
+    /// The best `limit` documents `keep` accepts that match the query, best first, each
+    /// turned into a result by `build`.
+    fn scored<'s, T>(
+        &'s self,
+        query: &str,
+        mut keep: impl FnMut(u32) -> bool,
+        limit: usize,
+        build: impl FnMut(&Scored<'s, '_>) -> T,
+    ) -> Vec<T> {
         let raw = query.trim_matches(is_js_space);
         let q = normalize(raw);
         if q.is_empty() {
@@ -368,9 +414,13 @@ impl SearchIndex {
         let mut matches: Vec<(u32, SearchField)> = Vec::with_capacity(tokens.len());
 
         let mut scored: Vec<Scored<'_, '_>> = Vec::new();
-        for doc in &self.docs {
+        for (index, doc) in (0_u32..).zip(&self.docs) {
+            if !keep(index) {
+                continue;
+            }
             if number == Some(doc.id) {
                 scored.push(Scored {
+                    index,
                     doc,
                     score: NUMBER_SCORE,
                     field: SearchField::Number,
@@ -380,6 +430,7 @@ impl SearchIndex {
             }
             if compact.len() >= 2 && doc.acronym == compact {
                 scored.push(Scored {
+                    index,
                     doc,
                     score: ACRONYM_SCORE,
                     field: SearchField::Title,
@@ -410,6 +461,7 @@ impl SearchIndex {
                 score += TITLE_PREFIX_BONUS;
             }
             scored.push(Scored {
+                index,
                 doc,
                 score,
                 field,
@@ -418,25 +470,16 @@ impl SearchIndex {
         }
 
         scored.sort_by(|a, b| b.score.cmp(&a.score).then(a.doc.rank.cmp(&b.doc.rank)));
-        scored.truncate(limit);
-        scored
-            .into_iter()
-            .map(
-                |Scored {
-                     doc, field, token, ..
-                 }| SearchHit {
-                    slug: &doc.slug,
-                    id: doc.id,
-                    rank: doc.rank,
-                    title: &doc.display_title,
-                    difficulty: doc.difficulty,
-                    field,
-                    snippet: token
-                        .filter(|_| field == SearchField::Statement)
-                        .map(|t| snippet(&doc.plain, t)),
-                },
-            )
-            .collect()
+        scored.iter().take(limit).map(build).collect()
+    }
+}
+
+impl Scored<'_, '_> {
+    /// The statement excerpt of a statement-only hit.
+    fn snippet(&self) -> Option<String> {
+        self.token
+            .filter(|_| self.field == SearchField::Statement)
+            .map(|t| snippet(&self.doc.plain, t))
     }
 }
 

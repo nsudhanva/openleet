@@ -259,6 +259,47 @@ impl Companies {
     }
 }
 
+/// Index of a topic in the content's topic table, most common first.
+pub type TopicId = u8;
+/// Most distinct topics a [`TopicSet`] holds.
+pub const MAX_TOPICS: usize = 256;
+
+/// A problem's topics as a fixed 256-bit set over [`TopicId`]s: a membership test is one
+/// shift and mask, with no string compare and no allocation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct TopicSet([u64; MAX_TOPICS / 64]);
+
+impl TopicSet {
+    /// Adds a topic.
+    pub const fn insert(&mut self, id: TopicId) {
+        self.0[(id >> 6) as usize] |= 1 << (id & 63);
+    }
+
+    /// Whether the set holds this topic.
+    #[must_use]
+    pub const fn contains(self, id: TopicId) -> bool {
+        self.0[(id >> 6) as usize] & (1 << (id & 63)) != 0
+    }
+
+    /// Every topic in the set, lowest id (most common topic) first.
+    pub fn iter(self) -> impl Iterator<Item = TopicId> {
+        (0_u8..).zip(self.0).flat_map(|(word, mut bits)| {
+            std::iter::from_fn(move || {
+                if bits == 0 {
+                    return None;
+                }
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    reason = "a u64 has fewer than 64 trailing zeros once it is not 0"
+                )]
+                let bit = bits.trailing_zeros() as u8;
+                bits &= bits - 1;
+                Some(word * 64 + bit)
+            })
+        })
+    }
+}
+
 /// Whose lists to use: one company's, or every company's ("any").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum CompanyFilter {
@@ -285,6 +326,9 @@ pub struct Problem {
     pub url: String,
     /// LeetCode topic tags.
     pub topics: Vec<String>,
+    /// The same tags as ids of the content's topic table, for filtering; filled in by
+    /// [`crate::content::Content::new`].
+    pub topic_set: TopicSet,
     /// Whether the problem needs LeetCode Premium.
     pub premium: bool,
     /// Sanitized HTML statement; `None` only when no source has one.
@@ -336,6 +380,12 @@ impl Problem {
     #[must_use]
     pub fn has_topic(&self, topic: &str) -> bool {
         self.topics.iter().any(|t| t == topic)
+    }
+
+    /// Whether the problem carries this topic, by id; one bit test.
+    #[must_use]
+    pub const fn has_topic_id(&self, topic: TopicId) -> bool {
+        self.topic_set.contains(topic)
     }
 
     /// The problem as JSON, with company ids resolved through `companies`.
@@ -535,6 +585,7 @@ pub(crate) mod fixtures {
             companies: Box::new([]),
             url: String::new(),
             topics: vec!["Array".to_owned()],
+            topic_set: super::TopicSet::default(),
             premium: false,
             description: None,
         }
@@ -632,6 +683,21 @@ mod tests {
         let c = classic(7);
         assert_eq!((c.rank(), c.best_frequency(Period::All)), (100_007, None));
         assert!(c.in_lc1000() && !classic(1001).in_lc1000());
+    }
+
+    #[test]
+    fn topic_sets_hold_every_id_and_list_them_in_order() {
+        let mut set = TopicSet::default();
+        assert_eq!(set.iter().count(), 0);
+        for id in [200, 0, 63, 64, 255, 127] {
+            set.insert(id);
+        }
+        set.insert(64);
+        assert_eq!(set.iter().collect::<Vec<_>>(), [0, 63, 64, 127, 200, 255]);
+        assert!(set.contains(255) && set.contains(0) && !set.contains(1) && !set.contains(128));
+        let mut p = classic(1);
+        p.topic_set = set;
+        assert!(p.has_topic_id(200) && !p.has_topic_id(201));
     }
 
     #[test]

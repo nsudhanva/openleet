@@ -5,7 +5,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{Attempt, Difficulty, Grade, Problem, wire_enum};
+use crate::lists::ProblemFilter;
+use crate::model::{Attempt, Grade, Problem, wire_enum};
 
 /// One minute in milliseconds.
 pub const MINUTE: i64 = 60_000;
@@ -198,23 +199,8 @@ pub fn in_set(set: StudySet, state: Option<&CardState>, now: i64) -> bool {
 pub struct QueueFilter {
     /// The study set.
     pub set: StudySet,
-    /// Only problems with this topic tag.
-    pub topic: Option<String>,
-    /// Only problems of this difficulty.
-    pub difficulty: Option<Difficulty>,
-}
-
-/// Whether a problem passes the filter at `now`.
-#[must_use]
-pub fn matches_filter(
-    problem: &Problem,
-    state: Option<&CardState>,
-    filter: &QueueFilter,
-    now: i64,
-) -> bool {
-    filter.topic.as_deref().is_none_or(|t| problem.has_topic(t))
-        && filter.difficulty.is_none_or(|d| problem.difficulty == d)
-        && in_set(filter.set, state, now)
+    /// Only problems with this topic and difficulty.
+    pub problems: ProblemFilter,
 }
 
 /// Queue order key: due reviews (visit-again first, then oldest due), then new problems in
@@ -237,8 +223,12 @@ fn ranked<'p>(
     now: i64,
 ) -> impl Iterator<Item = (Key, &'p Problem)> {
     list.into_iter().enumerate().filter_map(move |(i, p)| {
+        // The bit test first, so filtered-out problems never hash their slug.
+        if !filter.problems.matches(p) {
+            return None;
+        }
         let state = states.get(&p.slug);
-        matches_filter(p, state, filter, now).then(|| (priority(i, state, now), p))
+        in_set(filter.set, state, now).then(|| (priority(i, state, now), p))
     })
 }
 
@@ -281,6 +271,7 @@ pub fn queue_head<'p>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::Difficulty;
     use crate::model::fixtures::{T0, attempt, attempt_scored, problem};
 
     fn slugs(list: &[&Problem]) -> Vec<String> {
@@ -356,11 +347,12 @@ mod tests {
 
     #[test]
     fn filters_sets_by_list_topic_difficulty_and_missed_topics() {
+        const GRAPH: u8 = 7;
         let mut p1 = problem(1);
-        p1.topics = vec!["Graph".to_owned()];
+        p1.topic_set.insert(GRAPH);
         p1.difficulty = Difficulty::Hard;
         let mut p2 = problem(2);
-        p2.topics = vec!["Graph".to_owned()];
+        p2.topic_set.insert(GRAPH);
         let problems = [p1, p2, problem(3)];
         let states = card_states(&[
             attempt_scored("p1", Grade::Less, T0, Some(0.2)),
@@ -371,10 +363,22 @@ mod tests {
         assert_eq!(
             run(QueueFilter {
                 set: StudySet::Less,
-                topic: Some("Graph".to_owned()),
-                difficulty: Some(Difficulty::Hard),
+                problems: ProblemFilter {
+                    topic: Some(GRAPH),
+                    difficulty: Some(Difficulty::Hard),
+                },
             }),
             ["p1"]
+        );
+        assert_eq!(
+            run(QueueFilter {
+                set: StudySet::Less,
+                problems: ProblemFilter {
+                    topic: Some(GRAPH),
+                    difficulty: None,
+                },
+            }),
+            ["p1", "p2"]
         );
         assert_eq!(
             run(QueueFilter {
