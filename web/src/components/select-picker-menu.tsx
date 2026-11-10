@@ -1,4 +1,5 @@
 import {
+	chosenLabel,
 	PICKER_CLASS,
 	pickerName,
 	type SelectPickerProps,
@@ -30,7 +31,14 @@ export function SelectPickerMenu<T extends string | null>({
 				size="sm"
 				className={cn(PICKER_CLASS, className)}
 			>
-				<SelectValue />
+				{/* Its own span, so a long choice ends in an ellipsis. */}
+				<SelectValue className="min-w-0">
+					{(chosen: T) => (
+						<span className="truncate">
+							{chosenLabel({ value: chosen, items })}
+						</span>
+					)}
+				</SelectValue>
 			</SelectTrigger>
 			<SelectContent>
 				{items.map((item) => (

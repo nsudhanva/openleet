@@ -67,7 +67,7 @@ export function CompaniesDialog({
 										scope="col"
 										aria-sort={p === period ? "descending" : undefined}
 										className={cn(
-											"w-20 px-2 py-1.5 text-left font-medium",
+											"px-1 py-1.5 text-left font-medium sm:w-20 sm:px-2",
 											p === period && "text-foreground",
 										)}
 									>
@@ -101,7 +101,7 @@ export function CompaniesDialog({
 										</button>
 									</th>
 									{ASKED_PERIODS.map((p) => (
-										<td key={p} className="px-2 py-1">
+										<td key={p} className="px-1 py-1 sm:px-2">
 											<RankCell stat={row.asked[p]} />
 										</td>
 									))}
@@ -115,7 +115,10 @@ export function CompaniesDialog({
 	);
 }
 
-/** "#3" over a small bar as long as the frequency; a dash when it is not on that list. */
+/**
+ * "#3" over a small bar as long as the frequency (and its number, but on a phone, which has
+ * room only for the bar); a dash when it is not on that list.
+ */
 function RankCell({ stat }: { stat: Asked | undefined }) {
 	if (!stat)
 		return (
@@ -128,8 +131,11 @@ function RankCell({ stat }: { stat: Asked | undefined }) {
 		<div className="space-y-0.5">
 			<div className="flex items-baseline justify-between gap-1 tabular-nums">
 				<span>#{stat.rank}</span>
-				<span className="text-xs text-muted-foreground">
-					<span className="sr-only">frequency </span>
+				<span className="sr-only">frequency {Math.round(stat.frequency)}</span>
+				<span
+					aria-hidden
+					className="text-xs text-muted-foreground max-sm:hidden"
+				>
 					{Math.round(stat.frequency)}
 				</span>
 			</div>

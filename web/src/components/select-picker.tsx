@@ -7,14 +7,20 @@ import { cn } from "@/lib/utils";
 /** The trigger's look, the same before and after the list loads. */
 export const PICKER_CLASS = "bg-card max-sm:w-full";
 
-/** The trigger's accessible name, which includes its text: "Problem list: Asked in 6 months". */
-export function pickerName<T extends string | null>({
-	label,
+/** The chosen item's text. */
+export function chosenLabel<T extends string | null>({
 	value,
 	items,
-}: SelectPickerProps<T>): string {
-	const chosen = items.find((item) => item.value === value)?.label;
-	return chosen ? `${label}: ${chosen}` : label;
+}: Pick<SelectPickerProps<T>, "value" | "items">): string | undefined {
+	return items.find((item) => item.value === value)?.label;
+}
+
+/** The trigger's accessible name, which includes its text: "Problem list: Asked in 6 months". */
+export function pickerName<T extends string | null>(
+	props: SelectPickerProps<T>,
+): string {
+	const chosen = chosenLabel(props);
+	return chosen ? `${props.label}: ${chosen}` : props.label;
 }
 
 const loadMenu = () => import("@/components/select-picker-menu");
@@ -48,8 +54,8 @@ export function SelectPicker<T extends string | null>(
 			{...prefetchProps}
 			onClick={use}
 		>
-			<span data-slot="select-value" className="flex flex-1 text-left">
-				{props.items.find((item) => item.value === props.value)?.label}
+			<span data-slot="select-value" className="min-w-0 flex-1 text-left">
+				<span className="truncate">{chosenLabel(props)}</span>
 			</span>
 			<ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" />
 		</button>
