@@ -7,6 +7,9 @@ Pipeline (`uv run openleet judge all`):
             data/judge/specs.json and data/judge/tests.duckdb
   stress    run the stress generators (judge/py/gen) and the qualified references on them
   final     assemble again, now with the stress tests
+  time      submit every reference to running judge daemons (JUDGE_SOCKETS) on exactly the
+            kept tests, and set each problem's time limit from the trusted ones' times
+            (limits.py; `judge limits` sets them again from the cached times)
 
 `judge publish` uploads tests.duckdb as a GitHub release asset (it is too big for git) and
 records it in data/judge/corpus.json; `judge fetch` downloads and verifies that asset.
@@ -31,6 +34,8 @@ WORK_DIR = CACHE_DIR / "judge"
 WORK_ITEMS_DIR = WORK_DIR / "work"
 RESULTS_DIR = WORK_DIR / "results"
 STRESS_DIR = WORK_DIR / "stress"
+# Each reference's verdict and CPU time through the judge (timing.py).
+TIMING_DIR = WORK_DIR / "timing"
 JUDGE_DIR = DATA_DIR / "judge"
 SPECS_PATH = JUDGE_DIR / "specs.json"
 TESTS_PATH = JUDGE_DIR / "tests.duckdb"

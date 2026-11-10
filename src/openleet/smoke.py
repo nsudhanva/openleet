@@ -28,16 +28,19 @@ from typing import Any, TextIO
 from openleet.judging import SPECS_PATH
 
 DEFAULT_URL = "http://localhost:8080"
-# The judge may queue a submission behind others and then run it for up to 30 s of CPU.
-TIMEOUT_S = 240
+# The judge may queue a submission behind others, then run it twice (a slowed machine), each
+# time for up to 120 s of CPU on a throttled machine (proto MAX_RUN_CPU_MS).
+TIMEOUT_S = 600
 BUSY_RETRIES = 20
 BUSY_WAIT_S = 3.0
 # The judge's per-test stdout cap (judge/src/run.rs STDOUT_BYTES, counted in characters).
 STDOUT_CAP = 16 << 10
 MAX_CODE_BYTES = 64 << 10
 MARK = -987654321
-# The judge's largest time limit (server/src/judge.rs, TimePolicy::MAX_MS).
+# The largest time limit, and the one without a measured limit, in reference ms
+# (server/src/judge.rs, limits::MAX_MS and limits::DEFAULT_MS).
 MAX_LIMIT_MS = 30_000
+DEFAULT_LIMIT_MS = 2000
 UNICODE = "héllo ✓ 日本語 🚀"
 CONCURRENT = 8
 # Category order for the sample: rare kinds first, so a small sample still covers them.
@@ -358,16 +361,15 @@ def categories(entry: dict) -> list[str]:
 
 
 def judged(specs: dict) -> dict[str, dict]:
-    """Problems with a reference that fits the time limit. The limit admits the slowest
-    reference only up to its 30 s cap (server/src/judge.rs, TimePolicy), and specs.json's
-    reference may be that slowest one, so problems over the cap are left out."""
+    """Problems with a reference solution, which their limit admits (src/openleet/judging/
+    limits.py) unless the limit had to stop at its cap."""
     return {
         slug: entry
         for slug, entry in specs.items()
         if entry.get("supported")
         and entry.get("reference")
         and entry.get("spec")
-        and limit_estimate(entry) <= MAX_LIMIT_MS
+        and limit_ms(entry) < MAX_LIMIT_MS
     }
 
 
@@ -393,14 +395,20 @@ def sample(specs: dict[str, dict], size: int, rng: random.Random) -> list[str]:
     return chosen
 
 
-def limit_estimate(entry: dict) -> float:
-    return max((entry.get("refCpuMs") or 0) * 4, (entry.get("slowCpuMs") or 0) * 1.25)
+def limit_ms(entry: dict) -> int:
+    """The problem's time limit in reference ms, as the server reads it."""
+    return min(entry.get("limitMs") or DEFAULT_LIMIT_MS, MAX_LIMIT_MS)
+
+
+def reference_ms(entry: dict) -> int:
+    """CPU time of the problem's fastest trusted reference solution, in reference ms."""
+    return min((entry.get("cpuMs") or {"": 0}).values())
 
 
 def abuse_problem(specs: dict[str, dict]) -> str:
     """A plain, fast function problem with two or more inputs, for the sandbox checks."""
     candidates = [
-        (limit_estimate(e), slug)
+        (limit_ms(e), slug)
         for slug, e in specs.items()
         if e["spec"]["kind"] == "function"
         and not e["spec"].get("adapter")
@@ -422,8 +430,8 @@ def slow_problems(specs: dict[str, dict], rng: random.Random, count: int) -> lis
         if e["tests"].get("stress")
         and e["spec"]["kind"] == "function"
         and any(p["type"].startswith(("List", "str")) for p in e["spec"]["params"])
-        and (e.get("refCpuMs") or 0) >= 100
-        and limit_estimate(e) <= 8000
+        and reference_ms(e) >= 100
+        and limit_ms(e) <= 8000
     ]
     return rng.sample(sized, min(count, len(sized)))
 

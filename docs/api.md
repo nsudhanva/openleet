@@ -17,7 +17,7 @@ All endpoints are under `/api` and return JSON.
 | `GET /code/:slug` | Starter code, your draft, examples and the time limit |
 | `PUT /drafts`, `POST /drafts/reset`, `POST /drafts/restore` | Save, reset or restore code |
 | `POST /run` `{slug, code, input?}` | Run the examples or your own input |
-| `POST /submit` `{slug, code}` | Run every test |
+| `POST /submit` `{slug, code}` | Run every test: verdict, CPU time against the limit, the intended complexity |
 | `GET /submissions?slug=` | Your submissions for a problem |
 | `GET /next?slug=&company=&period=&topic=&difficulty=&status=&order=` | The plan's next problem after `slug`, the plan's progress, and up to four related plans |
 | `GET /plans` | Your pinned plans, then your recent ones, each with its progress and next problem |

@@ -8,11 +8,13 @@ from openleet.judging import HARNESS_DIR, RESULTS_DIR, SPECS_PATH, STRESS_DIR, W
 from openleet.judging.assemble import assemble
 from openleet.judging.brief import brief
 from openleet.judging.corpus import fetch, publish
+from openleet.judging.limits import refresh_limits
 from openleet.judging.prepare import prepare
 from openleet.judging.testdb import migrate
+from openleet.judging.timing import time_references
 
 # The stages `judge all` runs, in order.
-PIPELINE = ("prepare", "vote", "assemble", "stress", "final")
+PIPELINE = ("prepare", "vote", "assemble", "stress", "final", "time")
 # The judge's own runtime, so references run exactly as submissions will.
 IMAGE = "openleet-judge-dev"
 # Built with HARNESS_DIR as the context, for requirements.txt (exported from pyproject.toml).
@@ -69,6 +71,13 @@ def stress() -> None:
     )
 
 
+def time_limits() -> None:
+    """Times every reference through running judge daemons (timing.py), then sets each
+    problem's time limit in specs.json from those times (limits.py)."""
+    time_references()
+    refresh_limits()
+
+
 def migrate_corpus(paths: list[str]) -> None:
     """Converts a corpus file to the current schema (see testdb.migrate)."""
     if len(paths) != 2:
@@ -83,6 +92,8 @@ def run(stage: str, args: list[str], problems_path: Path) -> None:
         "assemble": assemble,
         "stress": stress,
         "final": assemble,
+        "time": time_limits,
+        "limits": refresh_limits,
         "brief": lambda: brief(args, problems_path),
         "publish": publish,
         "fetch": fetch,

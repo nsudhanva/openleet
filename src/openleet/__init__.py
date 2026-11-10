@@ -32,6 +32,8 @@ def main() -> None:
             "assemble",
             "stress",
             "final",
+            "time",
+            "limits",
             "all",
             "brief",
             "publish",

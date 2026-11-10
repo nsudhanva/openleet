@@ -24,7 +24,9 @@ from openleet.judging import (
     trusted,
     unsupported,
 )
+from openleet.judging.limits import set_limit
 from openleet.judging.testdb import TEST_KINDS, write_jsonl
+from openleet.judging.timing import tests_print_of, timings
 
 FLOAT_TOLERANCE = 1e-5
 # Larger exact stress answers are stored as a SHA-256 of their printed form.
@@ -172,8 +174,9 @@ def judge_problem(item: dict, votes: dict) -> tuple[dict, list[dict]]:
             tests.append({"kind": kind, "test": {"input": test["input"]}, "expected": expected})
     stress, stress_cpu = stress_tests(item["slug"], voters, same)
     tests += stress
-    # Time limits come from the references that answered every stress input: the CPU time of
-    # one killed on an input says nothing about how long a correct answer takes.
+    # Until the references are timed on these tests through the judge (limits.py), their
+    # voting times stand in: those that answered every stress input, since the CPU time of one
+    # killed on an input says nothing about how long a correct answer takes.
     cpu = {name: votes[name]["cpuMs"] + ms for name, ms in stress_cpu.items()} or {
         name: votes[name]["cpuMs"] for name in voters
     }
@@ -184,9 +187,7 @@ def judge_problem(item: dict, votes: dict) -> tuple[dict, list[dict]]:
         "checker": checker,
         "floats": floats,
         "voters": sorted(voters),
-        "refCpuMs": min(cpu.values()),
-        # The slowest reference; all of them are accepted, so the limit must admit it.
-        "slowCpuMs": max(cpu.values()),
+        "cpuMs": cpu,
         # Runs custom inputs for the expected answer. Mercury's submissions are used offline
         # only (CC BY-NC), so they are never shipped.
         # The fastest trusted reference answers custom inputs (Mercury is never shipped).
@@ -217,20 +218,22 @@ def assemble() -> None:
             continue
         entry, tests = judge_problem(item, json.loads(result.read_text())["voters"])
         specs[slug] = entry
-        for i, test in enumerate(tests):
-            expected, digest = expected_columns(test, entry)
-            rows.append(
-                {
-                    "slug": slug,
-                    "idx": i,
-                    "kind": test["kind"],
-                    "test_case": key(test["test"]),
-                    "expected": expected,
-                    "expected_sha256": digest,
-                }
-            )
+        problem_rows = [
+            {
+                "slug": slug,
+                "idx": i,
+                "kind": test["kind"],
+                "test_case": key(test["test"]),
+                "expected": expected,
+                "expected_sha256": digest,
+            }
+            for i, test in enumerate(tests)
+            for expected, digest in [expected_columns(test, entry)]
+        ]
+        rows += problem_rows
         if entry["supported"]:
             entry["tests"] = {kind: sum(t["kind"] == kind for t in tests) for kind in TEST_KINDS}
+            set_limit(entry, timings(slug, tests_print_of(problem_rows)))
 
     JUDGE_DIR.mkdir(parents=True, exist_ok=True)
     SPECS_PATH.write_text(json.dumps(specs, indent=1, sort_keys=True) + "\n")
