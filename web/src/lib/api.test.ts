@@ -34,6 +34,39 @@ describe("api client", () => {
 		);
 	});
 
+	it("sends the problem table's filters and search, with the abort signal", async () => {
+		const fetch = answer(200, []);
+		const abort = new AbortController();
+		await api.problems(
+			{ company: "any", period: "all", topic: "Heap (Priority Queue)", q: "k" },
+			abort.signal,
+		);
+		const [url, init] = fetch.mock.calls[0];
+		expect(url).toBe(
+			"/api/problems?company=any&period=all&topic=Heap+%28Priority+Queue%29&q=k",
+		);
+		expect(init?.signal).toBe(abort.signal);
+	});
+
+	it("fetches a list's topic counts once, and again after a failure", async () => {
+		const failing = answer(500, { error: "down" });
+		const list = {
+			company: "stripe",
+			period: "3m",
+			difficulty: "Hard",
+		} as const;
+		await expect(api.topics(list)).rejects.toThrow("down");
+		const fetch = answer(200, [{ topic: "Array", problems: 3 }]);
+		expect(await api.topics(list)).toEqual([{ topic: "Array", problems: 3 }]);
+		await api.topics(list);
+		await api.topics({ ...list, difficulty: undefined });
+		expect(failing).toHaveBeenCalledTimes(1);
+		expect(fetch.mock.calls.map((call) => call[0])).toEqual([
+			"/api/topics?company=stripe&period=3m&difficulty=Hard",
+			"/api/topics?company=stripe&period=3m",
+		]);
+	});
+
 	it("sends JSON bodies and accepts 204 No Content", async () => {
 		const fetch = answer(204);
 		await expect(api.saveDraft("two-sum", "pass")).resolves.toBeUndefined();

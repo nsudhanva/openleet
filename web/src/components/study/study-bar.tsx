@@ -1,25 +1,15 @@
 import { CompanyPicker } from "@/components/company-picker";
-import { Segmented } from "@/components/segmented";
+import { DifficultyFilter } from "@/components/difficulty-filter";
 import { SelectPicker } from "@/components/select-picker";
+import { TopicFilter } from "@/components/topic-filter";
 import type { CompanySearch } from "@/lib/companies";
 import { STUDY_SETS, type StudySet } from "@/lib/scheduler";
 import type { StudySearch } from "@/lib/schemas";
-import {
-	DIFFICULTIES,
-	type Difficulty,
-	isAskedPeriod,
-	PERIOD_LABEL,
-	PERIODS,
-	type Period,
-} from "@/lib/types";
+import { isAskedPeriod, PERIOD_LABEL, PERIODS, type Period } from "@/lib/types";
 
 const SET_ITEMS = Object.entries(STUDY_SETS).map(([value, label]) => ({
 	value: value as StudySet,
 	label,
-}));
-const DIFFICULTY_OPTIONS = DIFFICULTIES.map((value) => ({
-	value,
-	label: value,
 }));
 const PERIOD_ITEMS = PERIODS.map((value) => ({
 	value,
@@ -36,58 +26,46 @@ const PERIOD_ITEMS = PERIODS.map((value) => ({
  */
 export function StudyBar({
 	search,
-	topics,
 	remaining,
 	onChange,
 }: {
 	search: StudySearch & CompanySearch;
-	topics: string[];
 	remaining: number;
 	onChange: (next: Partial<StudySearch & CompanySearch>) => void;
 }) {
-	const topicItems = [
-		{ value: null, label: "All topics" },
-		...[...topics].sort().map((t) => ({ value: t, label: t })),
-	];
+	const change = (next: Partial<StudySearch & CompanySearch>) =>
+		onChange({ ...next, slug: undefined });
 	return (
 		<>
 			<CompanyPicker
 				value={search.company}
 				// LC 1–1000 is the same list for every company.
 				disabled={!isAskedPeriod(search.period)}
-				onChange={(company) => onChange({ company, slug: undefined })}
+				onChange={(company) => change({ company })}
 			/>
 			<SelectPicker<Period>
 				label="Problem list"
 				value={search.period}
 				items={PERIOD_ITEMS}
-				onChange={(period) => onChange({ period, slug: undefined })}
+				onChange={(period) => change({ period })}
 			/>
 			<SelectPicker
 				label="Study set"
 				value={search.set}
 				items={SET_ITEMS}
-				onChange={(set) => onChange({ set, slug: undefined })}
+				onChange={(set) => change({ set })}
 			/>
-			<SelectPicker<string | null>
-				label="Topic"
-				value={search.topic ?? null}
-				items={topicItems}
-				onChange={(topic) =>
-					onChange({ topic: topic ?? undefined, slug: undefined })
-				}
+			<TopicFilter
+				value={search.topic}
+				list={search}
+				onChange={(topic) => change({ topic })}
 			/>
-			<Segmented<Difficulty>
-				label="Difficulty"
-				value={search.difficulty ?? null}
-				options={DIFFICULTY_OPTIONS}
-				deselectable
-				itemClassName="bg-card"
-				onChange={(difficulty) =>
-					onChange({ difficulty: difficulty ?? undefined, slug: undefined })
-				}
+			<DifficultyFilter
+				value={search.difficulty}
+				onChange={(difficulty) => change({ difficulty })}
 			/>
-			<p className="ml-auto text-sm text-muted-foreground tabular-nums">
+			{/* Wide enough for "3092 cards in this set", so a new count never moves the row. */}
+			<p className="ml-auto min-w-[22ch] text-right text-sm text-muted-foreground tabular-nums">
 				{remaining} {remaining === 1 ? "card" : "cards"} in this set
 			</p>
 		</>

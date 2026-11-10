@@ -119,8 +119,9 @@ export interface AttemptInput {
 }
 
 /**
- * One problem of a list (GET /api/problems?company=&period=), in list order, with its
- * progress. Topics stay off so browsing does not spoil guesses.
+ * One problem of a list (GET /api/problems?company=&period=&topic=&difficulty=&q=), in list
+ * order (best match first with `q`), with its progress. Topics stay off so browsing does not
+ * spoil guesses.
  */
 export interface ProblemRow
 	extends Pick<Problem, "id" | "slug" | "title" | "difficulty" | "premium"> {
@@ -136,6 +137,14 @@ export interface ProblemRow
 	lastScore: number | null;
 	lastAt: number | null;
 	due: number | null;
+	/** With a search (`q`): the statement excerpt of a statement-only hit. */
+	snippet?: string;
+}
+
+/** How many problems of a list carry one topic (GET /api/topics). */
+export interface TopicCount {
+	topic: string;
+	problems: number;
 }
 
 /** Where a search hit matched, strongest first. */

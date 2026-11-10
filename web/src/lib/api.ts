@@ -1,10 +1,11 @@
 import { notFound } from "@tanstack/react-router";
 import type { CompanySearch } from "@/lib/companies";
-import type { StudySearch } from "@/lib/schemas";
+import type { ProblemsSearch, StudySearch } from "@/lib/schemas";
 import type {
 	AttemptInput,
 	CodeInfo,
 	Company,
+	Difficulty,
 	DraftVersions,
 	Period,
 	ProblemRow,
@@ -16,6 +17,7 @@ import type {
 	Submission,
 	SubmissionSummary,
 	SubmitResult,
+	TopicCount,
 } from "@/lib/types";
 
 /** A non-2xx answer from the API, carrying the server's `error` message. */
@@ -106,10 +108,19 @@ const problemPath = (base: string, slug: string) =>
 /** The company list is fixed for a build: fetched once per page load. */
 let companies: Promise<Company[]> | undefined;
 
+/** Topic counts depend only on the data and the list: fetched once per list and page load. */
+const topicCounts = new Map<string, Promise<TopicCount[]>>();
+
+/** The list GET /api/topics counts: its topics after the difficulty filter. */
+export type TopicQuery = CompanySearch & {
+	period: Period;
+	difficulty?: Difficulty;
+};
+
 /** Typed client for the JSON API under /api (see the README's API table). */
 export const api = {
-	deck: (filter: StudySearch & CompanySearch) =>
-		json<StudyDeck>("GET", "/api/deck", { query: filter }),
+	deck: (filter: StudySearch & CompanySearch, signal?: AbortSignal) =>
+		json<StudyDeck>("GET", "/api/deck", { query: filter, signal }),
 	/** Fetched once per page load; a failure gives an empty list and the next call retries. */
 	companies: () => {
 		companies ??= json<Company[]>("GET", "/api/companies").catch(
@@ -130,9 +141,24 @@ export const api = {
 		}),
 	clearProgress: (target: { slug: string } | { all: true }) =>
 		empty("DELETE", "/api/progress", { query: target }),
-	/** One list's problems, in its order. */
-	problems: (list: CompanySearch & { period: Period }) =>
-		json<ProblemRow[]>("GET", "/api/problems", { query: list }),
+	/** One list's problems that pass the filters, in its order (best match first with `q`). */
+	problems: (list: CompanySearch & ProblemsSearch, signal?: AbortSignal) =>
+		json<ProblemRow[]>("GET", "/api/problems", { query: list, signal }),
+	/**
+	 * The list's topics with their counts, most first. Shared and cached per list for the page
+	 * load (callers drop answers they no longer need); a failure is not cached.
+	 */
+	topics: ({ company, period, difficulty }: TopicQuery) => {
+		const query = { company, period, difficulty };
+		const key = urlOf("", query);
+		let request = topicCounts.get(key);
+		if (!request) {
+			request = json<TopicCount[]>("GET", "/api/topics", { query });
+			topicCounts.set(key, request);
+			request.catch(() => topicCounts.delete(key));
+		}
+		return request;
+	},
 	problem: (slug: string) =>
 		json<StudyCard>("GET", problemPath("/api/problems", slug)),
 	search: (q: string, limit: number, signal?: AbortSignal) =>

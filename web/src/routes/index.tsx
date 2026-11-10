@@ -12,16 +12,19 @@ import { buttonVariants } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { CompanySearch } from "@/lib/companies";
 import { STUDY_SETS } from "@/lib/scheduler";
-import { parseStudySearch, type StudySearch } from "@/lib/schemas";
+import {
+	parseStudySearch,
+	STUDY_DEFAULTS,
+	type StudySearch,
+} from "@/lib/schemas";
 import { isAskedPeriod } from "@/lib/types";
 
 export const Route = createFileRoute("/")({
 	validateSearch: parseStudySearch,
-	search: {
-		middlewares: [stripSearchParams({ set: "smart", period: "6m" })],
-	},
+	search: { middlewares: [stripSearchParams(STUDY_DEFAULTS)] },
+	// Every param picks the card; a newer navigation aborts the older request.
 	loaderDeps: ({ search }) => search,
-	loader: ({ deps }) => api.deck(deps),
+	loader: ({ deps, abortController }) => api.deck(deps, abortController.signal),
 	component: Study,
 });
 
@@ -67,14 +70,7 @@ function Study() {
 
 	return (
 		<ProblemPage
-			toolbar={
-				<StudyBar
-					search={search}
-					topics={topics}
-					remaining={remaining}
-					onChange={go}
-				/>
-			}
+			toolbar={<StudyBar search={search} remaining={remaining} onChange={go} />}
 		>
 			{card ? (
 				<Flashcard

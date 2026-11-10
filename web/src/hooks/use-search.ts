@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { MAX_QUERY } from "@/lib/schemas";
 import type { SearchHit } from "@/lib/types";
 
 const DEBOUNCE_MS = 120;
-const MAX_QUERY = 200;
 
 /** Server-ranked hits for a query, debounced; a newer query cancels the older request. */
 export function useSearch(query: string, limit = 20): SearchHit[] {
