@@ -1,4 +1,4 @@
-"""Build a tree from inorder and preorder traversals at 3000 distinct values: a chain 3000
+"""Construct Binary Tree from Preorder and Inorder Traversal at 3000 distinct values: a chain 3000
 deep (recursion and linear-index-search worst case), a deep mostly-chain tree, or a random tree."""
 
 from _shapes import shaped_tree, traversals

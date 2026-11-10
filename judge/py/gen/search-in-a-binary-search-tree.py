@@ -1,5 +1,5 @@
-"""Search in a BST with 5000 distinct nodes: a random BST, or a 5000-deep chain (recursion
-depth worst case), searching for the deepest value or an absent one."""
+"""Search in a BST with 5000 distinct nodes, a random BST or a chain 5000 deep (recursion-depth
+worst case), searching for the last value inserted (a leaf) or an absent one."""
 
 from _shapes import insert_bst, level_order
 

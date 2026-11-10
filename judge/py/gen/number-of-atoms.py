@@ -1,5 +1,5 @@
-"""Number of Atoms on valid formulas of close to 1000 characters with nested, multiplied
-groups; the generator tracks every count so the totals stay within 32 bits."""
+"""Number of Atoms on valid formulas of close to 1000 characters with nested, multiplied groups,
+every count tracked so the totals stay within 32 bits."""
 
 from string import ascii_lowercase, ascii_uppercase
 

@@ -1,5 +1,5 @@
-"""Obstacle-elimination shortest path on a 40 x 40 grid with dense obstacles and a mid-sized k,
-so the (cell, k) state space is large."""
+"""Shortest Path with Obstacles Elimination on a 40 x 40 grid with dense obstacles and a mid-sized
+k, so the (cell, k) state space is large."""
 
 SEEDS = 3
 

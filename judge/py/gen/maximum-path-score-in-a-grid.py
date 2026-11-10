@@ -1,4 +1,4 @@
-"""Maximum Path Score on a 200 x 200 grid of 0 / 1 / 2 with k up to 1000 (grid[0][0] = 0), so
+"""Maximum Path Score on grids up to 200 x 200 of 0 / 1 / 2 with k up to 1000 (grid[0][0] = 0), so
 the state space is about 4 * 10^7 if done naively."""
 
 SEEDS = 3

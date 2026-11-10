@@ -1,5 +1,5 @@
-"""Maximum XOR of Two Numbers at n = 2 * 10^5 over [0, 2^31 - 1]; the pairwise scan is
-2 * 10^10 steps. One seed shares the high bits so the trie goes deep."""
+"""Maximum XOR of Two Numbers at n = 2 * 10^5 over [0, 2^31 - 1], where the pairwise scan is 2 *
+10^10 steps: random values, or values sharing their top 11 bits so the trie goes deep."""
 
 SEEDS = 2
 N = 2 * 10**5

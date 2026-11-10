@@ -1,5 +1,5 @@
-"""500 equations chaining most letters together with == and placing the contradicting != last
-(or only consistent != constraints)."""
+"""Satisfiability of Equality Equations with 500 equations chaining most letters together with ==
+and the contradicting != last (or only consistent != constraints)."""
 
 from string import ascii_lowercase
 

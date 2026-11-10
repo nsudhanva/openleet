@@ -1,5 +1,5 @@
-"""Add Two Numbers at 100 digits (least significant first): all nines carry every step;
-random digits otherwise. The last node is never 0."""
+"""Add Two Numbers at 100 digits (least significant first, never a leading 0): all nines, which
+carry at every step, or random digits."""
 
 SEEDS = 2
 

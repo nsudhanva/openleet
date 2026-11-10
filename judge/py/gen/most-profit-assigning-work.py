@@ -1,5 +1,5 @@
-"""Most Profit Assigning Work with 10^4 jobs and 10^4 workers; scanning all jobs per worker is
-10^8 steps. Profit is unrelated to difficulty."""
+"""Most Profit Assigning Work with up to 10^4 jobs (profit unrelated to difficulty) and 10^4
+workers, so scanning every job per worker is 10^8 steps."""
 
 SEEDS = 3
 N = 10**4
