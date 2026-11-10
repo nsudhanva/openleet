@@ -19,6 +19,10 @@ const SETS: &[&str] = &[
 ];
 const PERIODS: &[&str] = &["30d", "3m", "6m", "all", "lc1000"];
 const DIFFICULTIES: &[&str] = &["Easy", "Medium", "Hard"];
+/// The plan statuses and orders the problem table sends, all but their defaults (lib/plan.ts):
+/// the table shows every problem in list order when they are left out.
+const STATUSES: &[&str] = &["unsolved", "untried"];
+const ORDERS: &[&str] = &["number", "easy-first", "random"];
 const DEFAULT_SET: &str = "smart";
 const DEFAULT_PERIOD: &str = "6m";
 /// Longest topic and search query the app keeps (web/src/lib/schemas.ts).
@@ -67,7 +71,10 @@ pub fn urls(path: &str, query: Option<&str>) -> Vec<String> {
     ];
     match path {
         "/" => urls.extend(params.deck(company)),
-        "/problems" => urls.extend(params.problems(company)),
+        "/problems" => {
+            urls.extend(params.problems(company));
+            urls.push("/api/plans".to_owned());
+        }
         "/progress" => urls.push(api("/api/report", &[("company", Some(company))])),
         _ => {
             if let Some(slug) = path.strip_prefix("/code/").filter(|s| is_slug(s, MAX_SLUG)) {
@@ -283,6 +290,8 @@ impl Params {
                 ("period", Some(period.to_owned())),
                 ("topic", self.text("topic", MAX_TOPIC).ok()?),
                 ("difficulty", self.difficulty()),
+                ("status", self.one_of("status", STATUSES).map(str::to_owned)),
+                ("order", self.one_of("order", ORDERS).map(str::to_owned)),
                 ("q", self.text("q", MAX_QUERY).ok()?),
             ],
         ))
@@ -329,14 +338,18 @@ mod tests {
             urls(path, query)
         }
         // Numbers JavaScript prints its own way, and JSON serde_json refuses.
+        // The problem table's plans need no query, so they are preloaded all the same.
         for value in ["1.5", "1e21", "1e400", "%5B%5B", "%22%5Cud800%22"] {
-            for page_query in [format!("/?topic={value}"), format!("/problems?q={value}")] {
-                assert_eq!(page(&page_query).len(), 2, "{page_query}");
-            }
+            assert_eq!(page(&format!("/?topic={value}")).len(), 2, "{value}");
+            assert_eq!(
+                page(&format!("/problems?q={value}"))[2..],
+                ["/api/plans"],
+                "{value}"
+            );
         }
         // Half of a surrogate pair at the cut.
         let q = format!("{}%F0%9F%98%80", "a".repeat(MAX_QUERY - 1));
-        assert_eq!(page(&format!("/problems?q={q}")).len(), 2);
+        assert_eq!(page(&format!("/problems?q={q}"))[2..], ["/api/plans"]);
         // Such values are no company, set or period either way.
         assert_eq!(
             page("/progress?company=1.5"),

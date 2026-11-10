@@ -2,10 +2,11 @@ import {
 	createFileRoute,
 	Link,
 	stripSearchParams,
+	useNavigate,
 	useRouter,
 	useRouterState,
 } from "@tanstack/react-router";
-import { CodeXmlIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
+import { CodeXmlIcon, PlayIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { CompanyPicker } from "@/components/company-picker";
 import { CompanyChip } from "@/components/company-tags";
@@ -15,6 +16,9 @@ import { DifficultyFilter } from "@/components/difficulty-filter";
 import { ListBadge } from "@/components/list-badge";
 import { PageHeader } from "@/components/page-header";
 import { PagerControls } from "@/components/pager";
+import { OrderPicker, StatusFilter } from "@/components/plan/plan-filters";
+import { remember } from "@/components/plan/plan-link";
+import { SavedPlans } from "@/components/plan/saved-plans";
 import { PremiumBadge } from "@/components/premium-badge";
 import { Segmented } from "@/components/segmented";
 import { SelectPicker } from "@/components/select-picker";
@@ -36,6 +40,7 @@ import { usePager } from "@/hooks/use-pager";
 import { api } from "@/lib/api";
 import { ANY_COMPANY, type CompanySearch, companyName } from "@/lib/companies";
 import { pageTitle, percent, timeFrom } from "@/lib/format";
+import { type Plan, planOf, tablePlan } from "@/lib/plan";
 import {
 	MAX_QUERY,
 	PROBLEMS_DEFAULTS,
@@ -49,6 +54,7 @@ import {
 	PERIOD_PHRASE,
 	PERIODS,
 	type Period,
+	type PlanOrder,
 	type ProblemRow,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -59,8 +65,14 @@ export const Route = createFileRoute("/problems")({
 	// The server filters, searches and orders; a newer navigation aborts the older request.
 	loaderDeps: ({ search }) => problemsQuery(search),
 	head: () => ({ meta: [{ title: pageTitle("Problems") }] }),
-	loader: ({ deps, abortController }) =>
-		api.problems(deps, abortController.signal),
+	loader: async ({ deps, abortController }) => {
+		const { signal } = abortController;
+		const [rows, plans] = await Promise.all([
+			api.problems(deps, signal),
+			api.plans(signal),
+		]);
+		return { rows, plans };
+	},
 	component: Problems,
 });
 
@@ -82,12 +94,23 @@ function formatFrequency(row: ProblemRow): string {
 	return row.frequency ? String(Math.round(row.frequency)) : "";
 }
 
-/** "Problems Meta asked in the last 30 days", "LC 1–1000": what the list holds. */
-function describeList(company: string, period: Period): string {
+/** How the table is ordered when it is not in list order. */
+const ORDER_PHRASE: Record<Exclude<PlanOrder, "rank">, string> = {
+	number: "by number",
+	"easy-first": "easy first",
+	random: "shuffled",
+};
+
+/** "Problems Meta asked in the last 30 days, most frequent first": what the list holds. */
+function describeList(
+	company: string,
+	period: Period,
+	order: ProblemsSearch["order"],
+): string {
 	if (!isAskedPeriod(period))
-		return "LeetCode problems numbered 1 to 1000, in order; frequency is the highest any company gives.";
+		return `LeetCode problems numbered 1 to 1000, ${order ? ORDER_PHRASE[order] : "in order"}; frequency is the highest any company gives.`;
 	const who = company === ANY_COMPANY ? "any listed company" : company;
-	return `Problems ${who} asked ${PERIOD_PHRASE[period]}, most frequent first.`;
+	return `Problems ${who} asked ${PERIOD_PHRASE[period]}, ${order ? ORDER_PHRASE[order] : "most frequent first"}.`;
 }
 
 function statusText(row: ProblemRow): string {
@@ -97,8 +120,10 @@ function statusText(row: ProblemRow): string {
 }
 
 function Problems() {
-	const rows = Route.useLoaderData();
-	const { company, period, topic, difficulty, q } = Route.useSearch();
+	const { rows, plans } = Route.useLoaderData();
+	const search = Route.useSearch();
+	const { company, period, topic, difficulty, status, order, q } = search;
+	const plan = tablePlan(search);
 	const navigate = Route.useNavigate();
 	const companies = useCompanies();
 	const router = useRouter();
@@ -123,7 +148,7 @@ function Problems() {
 	const pager = usePager(
 		Math.ceil(rows.length / pageSize),
 		true,
-		JSON.stringify([company, period, topic, difficulty, q]),
+		JSON.stringify([company, period, topic, difficulty, status, order, q]),
 	);
 	const first = pager.page * pageSize;
 	const visible = rows.slice(first, first + pageSize);
@@ -146,9 +171,10 @@ function Problems() {
 	return (
 		<div className="flex flex-col fit:h-full fit:min-h-0">
 			<PageHeader title="Problems">
-				{describeList(companyName(companies, company), period)} Topics stay
-				hidden unless you filter or search by one.
+				{describeList(companyName(companies, company), period, order)} Topics
+				stay hidden unless you filter or search by one.
 			</PageHeader>
+			<SavedPlans plans={plans} onChange={() => router.invalidate()} />
 			{/* Two to a row on a phone, the search first; one wrapping row from sm. */}
 			<div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
 				<CompanyPicker
@@ -180,6 +206,19 @@ function Problems() {
 					value={difficulty}
 					onChange={(next) => choose({ difficulty: next })}
 				/>
+				<StatusFilter
+					value={status ?? "all"}
+					onChange={(next) =>
+						choose({ status: next === "all" ? undefined : next })
+					}
+				/>
+				<OrderPicker
+					value={order ?? "rank"}
+					onChange={(next) =>
+						choose({ order: next === "rank" ? undefined : next })
+					}
+				/>
+				<PracticeButton plan={plan} />
 				<SearchBox value={q} onChange={(next) => choose({ q: next }, true)} />
 			</div>
 
@@ -279,6 +318,9 @@ function Problems() {
 									<Link
 										to="/code/$slug"
 										params={{ slug: row.slug }}
+										// The plan of the table: Next goes on from this row.
+										search={plan}
+										onClick={() => remember(plan)}
 										className={cn(
 											buttonVariants({ variant: "ghost", size: "icon-xs" }),
 											"text-muted-foreground",
@@ -329,6 +371,53 @@ function Problems() {
 					`${first + 1}–${first + visible.length} of ${rows.length}`}
 				<PagerControls pager={pager} className="gap-2" />
 			</nav>
+		</div>
+	);
+}
+
+/**
+ * Opens the first problem of the table's plan (its unsolved problems unless a status is
+ * chosen) on the code page, and remembers the plan.
+ */
+function PracticeButton({ plan }: { plan: Plan }) {
+	const navigate = useNavigate();
+	const [state, setState] = useState<"idle" | "busy" | "empty" | "failed">(
+		"idle",
+	);
+	async function start() {
+		setState("busy");
+		try {
+			const page = await api.next(plan);
+			if (!page.next) return setState("empty");
+			remember(plan);
+			await navigate({
+				to: "/code/$slug",
+				params: { slug: page.next.slug },
+				search: planOf(page.plan),
+			});
+		} catch (error) {
+			console.error("Could not start the plan", error);
+			setState("failed");
+		}
+	}
+	return (
+		<div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+			<Button
+				onClick={start}
+				disabled={state === "busy"}
+				className="max-sm:w-full"
+				title="Solve this list's problems in order, with Next after each one"
+			>
+				<PlayIcon data-icon="inline-start" />
+				Practice
+			</Button>
+			{(state === "empty" || state === "failed") && (
+				<p role="status" className="text-xs text-muted-foreground">
+					{state === "empty"
+						? "Nothing left to solve here."
+						: "Could not start; try again."}
+				</p>
+			)}
 		</div>
 	);
 }

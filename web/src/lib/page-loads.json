@@ -132,7 +132,35 @@
 		"fetches": [
 			"/api/readiness?company=google",
 			"/api/companies",
-			"/api/problems?company=google&period=6m"
+			"/api/problems?company=google&period=6m",
+			"/api/plans"
+		]
+	},
+	{
+		"page": "/problems?status=unsolved&order=easy-first&topic=Trie",
+		"fetches": [
+			"/api/readiness?company=google",
+			"/api/companies",
+			"/api/problems?company=google&period=6m&topic=Trie&status=unsolved&order=easy-first",
+			"/api/plans"
+		]
+	},
+	{
+		"page": "/problems?status=all&order=rank",
+		"fetches": [
+			"/api/readiness?company=google",
+			"/api/companies",
+			"/api/problems?company=google&period=6m",
+			"/api/plans"
+		]
+	},
+	{
+		"page": "/problems?status=solved&order=best",
+		"fetches": [
+			"/api/readiness?company=google",
+			"/api/companies",
+			"/api/problems?company=google&period=6m",
+			"/api/plans"
 		]
 	},
 	{
@@ -140,7 +168,8 @@
 		"fetches": [
 			"/api/readiness?company=amazon",
 			"/api/companies",
-			"/api/problems?company=amazon&period=lc1000&q=two+sum"
+			"/api/problems?company=amazon&period=lc1000&q=two+sum",
+			"/api/plans"
 		]
 	},
 	{
@@ -148,7 +177,8 @@
 		"fetches": [
 			"/api/readiness?company=google",
 			"/api/companies",
-			"/api/problems?company=google&period=6m&topic=Heap+%28Priority+Queue%29&q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+			"/api/problems?company=google&period=6m&topic=Heap+%28Priority+Queue%29&q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"/api/plans"
 		]
 	},
 	{
@@ -165,6 +195,16 @@
 	},
 	{
 		"page": "/code/two-sum",
+		"fetches": [
+			"/api/readiness?company=google",
+			"/api/companies",
+			"/api/problems/two-sum",
+			"/api/code/two-sum",
+			"/api/submissions?slug=two-sum"
+		]
+	},
+	{
+		"page": "/code/two-sum?period=3m&topic=Array&status=all&order=random",
 		"fetches": [
 			"/api/readiness?company=google",
 			"/api/companies",

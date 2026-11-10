@@ -39,9 +39,10 @@ async function pageLoads(page: string): Promise<string[]> {
 	if (pathname === "/") {
 		await api.deck(deckQuery({ ...root, ...parseStudySearch(root) }));
 	} else if (pathname === "/problems") {
-		await api.problems(
-			problemsQuery({ ...root, ...parseProblemsSearch(root) }),
-		);
+		await Promise.all([
+			api.problems(problemsQuery({ ...root, ...parseProblemsSearch(root) })),
+			api.plans(),
+		]);
 	} else if (pathname === "/progress") {
 		await api.report(root.company);
 	} else if (code) {
