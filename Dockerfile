@@ -3,7 +3,7 @@
 # systemd instead (deploy/).
 #   app    the server, a fully static musl binary with the web app embedded, plus the data,
 #          on an empty base (no shell, no libc)
-#   judge  the judge daemon (static) and the Python zygote on a trimmed python:alpine
+#   judge  the judge daemon (static) and the Python zygote on a trimmed python:slim
 # Both binaries are built natively for the build machine's architecture (amd64 or arm64).
 
 ARG RUST=1.99
@@ -113,9 +113,11 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --start-interval=1s \
 ENTRYPOINT ["/usr/local/bin/openleet"]
 
 # Judge image
-# Trimmed python:alpine (no pip, docs, IDLE, Tk or headers), then squashed into one layer. The
-# imports the zygote makes are precompiled: the root file system is read-only at run time.
-FROM python:${PYTHON}-alpine AS judge-root
+# Trimmed python:slim (no pip, apt, docs, IDLE, Tk or headers), then squashed into one layer.
+# glibc, as in production: on musl, CPython assumes a 1 MB C stack for every thread, so recursion
+# through C code (a function under @cache) overflows at a depth of about 5,000. The imports the
+# zygote makes are precompiled: the root file system is read-only at run time.
+FROM python:${PYTHON}-slim AS judge-root
 COPY judge/py/requirements.txt /tmp/requirements.txt
 RUN set -eu; \
 	pip install --no-cache-dir --root-user-action=ignore -r /tmp/requirements.txt; \
@@ -123,7 +125,8 @@ RUN set -eu; \
 	lib=$(python -c 'import sysconfig; print(sysconfig.get_path("stdlib"))'); \
 	rm -rf /tmp/requirements.txt "$lib"/ensurepip "$lib"/idlelib "$lib"/tkinter "$lib"/turtledemo \
 		"$lib"/turtle.py "$lib"/pydoc_data "$lib"/config-* /usr/local/include /usr/local/bin/idle* \
-		/usr/local/bin/pydoc* /usr/local/share /sbin/apk /etc/apk /lib/apk /usr/share/apk /var/cache/apk; \
+		/usr/local/bin/pydoc* /usr/local/share /usr/share/doc /usr/share/man /usr/share/info \
+		/usr/share/locale /usr/bin/apt* /usr/lib/apt /etc/apt /var/lib/apt /var/cache/* /var/log/*; \
 	mkdir -p /run/openleet-judge
 COPY judge/py /opt/openleet/judge/py
 RUN set -eu; \
