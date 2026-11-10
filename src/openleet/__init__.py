@@ -39,6 +39,20 @@ def main() -> None:
         ],
     )
     judge.add_argument("slugs", nargs="*", help="brief: problems to describe")
+    smoke = commands.add_parser(
+        "smoke", help="end-to-end judge and sandbox checks against a running server (HTTP only)"
+    )
+    smoke.add_argument("--base-url", default="http://localhost:8080")
+    smoke.add_argument("--sample", type=int, default=30, help="problems to sample (default 30)")
+    smoke.add_argument("--seed", type=int, help="sample seed (default: random, printed)")
+    smoke.add_argument("--slow", type=int, default=2, help="stress problems given a slow variant")
+    smoke.add_argument("--specs", type=Path, help="specs.json with the reference solutions")
+    smoke.add_argument("--json", action="store_true", help="print the results as JSON")
+    smoke.add_argument(
+        "--allow-network",
+        action="store_true",
+        help="pass the network check anyway (the local Docker judge has a network)",
+    )
     args = parser.parse_args()
 
     if args.command == "ingest":
@@ -49,6 +63,21 @@ def main() -> None:
         from openleet.judging.cli import run
 
         run(args.stage, args.slugs, args.problems)
+    elif args.command == "smoke":
+        from openleet.judging import SPECS_PATH
+        from openleet.smoke import smoke
+
+        raise SystemExit(
+            smoke(
+                args.base_url,
+                args.sample,
+                args.seed,
+                args.json,
+                args.specs or SPECS_PATH,
+                args.slow,
+                args.allow_network,
+            )
+        )
     else:
         from openleet.approaches import check
 
