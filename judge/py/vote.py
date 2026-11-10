@@ -19,6 +19,10 @@ ZYGOTE = Path(__file__).with_name("zygote.py")
 LIMITS = {"cpu_s": 30, "as_mb": 3072, "out_bytes": 512 << 20, "stdout_bytes": 0}
 WALL_SECONDS = 120
 
+# References may print integers longer than CPython's default 4300-digit limit; vote.py and
+# stress.py both parse those events.
+sys.set_int_max_str_digits(0)
+
 
 class Zygote:
     """One zygote process, driven synchronously."""

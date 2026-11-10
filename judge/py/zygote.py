@@ -145,6 +145,8 @@ def sandbox(limits: dict, keep_fd: int) -> None:
     resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     sys.setrecursionlimit(RECURSION_LIMIT)
+    # LeetCode's Python has no int<->str digit limit (CPython's default is 4300 digits).
+    sys.set_int_max_str_digits(0)
     threading.stack_size(STACK_BYTES)
 
 
@@ -259,6 +261,8 @@ def handle(job: dict) -> None:
 
 
 def main() -> None:
+    # Test inputs and generated tests may hold huge integers, as on LeetCode.
+    sys.set_int_max_str_digits(0)
     gc.collect()
     # Objects that exist now are never collected, so children do not copy their pages.
     gc.freeze()
