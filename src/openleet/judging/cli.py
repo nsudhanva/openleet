@@ -7,8 +7,11 @@ from pathlib import Path
 from openleet.judging import HARNESS_DIR, RESULTS_DIR, SPECS_PATH, STRESS_DIR, WORK_ITEMS_DIR
 from openleet.judging.assemble import assemble
 from openleet.judging.brief import brief
+from openleet.judging.corpus import fetch, publish
 from openleet.judging.prepare import prepare
 
+# The stages `judge all` runs, in order.
+PIPELINE = ("prepare", "vote", "assemble", "stress", "final")
 # The judge's own runtime, so references run exactly as submissions will.
 IMAGE = "openleet-judge-dev"
 IMAGE_RECIPE = (
@@ -61,15 +64,15 @@ def stress() -> None:
 
 
 def run(stage: str, slugs: list[str], problems_path: Path) -> None:
-    if stage == "brief":
-        brief(slugs, problems_path)
-        return
     stages = {
         "prepare": lambda: prepare(problems_path),
         "vote": vote,
         "assemble": assemble,
         "stress": stress,
         "final": assemble,
+        "brief": lambda: brief(slugs, problems_path),
+        "publish": publish,
+        "fetch": fetch,
     }
-    for name in stages if stage == "all" else [stage]:
+    for name in PIPELINE if stage == "all" else [stage]:
         stages[name]()

@@ -5,6 +5,7 @@ example's official output. A test is kept only if every counting voter ran it an
 agree under the problem's checker; the expected output is their shared answer.
 """
 
+import hashlib
 import json
 import math
 from collections.abc import Callable
@@ -24,6 +25,8 @@ from openleet.judging import (
 )
 
 FLOAT_TOLERANCE = 1e-5
+# Larger exact stress answers are stored as a SHA-256 of their printed form.
+DIGEST_MIN_BYTES = 16384
 # Strictest first; any-order problems start at "unordered".
 CHECKERS = ("exact", "unordered", "unordered_nested")
 TEST_KINDS = ("example", "hidden", "stress")
@@ -63,6 +66,19 @@ def matcher(checker: str, floats: bool) -> Matcher:
         return close(a, b) if floats else key(a) == key(b)
 
     return same
+
+
+def expected_columns(test: dict, entry: dict) -> tuple[str | None, str | None]:
+    """A test's `expected` and `expected_sha256` columns: the answer as canonical JSON, or,
+    for a big stress answer compared exactly, only the SHA-256 of the line the sandboxed child
+    prints for it (judge/py/zygote.py `send`). Equal values print as equal bytes there, so
+    the judge compares a submission's raw output bytes against the digest."""
+    if test["kind"] == "stress" and entry["checker"] == "exact" and not entry["floats"]:
+        printed = json.dumps(test["expected"], separators=(",", ":"), ensure_ascii=False)
+        data = printed.encode()
+        if len(data) > DIGEST_MIN_BYTES:
+            return None, hashlib.sha256(data).hexdigest()
+    return key(test["expected"]), None
 
 
 def has_float(spec: dict) -> bool:
@@ -171,16 +187,18 @@ def assemble() -> None:
             continue
         entry, tests = judge_problem(item, json.loads(result.read_text())["voters"])
         specs[slug] = entry
-        rows += (
-            {
-                "slug": slug,
-                "idx": i,
-                "kind": test["kind"],
-                "test": key(test["test"]),
-                "expected": key(test["expected"]),
-            }
-            for i, test in enumerate(tests)
-        )
+        for i, test in enumerate(tests):
+            expected, digest = expected_columns(test, entry)
+            rows.append(
+                {
+                    "slug": slug,
+                    "idx": i,
+                    "kind": test["kind"],
+                    "test": key(test["test"]),
+                    "expected": expected,
+                    "expected_sha256": digest,
+                }
+            )
         if entry["supported"]:
             entry["tests"] = {kind: sum(t["kind"] == kind for t in tests) for kind in TEST_KINDS}
 
@@ -196,7 +214,8 @@ def assemble() -> None:
         con.execute(
             f"""CREATE TABLE tests AS
             FROM read_json('{staging}', columns = {{slug: 'VARCHAR', idx: 'USMALLINT',
-                kind: 'VARCHAR', test: 'VARCHAR', expected: 'VARCHAR'}})
+                kind: 'VARCHAR', test: 'VARCHAR', expected: 'VARCHAR',
+                expected_sha256: 'VARCHAR'}})
             ORDER BY slug, idx"""
         )
         con.execute("CHECKPOINT")

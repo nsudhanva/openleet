@@ -8,6 +8,9 @@ Pipeline (`uv run openleet judge all`):
   stress    run the stress generators (judge/py/gen) and the qualified references on them
   final     assemble again, now with the stress tests
 
+`judge publish` uploads tests.duckdb as a GitHub release asset (it is too big for git) and
+records it in data/judge/corpus.json; `judge fetch` downloads and verifies that asset.
+
 Inputs come from LeetCodeDataset (Apache-2.0) and the statements' own examples; expected
 outputs are never copied from a dataset, only computed by running independent reference
 solutions (LeetCodeDataset's canonical solution, every doocs/leetcode Python solution, and,

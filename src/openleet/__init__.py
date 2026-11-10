@@ -25,7 +25,18 @@ def main() -> None:
         "judge", parents=[problems], help="build the judge's specs and tests (data/judge)"
     )
     judge.add_argument(
-        "stage", choices=["prepare", "vote", "assemble", "stress", "final", "brief", "all"]
+        "stage",
+        choices=[
+            "prepare",
+            "vote",
+            "assemble",
+            "stress",
+            "final",
+            "all",
+            "brief",
+            "publish",
+            "fetch",
+        ],
     )
     judge.add_argument("slugs", nargs="*", help="brief: problems to describe")
     args = parser.parse_args()
