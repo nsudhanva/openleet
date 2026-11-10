@@ -7,6 +7,15 @@ edition = "2024"
 license = "MIT"
 publish = false
 
+# Dependencies more than one crate uses, at one version; each crate adds the features it needs.
+[workspace.dependencies]
+anyhow = "1.0.104"
+openleet-proto = { version = "0.1.0", path = "proto" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["raw_value"] }
+sha2 = "0.11.1"
+tokio = "1.54.1"
+
 [profile.release]
 lto = "fat"
 codegen-units = 1
