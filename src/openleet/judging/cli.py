@@ -14,9 +14,12 @@ from openleet.judging.prepare import prepare
 PIPELINE = ("prepare", "vote", "assemble", "stress", "final")
 # The judge's own runtime, so references run exactly as submissions will.
 IMAGE = "openleet-judge-dev"
+# Built with HARNESS_DIR as the context, for requirements.txt (exported from pyproject.toml).
 IMAGE_RECIPE = (
-    "FROM python:3.15-slim\n"
-    "RUN pip install --no-cache-dir --root-user-action=ignore sortedcontainers==2.4.0\n"
+    "FROM python:3.15-slim-trixie\n"
+    "COPY requirements.txt /tmp/requirements.txt\n"
+    "RUN pip install --no-cache-dir --root-user-action=ignore --require-hashes"
+    " -r /tmp/requirements.txt\n"
 )
 
 
@@ -25,7 +28,9 @@ def run_in_sandbox(script: str, args: list[str], mounts: dict[Path, str]) -> Non
     drop to its own user. `mounts` maps host paths to container paths (append ":ro" for
     read-only); the harness is mounted at /judge. The job count goes last."""
     subprocess.run(
-        ["docker", "build", "-q", "-t", IMAGE, "-"], input=IMAGE_RECIPE.encode(), check=True
+        ["docker", "build", "-q", "-t", IMAGE, "-f", "-", str(HARNESS_DIR)],
+        input=IMAGE_RECIPE.encode(),
+        check=True,
     )
     volumes = [
         arg

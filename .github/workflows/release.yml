@@ -2,6 +2,10 @@
 # signed POST /api/deploy, systemd runs deploy/update.sh as root, and the job ends when
 # /api/version reports the new revision. The archive holds bin/openleet (web app embedded),
 # bin/openleet-judge, the judge's Python, the data and deploy/ (units and scripts).
+#
+# Whoever can write the edge release gets root on the server, so only the small `release` job
+# holds a token that can: `build` (which runs the repo's code and its dependencies) reads only.
+# Actions are pinned to commit SHAs; the comment names the release.
 name: release
 
 on:
@@ -18,14 +22,17 @@ on:
       - deploy/**
       - Cargo.toml
       - Cargo.lock
+      - rust-toolchain.toml
       - package.json
       - bun.lock
       - biome.json
+      - pyproject.toml
+      - uv.lock
+      - .pre-commit-config.yaml
       - .github/workflows/release.yml
   workflow_dispatch:
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: release
@@ -36,34 +43,45 @@ defaults:
     shell: bash --noprofile --norc -euo pipefail {0}
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      revision: ${{ steps.package.outputs.revision }}
     env:
       # Every GCP e2 machine has AVX2.
       RUSTFLAGS: -C target-cpu=x86-64-v3
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-      - uses: actions/cache@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          components: clippy, rustfmt
-      - name: Lint
+          version: 0.13.7
+          enable-cache: true
+      - name: Rust toolchain
+        # The version and components in rust-toolchain.toml.
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install dependencies
+        # No lifecycle scripts: nothing the web app needs has one.
         run: |
-          bun install --frozen-lockfile
-          bun run check
-          cargo fmt --all --check
-          bun run typecheck
+          bun install --frozen-lockfile --ignore-scripts
+          uv sync --locked
       - name: Web app
-        run: |
-          bun run test
-          bun run build
+        # Before the Rust checks: the server embeds web/dist.
+        run: bun run build
       - name: Test corpus
         # tests.duckdb is too big for git; corpus.json names its asset on the "corpus" release.
         run: |
@@ -72,13 +90,13 @@ jobs:
           curl -fsSL --retry 3 -o data/judge/tests.duckdb \
             "https://github.com/$GITHUB_REPOSITORY/releases/download/corpus/$asset"
           echo "$sha256  data/judge/tests.duckdb" | sha256sum -c -
-      - uses: Swatinem/rust-cache@v2
-      - name: Test and build
-        run: |
-          cargo clippy --locked --all-targets -- -D warnings
-          cargo test --locked
-          cargo build --locked --release --bins
+      - name: Checks and tests
+        # Exactly the git hooks (.pre-commit-config.yaml): linters, type checks, clippy, tests.
+        run: uv run prek run --all-files --hook-stage pre-push --show-diff-on-failure
+      - name: Build
+        run: cargo build --locked --release --bins
       - name: Package
+        id: package
         run: |
           rev=${GITHUB_SHA::12}
           out=dist/openleet
@@ -92,10 +110,32 @@ jobs:
           cp dist/REVISION "$out/REVISION"
           tar --zstd -cf "dist/openleet-$rev.tar.zst" -C "$out" .
           (cd dist && sha256sum "openleet-$rev.tar.zst" > "openleet-$rev.tar.zst.sha256")
-          echo "REV=$rev" >> "$GITHUB_ENV"
+          rm -rf "$out"
+          echo "revision=$rev" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      REV: ${{ needs.build.outputs.revision }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: dist
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release view edge >/dev/null 2>&1 ||
             gh release create edge --prerelease --title edge --notes "Latest build of main."

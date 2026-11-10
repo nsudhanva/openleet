@@ -6,10 +6,10 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-anyhow = "1.0.104"
+anyhow.workspace = true
 libc = "0.2.191"
-openleet-proto = { version = "0.1.0", path = "../proto" }
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = { version = "1.0.154", features = ["raw_value", "float_roundtrip", "arbitrary_precision"] }
-sha2 = "0.11.1"
-tokio = { version = "1.54.1", features = ["rt", "macros", "net", "io-util", "process", "time", "sync", "signal"] }
+openleet-proto.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip", "arbitrary_precision"] }
+sha2.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "net", "io-util", "process", "time", "sync", "signal"] }

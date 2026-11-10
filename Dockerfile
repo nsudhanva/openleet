@@ -3,7 +3,7 @@
 # setuid, rlimits), so it runs here while the server runs natively and connects over TCP
 # (README, "Run locally"). Production runs both natively under systemd (deploy/).
 
-FROM rust:1.99-slim-trixie AS build
+FROM rust:1.99.1-slim-trixie AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY proto proto
@@ -13,7 +13,10 @@ RUN sed -i 's/members = \[.*\]/members = ["judge", "proto"]/' Cargo.toml \
 	&& cargo build --release -p openleet-judge
 
 FROM python:3.15-slim-trixie AS judge
-RUN pip install --no-cache-dir --root-user-action=ignore sortedcontainers==2.4.0
+# judge/py/requirements.txt is exported from pyproject.toml, with hashes.
+COPY judge/py/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --root-user-action=ignore --require-hashes -r /tmp/requirements.txt \
+	&& rm /tmp/requirements.txt
 COPY --from=build /src/target/release/openleet-judge /usr/local/bin/openleet-judge
 COPY judge/py /opt/judge
 ENV JUDGE_ZYGOTE=/opt/judge/zygote.py JUDGE_PYTHON=/usr/local/bin/python3 \
