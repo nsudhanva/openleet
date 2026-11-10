@@ -46,11 +46,11 @@ sys.path.append(str(GEN_DIR))  # generators import _shapes
 SOLUTION_FILE = "solution.py"
 STACK_BYTES = 256 * 1024 * 1024
 RECURSION_LIMIT = 1_000_000
-CACHE_SIZE = 48
 TICKS = os.sysconf("SC_CLK_TCK")
 
-# Generated stress inputs, prepared once and reused across jobs. Children mutate their own
-# copy-on-write pages, never these.
+# Generated stress inputs of the problem judged last, prepared once and reused while the same
+# problem is submitted again. Only one problem's are kept: they are big (10^5-node structures)
+# and count against the judge's memory limit. Children mutate their own copy-on-write pages.
 generated: OrderedDict[tuple[str, int], object] = OrderedDict()
 generators: dict[str, ModuleType] = {}
 
@@ -86,9 +86,9 @@ def generated_input(spec: dict, test: dict):
     if test.get("sha") and input_sha(data) != test["sha"]:
         raise ValueError(f"Generator {key} no longer makes the stored input")
     prepared = harness.prepare(spec, data)
+    for other in [k for k in generated if k[0] != key[0]]:
+        del generated[other]
     generated[key] = prepared
-    if len(generated) > CACHE_SIZE:
-        generated.popitem(last=False)
     return prepared
 
 
@@ -231,6 +231,10 @@ def handle(job: dict) -> None:
         emit({"fatal": f"{type(error).__name__}: {error}"})
         return
     read_fd, write_fd = os.pipe()
+    # Every object that exists now goes to the permanent generation: the child's collector
+    # never walks the inputs or the cache, so it never copies their pages (that copy cost
+    # ~0.7 s of the solution's CPU time with a 160 MB cache).
+    gc.freeze()
     pid = os.fork()
     if pid == 0:
         os.close(read_fd)
@@ -259,6 +263,7 @@ def handle(job: dict) -> None:
             sys.stdout.buffer.write(b'{"cpu_ms":%d,"ev":%s}\n' % (cpu_ms(pid), line.rstrip(b"\n")))
             sys.stdout.buffer.flush()
     _, status, usage = os.wait4(pid, 0)
+    gc.unfreeze()
     emit(
         {
             "done": {
