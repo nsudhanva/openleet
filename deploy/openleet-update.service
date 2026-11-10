@@ -1,0 +1,9 @@
+# Installs the newest release CI published, if it is not the running one (deploy/update.sh).
+[Unit]
+Description=Update openleet to the latest release
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/openleet/update.sh

@@ -9,7 +9,7 @@ mod zygote;
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::{Context, Result};
-use judge_proto::{DEFAULT_SOCKET, Endpoint, Job, Outcome};
+use openleet_proto::{DEFAULT_SOCKET, Endpoint, Job, Outcome};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, UnixListener};
 
@@ -31,7 +31,7 @@ impl Config {
         Self {
             socket: var("JUDGE_SOCKET", DEFAULT_SOCKET),
             python: var("JUDGE_PYTHON", "python3"),
-            script: var("JUDGE_ZYGOTE", "/opt/judge/zygote.py"),
+            script: var("JUDGE_ZYGOTE", "/opt/openleet/current/judge/py/zygote.py"),
         }
     }
 }

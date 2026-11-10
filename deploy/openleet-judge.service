@@ -1,0 +1,48 @@
+# Runs submissions (bin/openleet-judge plus the Python zygote). It starts as root only to drop each
+# submission to its own user (uid 61000) with rlimits; systemd adds the outer sandbox: no
+# network, a read-only system, no view of the app's data, and bounded memory and tasks.
+[Unit]
+Description=OpenLeet judge
+
+[Service]
+Environment=JUDGE_SOCKET=/run/openleet-judge/judge.sock
+Environment=JUDGE_PYTHON=/opt/openleet/venv/bin/python
+Environment=JUDGE_ZYGOTE=/opt/openleet/current/judge/py/zygote.py
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/openleet/current/bin/openleet-judge
+Restart=always
+RestartSec=2
+RuntimeDirectory=openleet-judge
+RuntimeDirectoryMode=0755
+
+# Memory and processes for the zygote and one running submission. No swap, so a solution
+# that needs too much memory fails fast as Memory Limit Exceeded instead of thrashing.
+MemoryMax=450M
+MemorySwapMax=0
+TasksMax=64
+# The web app stays responsive while a submission runs.
+CPUWeight=50
+
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_KILL
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectProc=invisible
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+InaccessiblePaths=/var/lib/openleet /etc/openleet.env -/var/lib/docker -/home -/root
+
+[Install]
+WantedBy=multi-user.target

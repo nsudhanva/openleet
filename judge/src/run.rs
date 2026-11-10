@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use judge_proto::{Case, Job, Outcome, Verdict};
+use openleet_proto::{Case, Job, Outcome, Verdict};
 use serde::Serialize;
 use serde_json::Value;
 use serde_json::value::RawValue;

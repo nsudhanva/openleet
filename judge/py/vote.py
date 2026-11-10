@@ -1,6 +1,6 @@
 """Runs every reference solution of every work item through the zygote (the judge's own
 sandbox, so the same conversion and limits as a real submission) and records what each one
-printed for each test. google.judging.assemble decides what to keep.
+printed for each test. openleet.judging.assemble decides what to keep.
 
 Usage (inside the judge image, as root, without network):
     python vote.py WORK_DIR RESULTS_DIR [JOBS]

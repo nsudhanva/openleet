@@ -1,7 +1,7 @@
 [project]
-name = "google"
+name = "openleet"
 version = "0.1.0"
-description = "Python package for the google project"
+description = "OpenLeet data tools: problem lists, approaches, judge tests"
 readme = "README.md"
 authors = [{ name = "Sudhanva Narayana", email = "nsudhanva@gmail.com" }]
 requires-python = ">=3.15"
@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-google = "google:main"
+openleet = "openleet:main"
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]

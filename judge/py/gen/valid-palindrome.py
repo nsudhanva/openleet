@@ -1,0 +1,24 @@
+"""Valid Palindrome at 2 * 10^5 printable ASCII chars: an alphanumeric palindrome buried in
+punctuation and mixed case, sometimes with one mismatch in the middle."""
+
+SEEDS = 3
+N = 2 * 10**5
+ALNUM = "abcdefghijklmnopqrstuvwxyz0123456789"
+JUNK = " ,.:;!?'\"-_()[]{}@#$%^&*/\\|`~<>+="
+
+
+def generate(rng):
+    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    if shape == 2:
+        return {"s": "".join(chr(rng.randint(32, 126)) for _ in range(N))}
+    half = [rng.choice(ALNUM) for _ in range(N // 4)]
+    core = half + half[::-1]
+    if shape == 1:
+        mid = len(half)
+        core[mid] = "x" if core[mid] != "x" else "y"
+    out = []
+    for ch in core:
+        while rng.random() < 0.5 and len(out) < N - len(core):
+            out.append(rng.choice(JUNK))
+        out.append(ch.upper() if rng.random() < 0.5 else ch)
+    return {"s": "".join(out)[:N]}

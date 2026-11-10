@@ -1,9 +1,0 @@
-# Installs the newest release CI published, if it is not the running one (deploy/update.sh).
-[Unit]
-Description=Update google-cards to the latest release
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/opt/google-cards/update.sh

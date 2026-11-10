@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 
 /// Where the judge listens by default: systemd's runtime directory for the judge service.
-pub const DEFAULT_SOCKET: &str = "/run/google-judge/judge.sock";
+pub const DEFAULT_SOCKET: &str = "/run/openleet-judge/judge.sock";
 
 /// How an output is compared with the expected one.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

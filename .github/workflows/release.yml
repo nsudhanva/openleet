@@ -1,6 +1,6 @@
 # Builds the native release on every push to main and publishes it as the "edge" GitHub
 # release; the server's timer (deploy/update.sh) installs it within about five minutes.
-# The archive holds bin/cards (web app embedded), bin/judge, the judge's Python, the data and
+# The archive holds bin/openleet (web app embedded), bin/openleet-judge, the judge's Python, the data and
 # deploy/ (systemd units and scripts, which update themselves on the server).
 name: release
 
@@ -59,17 +59,17 @@ jobs:
       - name: Package
         run: |
           rev=${GITHUB_SHA::12}
-          out=dist/google-cards
+          out=dist/openleet
           mkdir -p "$out/bin" "$out/data" "$out/judge"
-          cp target/release/cards target/release/judge "$out/bin/"
+          cp target/release/openleet target/release/openleet-judge "$out/bin/"
           cp data/problems.json data/approaches.json "$out/data/"
           cp -r data/judge "$out/data/judge"
           cp -r judge/py "$out/judge/py"
           cp -r deploy "$out/deploy"
           echo "$rev" > "$out/REVISION"
           echo "$rev" > dist/REVISION
-          tar --zstd -cf "dist/google-cards-$rev.tar.zst" -C "$out" .
-          (cd dist && sha256sum "google-cards-$rev.tar.zst" > "google-cards-$rev.tar.zst.sha256")
+          tar --zstd -cf "dist/openleet-$rev.tar.zst" -C "$out" .
+          (cd dist && sha256sum "openleet-$rev.tar.zst" > "openleet-$rev.tar.zst.sha256")
           echo "REV=$rev" >> "$GITHUB_ENV"
       - name: Publish
         env:
@@ -78,9 +78,9 @@ jobs:
           gh release view edge >/dev/null 2>&1 || \
             gh release create edge --prerelease --title "edge" --notes "Latest build of main."
           # The archive first, REVISION last: the server only follows REVISION.
-          gh release upload edge "dist/google-cards-$REV.tar.zst" "dist/google-cards-$REV.tar.zst.sha256" --clobber
+          gh release upload edge "dist/openleet-$REV.tar.zst" "dist/openleet-$REV.tar.zst.sha256" --clobber
           gh release upload edge dist/REVISION --clobber
           # Keep the archives of the last three builds.
           gh release view edge --json assets --jq '.assets | sort_by(.createdAt) | reverse | .[].name' \
-            | grep '^google-cards-.*\.tar\.zst$' | tail -n +4 \
+            | grep '^openleet-.*\.tar\.zst$' | tail -n +4 \
             | while read -r name; do gh release delete-asset edge "$name" -y; gh release delete-asset edge "$name.sha256" -y || true; done

@@ -1,6 +1,6 @@
 """Runs the stress-test generators (gen/<slug>.py) through the zygote: each seed's input is
 made exactly as the judge will make it, then every reference that passed the problem's other
-tests answers it. google.judging.assemble keeps the seeds they all agree on.
+tests answers it. openleet.judging.assemble keeps the seeds they all agree on.
 
 Usage (inside the judge image, as root, without network):
     python stress.py WORK_DIR SPECS_JSON RESULTS_DIR [JOBS]

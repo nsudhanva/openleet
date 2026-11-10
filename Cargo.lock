@@ -579,33 +579,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
-name = "cards"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "axum-server",
- "brotli",
- "duckdb",
- "jiff",
- "judge-proto",
- "mimalloc",
- "parking_lot",
- "rusqlite",
- "rustls-acme",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "unicode-normalization",
- "zstd",
-]
-
-[[package]]
 name = "cast"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1388,26 +1361,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "judge"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "judge-proto",
- "libc",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "judge-proto"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1681,6 +1634,53 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "openleet"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "axum-server",
+ "brotli",
+ "duckdb",
+ "jiff",
+ "mimalloc",
+ "openleet-proto",
+ "parking_lot",
+ "rusqlite",
+ "rustls-acme",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "unicode-normalization",
+ "zstd",
+]
+
+[[package]]
+name = "openleet-judge"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libc",
+ "openleet-proto",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "openleet-proto"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "parking"

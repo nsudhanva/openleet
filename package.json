@@ -1,5 +1,5 @@
 {
-  "name": "google",
+  "name": "openleet",
   "private": true,
   "workspaces": [
     "web"

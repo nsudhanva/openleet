@@ -24,7 +24,7 @@ pub struct Event {
 #[derive(Debug, Default, Deserialize)]
 pub struct ChildEvent {
     pub i: Option<usize>,
-    #[serde(default, deserialize_with = "judge_proto::present")]
+    #[serde(default, deserialize_with = "openleet_proto::present")]
     pub out: Option<Box<RawValue>>,
     #[serde(default)]
     pub stdout: String,

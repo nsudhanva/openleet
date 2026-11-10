@@ -23,18 +23,18 @@
     "cwd": "$ZED_WORKTREE_ROOT"
   },
   {
-    "label": "docker: build and run locally (http://google.localhost)",
+    "label": "docker: start the judge for local development",
     "command": "docker compose up -d --build",
     "cwd": "$ZED_WORKTREE_ROOT"
   },
   {
     "label": "py: ingest problems",
-    "command": "uv run google ingest",
+    "command": "uv run openleet ingest",
     "cwd": "$ZED_WORKTREE_ROOT"
   },
   {
     "label": "py: check approaches",
-    "command": "uv run google check",
+    "command": "uv run openleet check",
     "cwd": "$ZED_WORKTREE_ROOT"
   },
   {

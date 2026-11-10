@@ -1,7 +1,7 @@
-//! Compares a solution's answer with the expected one, the way google.judging.assemble chose
+//! Compares a solution's answer with the expected one, the way openleet.judging.assemble chose
 //! when it built the tests (keep the two in step).
 
-use judge_proto::Checker;
+use openleet_proto::Checker;
 use serde_json::Value;
 
 /// LeetCode accepts floating-point answers within 1e-5.
