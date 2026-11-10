@@ -358,12 +358,18 @@ impl<'a> Run<'a> {
             ),
             None => (Verdict::Accepted, None, None),
         };
+        let mut cpu_ms = reference_ms(f64::from(done.cpu_ms), slowdown);
+        // A run stopped at its limit used all of it, even when the machine slowed down so much
+        // that the time it did get comes to less in reference milliseconds.
+        if verdict == Verdict::TimeLimitExceeded {
+            cpu_ms = cpu_ms.max(self.job.cpu_limit_ms);
+        }
         Outcome {
             verdict,
             failed_size: failed.and_then(|i| self.sizes.get(i).cloned()),
             cases: self.cases,
             failed,
-            cpu_ms: reference_ms(f64::from(done.cpu_ms), slowdown),
+            cpu_ms,
             slowdown,
             rerun: false,
             max_rss_kb: done.maxrss_kb,
@@ -624,12 +630,16 @@ mod tests {
     #[test]
     fn time_is_judged_by_the_slowdown_over_the_run() {
         let job = job(1, Some("[1]"));
-        // Slower after the run: the time is divided by the mean, and the run counts as slowed.
+        // Slower after the run: it counts as slowed, and a run stopped at its limit reports it.
         let mut run = start(&job);
         run.start(7, 1.0, None);
         let slower = r#"{"code":0,"signal":null,"cpu_ms":1500,"maxrss_kb":1,"calib_ns":75000000}"#;
         assert!(run.slowed(&done(slower)));
-        assert_eq!(run.finish(&done(slower)).cpu_ms, 750);
+        let outcome = run.finish(&done(slower));
+        assert_eq!(
+            (outcome.verdict, outcome.cpu_ms),
+            (Verdict::TimeLimitExceeded, 1000)
+        );
         // Faster after it: the slowdown the limit was set by stands.
         let mut run = start(&job);
         run.start(7, 2.0, None);
