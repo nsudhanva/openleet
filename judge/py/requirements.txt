@@ -1,0 +1,3 @@
+# What submissions can import beyond the standard library (LeetCode's Python has it). The
+# judge image installs from this file; keep it in step with pyproject.toml and deploy/install.sh.
+sortedcontainers==2.4.0
