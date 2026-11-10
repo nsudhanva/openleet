@@ -106,14 +106,15 @@ def stress_answer(results: dict[str, Any], same: Matcher) -> dict | None:
 
     The trusted references must all answer alike (all references, when none is trusted). A
     Mercury submission that fails or disagrees is ignored rather than vetoing the input, but
-    at least two references must give the kept answer."""
+    at least two references must give the kept answer when the problem has two or more (a
+    problem with one reference keeps its answer, as its hidden tests do)."""
     trusted_results = [r for name, r in results.items() if trusted(name)]
     deciding = trusted_results or list(results.values())
     if not agreed(deciding, same):
         return None
     answer = deciding[0]
     backers = sum(answered(r) and same(answer["out"], r["out"]) for r in results.values())
-    return answer if backers >= 2 else None
+    return answer if backers >= min(2, len(results)) else None
 
 
 def stress_tests(slug: str, voters: dict, same: Matcher) -> tuple[list[dict], dict[str, int]]:
