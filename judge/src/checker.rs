@@ -2,9 +2,11 @@
 //! when it built the tests (keep the two in step).
 
 use std::borrow::Cow;
+use std::fmt::Write as _;
 
 use openleet_proto::Checker;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 /// The official judge accepts floating-point answers within 1e-5.
 const TOLERANCE: f64 = 1e-5;
@@ -18,6 +20,18 @@ pub fn accepts(checker: Checker, floats: bool, actual: &Value, expected: &Value)
     } else {
         actual == expected
     }
+}
+
+/// Whether the answer's exact JSON text, as the child printed it, hashes to `sha256_hex`.
+#[must_use]
+pub fn digest_matches(raw: &str, sha256_hex: &str) -> bool {
+    let digest = Sha256::digest(raw.as_bytes());
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        // Writing to a String cannot fail.
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex.eq_ignore_ascii_case(sha256_hex)
 }
 
 /// The form two answers must share: lists sorted where order does not matter.
@@ -126,6 +140,20 @@ mod tests {
             &json!([2.000_001, 1.0]),
             &json!([1.0, 2.0])
         ));
+    }
+
+    #[test]
+    fn digest_of_the_exact_text() {
+        // From `shasum -a 256` and Python's
+        // hashlib.sha256(json.dumps(v, separators=(",", ":"), ensure_ascii=False).encode()).
+        let pair = "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684";
+        let unicode = "50f42003d4ea3d90e8fc5d170ffc70daa4d284a5d11e3622f362b237a7a28349";
+        assert!(digest_matches("[1,2]", pair));
+        assert!(digest_matches("[1,2]", &pair.to_uppercase()));
+        assert!(digest_matches(r#"[[1,2],"é",null]"#, unicode));
+        assert!(!digest_matches("[1, 2]", pair));
+        assert!(!digest_matches("[2,1]", pair));
+        assert!(!digest_matches("[1,2]", ""));
     }
 
     #[test]

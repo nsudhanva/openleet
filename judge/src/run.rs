@@ -3,12 +3,12 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use openleet_proto::{Case, Job, Outcome, Verdict};
+use openleet_proto::{Case, Expected, Job, Outcome, Verdict};
 use serde::Serialize;
 use serde_json::Value;
 use serde_json::value::RawValue;
 
-use crate::checker::accepts;
+use crate::checker::{accepts, digest_matches};
 use crate::watchdog::{Kill, KillSwitch, watch};
 use crate::zygote::{ChildEvent, Done, Zygote};
 
@@ -44,7 +44,7 @@ fn wall_limit(cpu_limit_ms: u32) -> Duration {
 /// Executes `job`; judge faults come back as [`Verdict::InternalError`], never as `Err`
 /// unless the zygote itself broke (the caller then restarts it).
 pub async fn execute(zygote: &mut Zygote, job: &Job) -> Result<Outcome> {
-    let expected = match job.expected.as_deref().map(parse_all).transpose() {
+    let expected = match job.expected.as_deref().map(parse_expected).transpose() {
         Ok(expected) => expected,
         Err(error) => return Ok(Outcome::internal(format!("bad expected output: {error}"))),
     };
@@ -85,8 +85,20 @@ pub async fn execute(zygote: &mut Zygote, job: &Job) -> Result<Outcome> {
     }
 }
 
-fn parse_all(raw: &[Box<RawValue>]) -> serde_json::Result<Vec<Value>> {
-    raw.iter().map(|r| serde_json::from_str(r.get())).collect()
+/// An expected answer, ready to compare.
+enum Want<'a> {
+    Value(Value),
+    Sha256(&'a str),
+}
+
+fn parse_expected(expected: &[Expected]) -> serde_json::Result<Vec<Want<'_>>> {
+    expected
+        .iter()
+        .map(|want| match want {
+            Expected::Value(raw) => serde_json::from_str(raw.get()).map(Want::Value),
+            Expected::Sha256(hex) => Ok(Want::Sha256(hex)),
+        })
+        .collect()
 }
 
 /// A verdict with the test that decided it and the message to show.
@@ -95,7 +107,7 @@ type Decision = (Verdict, Option<usize>, Option<String>);
 /// State of one job while its events arrive.
 struct Run<'a> {
     job: &'a Job,
-    expected: Option<Vec<Value>>,
+    expected: Option<Vec<Want<'a>>>,
     cases: Vec<Case>,
     pid: Option<i32>,
     switch: KillSwitch,
@@ -104,7 +116,7 @@ struct Run<'a> {
 }
 
 impl<'a> Run<'a> {
-    fn new(job: &'a Job, expected: Option<Vec<Value>>) -> Self {
+    fn new(job: &'a Job, expected: Option<Vec<Want<'a>>>) -> Self {
         Self {
             job,
             expected,
@@ -128,12 +140,13 @@ impl<'a> Run<'a> {
     /// Whether `out` is right for test `i`; `None` without expected outputs or an answer.
     fn check(&self, i: usize, out: Option<&RawValue>) -> Option<bool> {
         let expected = self.expected.as_ref()?;
-        let actual = serde_json::from_str::<Value>(out?.get());
-        Some(actual.is_ok_and(|actual| {
-            expected
-                .get(i)
-                .is_some_and(|want| accepts(self.job.checker, self.job.floats, &actual, want))
-        }))
+        let out = out?.get();
+        Some(match expected.get(i) {
+            Some(Want::Value(want)) => serde_json::from_str::<Value>(out)
+                .is_ok_and(|actual| accepts(self.job.checker, self.job.floats, &actual, want)),
+            Some(Want::Sha256(hex)) => digest_matches(out, hex),
+            None => false,
+        })
     }
 
     fn child_event(&mut self, ev: ChildEvent, cpu_ms: i64) {
@@ -208,18 +221,38 @@ impl<'a> Run<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
-    fn job(tests: usize, expected: Option<&str>) -> Job {
+    /// A job whose `expected` is given in wire form (`[{"value": ..}, {"sha256": ..}]`).
+    fn wire_job(tests: usize, expected: &str) -> Job {
         let tests = vec![r#"{"input":{}}"#; tests].join(",");
-        let expected = expected.unwrap_or("null");
         serde_json::from_str(&format!(
             r#"{{"spec":{{}},"code":"","tests":[{tests}],"expected":{expected},"cpu_limit_ms":1000,"stop_on_failure":true}}"#
         ))
         .unwrap()
     }
 
+    /// A job expecting the answers in the JSON list `expected`, or only running without it.
+    fn job(tests: usize, expected: Option<&str>) -> Job {
+        let wire = expected.map_or_else(
+            || "null".to_owned(),
+            |list| {
+                let values: Vec<Value> = serde_json::from_str(list).unwrap();
+                let wrapped: Vec<Value> =
+                    values.into_iter().map(|v| json!({ "value": v })).collect();
+                serde_json::to_string(&wrapped).unwrap()
+            },
+        );
+        wire_job(tests, &wire)
+    }
+
     fn start(job: &Job) -> Run<'_> {
-        let expected = job.expected.as_deref().map(parse_all).transpose().unwrap();
+        let expected = job
+            .expected
+            .as_deref()
+            .map(parse_expected)
+            .transpose()
+            .unwrap();
         Run::new(job, expected)
     }
 
@@ -264,7 +297,31 @@ mod tests {
     }
 
     #[test]
-    fn null_answer_is_judged_and_unparsable_is_wrong() {
+    fn digest_compares_the_exact_text() {
+        // sha256 of `[1,2]`; the second test expects the plain value `[1,2]`.
+        let pair = "49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684";
+        let job = wire_job(2, &format!(r#"[{{"sha256":"{pair}"}},{{"value":[1,2]}}]"#));
+        let mut run = start(&job);
+        run.child_event(event(r#"{"i":0,"out":[1,2]}"#), 0);
+        run.child_event(event(r#"{"i":1,"out":[1, 2]}"#), 0);
+        let outcome = run.finish(&done(CLEAN));
+        assert_eq!(outcome.verdict, Verdict::Accepted);
+        assert_eq!(outcome.cases[0].ok, Some(true));
+        assert_eq!(outcome.cases[1].ok, Some(true));
+
+        let mut run = start(&job);
+        run.child_event(event(r#"{"i":0,"out":[1, 2]}"#), 0);
+        let outcome = run.finish(&done(CLEAN));
+        assert_eq!(outcome.verdict, Verdict::WrongAnswer);
+        assert_eq!(outcome.failed, Some(0));
+        assert_eq!(
+            outcome.cases[0].output.as_deref().map(RawValue::get),
+            Some("[1, 2]")
+        );
+    }
+
+    #[test]
+    fn null_answer_is_judged_and_missing_answers_are_not() {
         let job = job(2, Some("[null,1]"));
         let mut run = start(&job);
         run.child_event(event(r#"{"i":0,"out":null}"#), 0);

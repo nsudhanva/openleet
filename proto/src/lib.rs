@@ -28,6 +28,17 @@ pub enum Checker {
     UnorderedNested,
 }
 
+/// One test's expected answer: `{"value": <json>}` or `{"sha256": "<hex>"}`.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Expected {
+    /// The answer itself, compared with the job's [`Checker`].
+    Value(Box<RawValue>),
+    /// Lowercase hex SHA-256 of the answer's compact JSON text, for big exact answers. The child
+    /// prints answers with that same encoding, so a match means the same answer.
+    Sha256(String),
+}
+
 /// One submission (or reference run) to execute.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Job {
@@ -37,7 +48,7 @@ pub struct Job {
     /// Each `{"input": {...}}` or `{"gen": slug, "seed": n, "sha": hex}`.
     pub tests: Vec<Box<RawValue>>,
     /// Expected outputs, one per test; `None` only runs the code (no verdict on answers).
-    pub expected: Option<Vec<Box<RawValue>>>,
+    pub expected: Option<Vec<Expected>>,
     #[serde(default)]
     pub checker: Checker,
     /// Compare numbers with the official judge's 1e-5 tolerance.
@@ -216,6 +227,23 @@ mod tests {
         assert!(!job.capture_stdout);
         assert!(job.expected.is_none());
         assert_eq!(job.tests[0].get(), r#"{"input":{}}"#);
+    }
+
+    #[test]
+    fn expected_is_externally_tagged() {
+        let text = r#"[{"value":{"b":[1, 2.50]}},{"sha256":"ab12"},{"value":null}]"#;
+        let expected: Vec<Expected> = serde_json::from_str(text).unwrap();
+        let Expected::Value(value) = &expected[0] else {
+            panic!("not a value: {expected:?}")
+        };
+        assert_eq!(value.get(), r#"{"b":[1, 2.50]}"#);
+        assert!(matches!(&expected[1], Expected::Sha256(hex) if hex == "ab12"));
+        assert!(matches!(&expected[2], Expected::Value(v) if v.get() == "null"));
+        assert_eq!(
+            serde_json::to_string(&expected).unwrap(),
+            r#"[{"value":{"b":[1, 2.50]}},{"sha256":"ab12"},{"value":null}]"#
+        );
+        assert!(serde_json::from_str::<Expected>("[1]").is_err());
     }
 
     #[test]
