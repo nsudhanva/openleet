@@ -10,11 +10,11 @@ N = 10**4
 def generate(rng):
     shape = pick_shape(rng)
     peak = rng.randint(1, N - 2)
-    up = [*sorted(rng.sample(range(0, 10**4), peak)), 10**4]
-    down = sorted(rng.sample(range(0, 10**4), N - peak - 1), reverse=True)
+    up = [*sorted(rng.sample(range(10**4), peak)), 10**4]
+    down = sorted(rng.sample(range(10**4), N - peak - 1), reverse=True)
     arr = up + down
     if shape == 1:
         arr[peak + 1] = arr[peak]
     elif shape == 2:
-        arr = sorted(rng.sample(range(0, 10**4 + 1), N))
+        arr = sorted(rng.sample(range(10**4 + 1), N))
     return {"arr": arr}

@@ -10,7 +10,7 @@ N = 10**4
 def generate(rng):
     shape = rng.randrange(3)
     if shape == 2:
-        left, right = [-1] * N, [*list(range(1, N)), -1]
+        left, right = [-1] * N, [*range(1, N), -1]
     else:
         left, right = thin_tree(rng, N, 3, -1) if shape == 1 else random_tree(rng, N, -1)
     keys = sorted(rng.sample(range(-(10**8) + 2, 10**8 - 1, 2), N))

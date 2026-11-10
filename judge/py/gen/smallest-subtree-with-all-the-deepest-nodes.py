@@ -27,5 +27,5 @@ def generate(rng):
         left, right = zigzag_path(rng, n)
     else:
         left, right = random_tree(rng, n, swap=False)
-    vals = rng.sample(range(0, 501), n)
+    vals = rng.sample(range(501), n)
     return {"root": level_order(vals, left, right)}

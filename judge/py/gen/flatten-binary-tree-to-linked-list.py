@@ -10,7 +10,7 @@ def generate(rng):
     shape = rng.randrange(3)
     vals = [rng.randint(-100, 100) for _ in range(N)]
     if shape == 2:
-        left = [*list(range(1, N)), -1]
+        left = [*range(1, N), -1]
         right = [-1] * N
     else:
         left, right = thin_tree(rng, N, 3, -1) if shape == 1 else random_tree(rng, N, -1)

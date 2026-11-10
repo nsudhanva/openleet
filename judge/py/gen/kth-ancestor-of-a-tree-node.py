@@ -8,7 +8,7 @@ QUERIES = 5 * 10**4
 
 def generate(rng):
     if rng.random() < 0.5:
-        parent = [-1, *list(range(N - 1))]
+        parent = [-1, *range(N - 1)]
     else:
         parent = [-1] + [rng.randrange(max(0, i - 50), i) for i in range(1, N)]
     ops, args = ["TreeAncestor"], [[N, parent]]
