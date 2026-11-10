@@ -1,7 +1,7 @@
 import { SearchIcon } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
+import { KeyHint } from "@/components/action-button";
 import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
 import { useHotkeys, useModKeys } from "@/hooks/use-hotkeys";
 import { useLoadOnUse } from "@/hooks/use-load-on-use";
 
@@ -38,7 +38,7 @@ export function SearchDialog() {
 			>
 				<SearchIcon />
 				<span className="hidden sm:inline">Search problems</span>
-				<Kbd className="ml-auto hidden sm:inline-flex">⌘K</Kbd>
+				<KeyHint className="ml-auto">⌘K</KeyHint>
 			</Button>
 			{used && (
 				<Suspense fallback={null}>

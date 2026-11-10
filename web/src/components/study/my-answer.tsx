@@ -6,8 +6,8 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { KeyHint } from "@/components/action-button";
 import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
 /**
@@ -38,7 +38,7 @@ export function MyAnswer({
 			action={
 				<Button variant="ghost" size="xs" onClick={onEdit}>
 					Edit
-					<Kbd className="hidden sm:inline-flex">M</Kbd>
+					<KeyHint>M</KeyHint>
 				</Button>
 			}
 		>
@@ -139,11 +139,11 @@ function NoteEditor({
 				<div className="mt-2 flex items-center gap-2">
 					<Button type="submit" size="xs" disabled={saving}>
 						Save
-						<Kbd className="hidden sm:inline-flex">⌘↵</Kbd>
+						<KeyHint>⌘↵</KeyHint>
 					</Button>
 					<Button type="button" size="xs" variant="ghost" onClick={onCancel}>
 						Cancel
-						<Kbd className="hidden sm:inline-flex">Esc</Kbd>
+						<KeyHint>Esc</KeyHint>
 					</Button>
 					{failed && (
 						<p role="alert" className="text-xs text-destructive">

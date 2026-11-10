@@ -4,7 +4,10 @@ import { useCompanies } from "@/hooks/use-companies";
 import { ANY_COMPANY, companyName } from "@/lib/companies";
 import { cn } from "@/lib/utils";
 
-/** Chooses the company whose lists you study: "Any company", then every company by count. */
+/**
+ * Chooses the company whose lists you study: "Any company", then every company by count.
+ * On a phone it fills its cell of the filter grid.
+ */
 export function CompanyPicker({
 	value,
 	onChange,
@@ -41,7 +44,7 @@ export function CompanyPicker({
 			options={options}
 			onChange={onChange}
 			disabled={disabled}
-			className={cn("w-36", className)}
+			className={cn("w-36 max-sm:w-full", className)}
 		/>
 	);
 }

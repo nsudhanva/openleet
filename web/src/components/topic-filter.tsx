@@ -36,7 +36,7 @@ export function TopicFilter({
 			]}
 			optionsKey={`${company}|${period}|${difficulty ?? ""}`}
 			onChange={(topic) => onChange(topic || undefined)}
-			className={cn("w-44", className)}
+			className={cn("w-44 max-sm:w-full", className)}
 		/>
 	);
 }

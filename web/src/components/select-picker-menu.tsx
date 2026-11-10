@@ -1,4 +1,8 @@
-import type { SelectPickerProps } from "@/components/select-picker";
+import {
+	PICKER_CLASS,
+	pickerName,
+	type SelectPickerProps,
+} from "@/components/select-picker";
 import {
 	Select,
 	SelectContent,
@@ -6,15 +10,14 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 /** The select behind `SelectPicker`, loaded on first use. */
 export function SelectPickerMenu<T extends string | null>({
-	label,
-	value,
-	items,
-	onChange,
 	defaultOpen = false,
+	...props
 }: SelectPickerProps<T> & { defaultOpen?: boolean }) {
+	const { value, items, onChange, className } = props;
 	return (
 		<Select
 			value={value}
@@ -22,7 +25,11 @@ export function SelectPickerMenu<T extends string | null>({
 			onValueChange={(next) => onChange(next as T)}
 			defaultOpen={defaultOpen}
 		>
-			<SelectTrigger aria-label={label} size="sm" className="bg-card">
+			<SelectTrigger
+				aria-label={pickerName(props)}
+				size="sm"
+				className={cn(PICKER_CLASS, className)}
+			>
 				<SelectValue />
 			</SelectTrigger>
 			<SelectContent>

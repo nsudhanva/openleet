@@ -24,7 +24,7 @@ export function SiteHeader({ readiness }: { readiness: number | null }) {
 				<Link
 					to="/"
 					search={{}}
-					className="mr-1 flex items-center gap-2 font-bold tracking-tight sm:mr-2"
+					className="mr-1 flex h-9 min-w-9 items-center justify-center gap-2 font-bold tracking-tight max-xs:hidden sm:mr-2 md:justify-start"
 					aria-label="OpenLeet home"
 				>
 					<GalleryVerticalEndIcon
@@ -41,7 +41,7 @@ export function SiteHeader({ readiness }: { readiness: number | null }) {
 							activeOptions={{ exact, includeSearch: false }}
 							className={cn(
 								buttonVariants({ variant: "ghost", size: "sm" }),
-								"px-2 text-muted-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground sm:px-2.5",
+								"px-1 text-muted-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground xs:px-2 sm:px-2.5",
 							)}
 						>
 							{label}

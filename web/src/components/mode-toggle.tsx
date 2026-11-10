@@ -9,7 +9,13 @@ const ThemeMenu = lazy(async () => ({ default: (await loadMenu()).ThemeMenu }));
 /** The theme button: a sun in light mode, a moon in dark mode. */
 export function ThemeButton(props: ComponentProps<typeof Button>) {
 	return (
-		<Button variant="ghost" size="icon" aria-label="Theme" {...props}>
+		<Button
+			variant="ghost"
+			size="icon"
+			aria-label="Theme"
+			className="pointer-coarse:size-9"
+			{...props}
+		>
 			<SunIcon className="dark:hidden" />
 			<MoonIcon className="hidden dark:block" />
 		</Button>
