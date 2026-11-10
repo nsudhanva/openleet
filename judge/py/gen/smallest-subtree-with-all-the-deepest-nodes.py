@@ -1,7 +1,7 @@
 """Smallest Subtree with All Deepest Nodes at 500 nodes with unique values: two long chains of
 equal depth (LCA at the root), a single 500-deep chain, or a random tree."""
 
-from _shapes import level_order, pick_shape
+from _shapes import level_order, pick_shape, random_tree, zigzag_path
 
 SEEDS = 3
 
@@ -9,9 +9,9 @@ SEEDS = 3
 def generate(rng):
     shape = pick_shape(rng)
     n = 500
-    left, right = [None] * n, [None] * n
     if shape == 0:
         # Root with two chains of 249 and 250 nodes; the shorter gets one more at the end.
+        left, right = [None] * n, [None] * n
         left[0], right[0] = 1, 2
         a, b = 1, 2
         nxt = 3
@@ -24,16 +24,8 @@ def generate(rng):
                 b = nxt
                 nxt += 1
     elif shape == 1:
-        for i in range(n - 1):
-            if rng.random() < 0.5:
-                left[i] = i + 1
-            else:
-                right[i] = i + 1
+        left, right = zigzag_path(rng, n)
     else:
-        free = [(0, 0), (0, 1)]
-        for i in range(1, n):
-            parent, side = free.pop(rng.randrange(len(free)))
-            free += [(i, 0), (i, 1)]
-            (left if side == 0 else right)[parent] = i
+        left, right = random_tree(rng, n, swap=False)
     vals = rng.sample(range(0, 501), n)
     return {"root": level_order(vals, left, right)}

@@ -78,14 +78,18 @@ def leaf_sums(vals, left, right, empty=None):
     return sums
 
 
-def random_tree(rng, n, empty=None):
-    """A random n-node tree: each new node fills an open child slot chosen uniformly."""
+def random_tree(rng, n, empty=None, swap=True):
+    """A random n-node tree: each new node fills an open child slot chosen uniformly. With swap
+    False the chosen slot is popped in place rather than swapped to the end first, which leaves
+    the open slots in a different order, so the same rng grows a different tree."""
     left, right = [empty] * n, [empty] * n
     slots = [(0, 0), (0, 1)]
     for i in range(1, n):
         j = rng.randrange(len(slots))
-        slots[j], slots[-1] = slots[-1], slots[j]
-        parent, side = slots.pop()
+        if swap:
+            slots[j], slots[-1] = slots[-1], slots[j]
+            j = -1
+        parent, side = slots.pop(j)
         (left, right)[side][parent] = i
         slots += [(i, 0), (i, 1)]
     return left, right

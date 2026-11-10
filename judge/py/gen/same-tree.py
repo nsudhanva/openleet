@@ -1,28 +1,17 @@
 """Same Tree on 100-node trees (random or a skewed chain): identical, one value changed deep,
 or one structural difference."""
 
-from _shapes import level_order, pick_shape
+from _shapes import level_order, pick_shape, random_tree, shaped_tree
 
 SEEDS = 3
-
-
-def build(rng, n, chain):
-    left, right = [None] * n, [None] * n
-    free = [(0, 0), (0, 1)]
-    for i in range(1, n):
-        if chain:
-            parent, side = i - 1, rng.randrange(2)
-        else:
-            parent, side = free.pop(rng.randrange(len(free)))
-            free += [(i, 0), (i, 1)]
-        (left if side == 0 else right)[parent] = i
-    return left, right
 
 
 def generate(rng):
     shape = pick_shape(rng)
     n = 100
-    left, right = build(rng, n, rng.random() < 0.4)
+    left, right = (
+        shaped_tree(rng, n, "chain") if rng.random() < 0.4 else random_tree(rng, n, swap=False)
+    )
     vals = [rng.randint(-(10**4), 10**4) for _ in range(n)]
     p = level_order(vals, left, right)
     if shape == 0:
