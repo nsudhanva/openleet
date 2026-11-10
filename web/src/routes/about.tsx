@@ -1,4 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import {
+	ArrowBigUpIcon,
+	ArrowLeftIcon,
+	ArrowRightIcon,
+	CommandIcon,
+	CornerDownLeftIcon,
+	type LucideIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Kbd } from "@/components/ui/kbd";
@@ -24,6 +32,37 @@ const SHORTCUTS: [string, string][] = [
 	["⌘↵", "Code page: run the examples or your test case"],
 	["⌘⇧↵", "Code page: submit against every test"],
 ];
+
+/**
+ * One topic of the page. Sections off screen skip layout until scrolled near
+ * (content-visibility), so the first paint lays out only what a phone shows.
+ */
+/**
+ * Key symbols the text fonts lack, drawn as icons: a glyph from a fallback font costs the
+ * first layout about 10 ms (a phone's first screen shows them), an icon nothing.
+ */
+const KEY_ICONS: Record<string, [LucideIcon, string]> = {
+	"⌘": [CommandIcon, "Command"],
+	"⇧": [ArrowBigUpIcon, "Shift"],
+	"↵": [CornerDownLeftIcon, "Enter"],
+	"←": [ArrowLeftIcon, "Left"],
+	"→": [ArrowRightIcon, "Right"],
+};
+
+function KeyLabel({ keys }: { keys: string }) {
+	return [...keys].map((char, i) => {
+		const icon = KEY_ICONS[char];
+		if (!icon) return char;
+		const [Icon, name] = icon;
+		return (
+			// biome-ignore lint/suspicious/noArrayIndexKey: the characters of a fixed string never reorder
+			<span key={i}>
+				<Icon aria-hidden />
+				<span className="sr-only">{name}</span>
+			</span>
+		);
+	});
+}
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
 	return (
@@ -59,7 +98,9 @@ function About() {
 							{SHORTCUTS.map(([key, action]) => (
 								<div key={key} className="contents">
 									<dt>
-										<Kbd>{key}</Kbd>
+										<Kbd>
+											<KeyLabel keys={key} />
+										</Kbd>
 									</dt>
 									<dd>{action}</dd>
 								</div>
