@@ -44,7 +44,9 @@ zstd = "0.14.3"
 [build-dependencies]
 base64 = "0.22.1"
 brotli = "9.1.1"
-serde.workspace = true
-serde_json.workspace = true
+# Without the workspace's extra features, so build scripts that share them (libduckdb-sys)
+# are not rebuilt over their cached output.
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 sha2 = "0.11.1"
 zstd = "0.14.3"
