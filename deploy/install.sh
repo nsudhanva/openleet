@@ -67,5 +67,9 @@ ENV
 	chgrp openleet "$ENV_FILE"
 fi
 
+# Submissions have no use for io_uring, a common kernel attack surface.
+echo "kernel.io_uring_disabled = 2" >/etc/sysctl.d/90-openleet.conf
+sysctl -q --system
+
 install_units
 echo "Fill in $ENV_FILE, then run $ROOT/update.sh"

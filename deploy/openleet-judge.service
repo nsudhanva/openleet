@@ -26,6 +26,9 @@ TasksMax=64
 CPUWeight=50
 
 CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_KILL
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+UMask=0077
 PrivateNetwork=yes
 RestrictAddressFamilies=AF_UNIX
 NoNewPrivileges=yes

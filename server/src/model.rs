@@ -287,7 +287,7 @@ pub struct Problem {
     pub topics: Vec<String>,
     /// Whether the problem needs LeetCode Premium.
     pub premium: bool,
-    /// Sanitized HTML statement; `None` for premium problems.
+    /// Sanitized HTML statement; `None` only when no source has one.
     pub description: Option<String>,
 }
 
@@ -329,7 +329,7 @@ impl Problem {
     /// Whether the problem is in "LC 1–1000".
     #[must_use]
     pub const fn in_lc1000(&self) -> bool {
-        self.id <= LC_LIMIT && !self.premium
+        self.id <= LC_LIMIT
     }
 
     /// Whether the problem carries this topic tag.

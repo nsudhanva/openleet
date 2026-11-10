@@ -30,7 +30,12 @@ curl -fsSL -o "$work/$archive.sha256" "$BASE/$archive.sha256"
 release="$ROOT/releases/$revision"
 rm -rf "$release"
 mkdir -p "$release"
-tar --zstd -xf "$work/$archive" -C "$release"
+# Root runs parts of the release, so root owns all of it (not CI's uid). The data (reference
+# solutions, expected outputs) is readable by the server only, never by submissions.
+tar --zstd --no-same-owner --no-same-permissions -xf "$work/$archive" -C "$release"
+chown -R root:root "$release"
+chgrp -R openleet "$release/data"
+chmod -R o-rwx "$release/data"
 # Units and this script come with each release, so changes to them deploy themselves.
 "$release/deploy/install.sh" --units-only
 # mv -T renames over the old link in one step, so `current` always points at a whole release.

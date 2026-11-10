@@ -2,10 +2,9 @@
 
 Company lists come from liquidslr/leetcode-company-wise-problems: for each company, which
 problems it asked in the last 30 days, 3 months, 6 months and all time, in frequency order,
-with difficulty and topics. Every problem a listed company asked is included, plus every free
-problem numbered 1 to CLASSIC_MAX. Statements, difficulty and tags for problems no company
-lists come from doocs/leetcode (CC BY-SA 4.0); premium statements are left out (the app links
-to LeetCode for those).
+with difficulty and topics. Every problem a listed company asked is included, plus every
+problem numbered 1 to CLASSIC_MAX. Statements (premium ones included), and difficulty and tags
+for problems no company lists, come from doocs/leetcode (CC BY-SA 4.0).
 
 Each problem stores, per company and period, its rank (1 = asked most) and frequency (0-100).
 """
@@ -200,7 +199,7 @@ def build_problem(entry: DoocsEntry, listed: dict[str, Listing] | None) -> Probl
         url=url,
         topics=tags,
         premium=entry.premium,
-        description=None if entry.premium else statement(markdown),
+        description=statement(markdown),
     )
 
 
@@ -215,7 +214,7 @@ def build_problems() -> list[Problem]:
     wanted = [
         (entry, by_title.get(key))
         for key, entry in index.items()
-        if key in by_title or (entry.id <= CLASSIC_MAX and not entry.premium)
+        if key in by_title or entry.id <= CLASSIC_MAX
     ]
     with ThreadPoolExecutor(max_workers=FETCH_WORKERS) as pool:
         problems = list(pool.map(lambda pair: build_problem(*pair), wanted))

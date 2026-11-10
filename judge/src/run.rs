@@ -41,6 +41,21 @@ fn wall_limit(cpu_limit_ms: u32) -> Duration {
     Duration::from_millis(u64::from(cpu_limit_ms) * 4 + 3000)
 }
 
+/// Longest answer sent back to the server for display; bigger ones are replaced by a note.
+const SHOWN_BYTES: usize = 64 << 10;
+
+/// The answer as the server will show it.
+fn shown(output: Box<RawValue>) -> Box<RawValue> {
+    if output.get().len() <= SHOWN_BYTES {
+        return output;
+    }
+    let note = format!(
+        "\"({} KB answer, too large to show)\"",
+        output.get().len() >> 10
+    );
+    RawValue::from_string(note).unwrap_or(output)
+}
+
 /// Executes `job`; judge faults come back as [`Verdict::InternalError`], never as `Err`
 /// unless the zygote itself broke (the caller then restarts it).
 pub async fn execute(zygote: &mut Zygote, job: &Job) -> Result<Outcome> {
@@ -166,7 +181,9 @@ impl<'a> Run<'a> {
         } else {
             let ok = self.check(i, ev.out.as_deref());
             let failure = (ok == Some(false)).then_some((Verdict::WrongAnswer, None));
-            (ev.out, ok, failure)
+            // A submit only shows its failing case: passing answers are not sent back.
+            let keep = !(ok == Some(true) && self.job.stop_on_failure);
+            (ev.out.filter(|_| keep).map(shown), ok, failure)
         };
         self.cases.push(Case {
             output,
@@ -462,5 +479,13 @@ mod tests {
         let mut run = start(&job);
         run.child_event(event(r#"{"i":0,"out":1}"#), -1);
         assert_eq!(run.cases[0].cpu_ms, 0);
+    }
+
+    #[test]
+    fn big_answers_are_replaced_by_a_note() {
+        let small = RawValue::from_string("[1,2]".to_owned()).unwrap();
+        assert_eq!(shown(small).get(), "[1,2]");
+        let big = RawValue::from_string(format!("\"{}\"", "x".repeat(SHOWN_BYTES))).unwrap();
+        assert_eq!(shown(big).get(), "\"(64 KB answer, too large to show)\"");
     }
 }

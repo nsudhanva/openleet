@@ -17,6 +17,12 @@ use crate::zygote::Zygote;
 
 /// Largest job accepted (code plus every test and expected output).
 const MAX_JOB_BYTES: usize = 64 << 20;
+/// A client has this long to send its job line.
+const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+/// No job may ask for more CPU than this, whatever the client says.
+const MAX_CPU_LIMIT_MS: u32 = 30_000;
+/// The users the zygote runs submissions as (61000 in production, 61001+ in the test builder).
+const SANDBOX_UIDS: std::ops::Range<u32> = 61_000..62_000;
 
 struct Config {
     socket: String,
@@ -91,10 +97,19 @@ impl Listener {
 
     async fn accept(&self) -> Result<(Reader, Writer)> {
         Ok(match self {
-            Self::Unix(listener) => {
-                let (read, write) = listener.accept().await?.0.into_split();
-                (Box::new(read), Box::new(write))
-            }
+            Self::Unix(listener) => loop {
+                let stream = listener.accept().await?.0;
+                // The socket is world-writable so the server can reach it; submissions run as
+                // sandbox users and must not, or they could queue jobs of their own.
+                if stream
+                    .peer_cred()
+                    .is_ok_and(|peer| !SANDBOX_UIDS.contains(&peer.uid()))
+                {
+                    let (read, write) = stream.into_split();
+                    break (Box::new(read), Box::new(write));
+                }
+                eprintln!("judge: refused a connection from a sandbox user");
+            },
             Self::Tcp(listener) => {
                 let (read, write) = listener.accept().await?.0.into_split();
                 (Box::new(read), Box::new(write))
@@ -106,9 +121,14 @@ impl Listener {
 async fn serve(read: Reader, mut write: Writer, zygote: &mut Zygote) -> Result<()> {
     let mut line = Vec::new();
     let mut reader = BufReader::new(read).take(MAX_JOB_BYTES as u64);
-    reader.read_until(b'\n', &mut line).await?;
+    tokio::time::timeout(READ_TIMEOUT, reader.read_until(b'\n', &mut line))
+        .await
+        .context("the client sent no job in time")??;
     let outcome = match serde_json::from_slice::<Job>(&line) {
-        Ok(job) => run::execute(zygote, &job).await?,
+        Ok(mut job) => {
+            job.cpu_limit_ms = job.cpu_limit_ms.min(MAX_CPU_LIMIT_MS);
+            run::execute(zygote, &job).await?
+        }
         Err(error) => Outcome::internal(format!("bad job: {error}")),
     };
     let mut reply = serde_json::to_vec(&outcome)?;

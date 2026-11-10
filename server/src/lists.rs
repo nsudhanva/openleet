@@ -169,13 +169,17 @@ mod tests {
     }
 
     #[test]
-    fn lc1000_takes_free_problems_up_to_1000_by_number_for_any_company() {
+    fn lc1000_takes_every_problem_up_to_1000_by_number_for_any_company() {
         let problems = sample();
         let lists = Lists::build(&problems, 2);
         for company in [CompanyFilter::Any, CompanyFilter::Company(META)] {
             let lc = list(&lists, company, Period::Lc1000);
-            assert_eq!(ids(&problems, lc), [2, 3, 5, 7]);
-            assert_eq!(lc.iter().map(|e| e.rank).collect::<Vec<_>>(), [2, 3, 5, 7]);
+            // Premium problem 4 included.
+            assert_eq!(ids(&problems, lc), [2, 3, 4, 5, 7]);
+            assert_eq!(
+                lc.iter().map(|e| e.rank).collect::<Vec<_>>(),
+                [2, 3, 4, 5, 7]
+            );
         }
     }
 }

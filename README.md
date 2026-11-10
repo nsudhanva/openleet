@@ -63,8 +63,8 @@ Rebuild with `uv run openleet judge all`; `uv run openleet judge publish` upload
 
 Sources: company lists from
 [liquidslr/leetcode-company-wise-problems](https://github.com/liquidslr/leetcode-company-wise-problems),
-statements from [doocs/leetcode](https://github.com/doocs/leetcode) (CC BY-SA 4.0, no premium
-statements), approaches and hints written by Claude agents and reviewed with Codex CLI
+statements from [doocs/leetcode](https://github.com/doocs/leetcode) (CC BY-SA 4.0, premium ones
+included), approaches and hints written by Claude agents and reviewed with Codex CLI
 (`data/approach-reviews.json`).
 
 ## Releases

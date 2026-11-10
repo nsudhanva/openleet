@@ -28,6 +28,9 @@ MemoryMax=200M
 
 # The sockets come from openleet.socket, so the server needs no privileges at all.
 CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+UMask=0077
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes

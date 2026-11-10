@@ -94,7 +94,7 @@ def work_item(problem: dict) -> dict:
 
 
 def prepare(problems_path: Path = PROBLEMS_PATH) -> None:
-    problems = [p for p in json.loads(problems_path.read_text())["problems"] if not p["premium"]]
+    problems = json.loads(problems_path.read_text())["problems"]
     shutil.rmtree(WORK_ITEMS_DIR, ignore_errors=True)
     WORK_ITEMS_DIR.mkdir(parents=True)
     supported = 0
