@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
  * The card's heading over the red rule: the title, then difficulty, company tags in the space
  * left (one line that never wraps), `children` (progress, actions) and the LeetCode link. From
  * `lg` it is one line, so the header keeps its height; below, the line goes under the title
- * and `children` wrap onto a line of their own when the tags would get too little room.
+ * and `children` wrap onto a line of their own when the tags would get too little room (on
+ * the left on a phone, on the right from sm).
  */
 export function ProblemHeader({
 	problem,
@@ -44,7 +45,7 @@ export function ProblemHeader({
 						className="flex-1"
 					/>
 				</div>
-				<div className="ml-auto flex min-h-7 flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:gap-x-3 lg:flex-nowrap lg:whitespace-nowrap">
+				<div className="flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1 sm:ml-auto sm:justify-end sm:gap-x-3 lg:flex-nowrap lg:whitespace-nowrap">
 					{children}
 					<a
 						href={problem.url}
