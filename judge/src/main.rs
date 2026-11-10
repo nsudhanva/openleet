@@ -107,6 +107,10 @@ async fn serve(read: Reader, mut write: Writer, zygote: &mut Zygote) -> Result<(
     let mut line = Vec::new();
     let mut reader = BufReader::new(read).take(MAX_JOB_BYTES as u64);
     reader.read_until(b'\n', &mut line).await?;
+    if line.is_empty() {
+        // A health probe: connected and closed without a job.
+        return Ok(());
+    }
     let outcome = match serde_json::from_slice::<Job>(&line) {
         Ok(job) => run::execute(zygote, &job).await?,
         Err(error) => Outcome::internal(format!("bad job: {error}")),

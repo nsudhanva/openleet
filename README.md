@@ -82,6 +82,12 @@ flowchart LR
 ```
 
 Restarts drop no connection: `openleet.socket` holds ports 80 and 443 while the server restarts.
+The server heals itself: systemd restarts it if it exits or stops pinging the watchdog (it pings
+only while its database answers), rustls-acme renews the certificate 30 days before expiry, and
+the server copies its database to `/var/lib/openleet/backups/<date>.duckdb` daily (14 kept). On
+start it migrates the database (`server/src/db/migrations`, copying it to
+`backups/pre-migration-*` first) or, if the file is unusable, moves it to
+`/var/lib/openleet/quarantine/` and restores the newest backup.
 Roll back by pointing `/opt/openleet/current` at an older release. New server: copy `deploy/`,
 run `sudo deploy/install.sh`, fill in `/etc/openleet.env` (with `DEPLOY_SECRET`, the same value
 as the GitHub secret), run `sudo /opt/openleet/update.sh`.
@@ -128,6 +134,7 @@ deploy/  systemd units, install and update scripts
 | `POST /api/run` `{slug, code, input?}` | Run examples or your own input |
 | `POST /api/submit` `{slug, code}` | Run every test |
 | `GET /api/submissions?slug=` | Your submissions |
+| `GET /api/health` | `ok`, `db`, `judge`, certificate expiry; 503 when the database is down |
 
 ## Keys
 

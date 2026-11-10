@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use openleet_proto::{Checker, Endpoint, Expected, Job, Outcome, Verdict};
@@ -24,6 +24,10 @@ const MAX_CODE_BYTES: usize = 64 << 10;
 const MAX_CUSTOM_CASES: usize = 10;
 /// Longest input or output shown back; bigger ones are cut (stress tests are huge).
 const SHOWN_CHARS: usize = 4000;
+/// How long a health probe waits to connect to the daemon.
+const PROBE_TIMEOUT: Duration = Duration::from_millis(500);
+/// How long a probe's answer is reused.
+const PROBE_TTL: Duration = Duration::from_secs(5);
 
 /// One problem's entry in specs.json.
 #[derive(Deserialize)]
@@ -114,6 +118,8 @@ pub struct Judge {
     endpoint: Endpoint,
     permits: Semaphore,
     waiting: AtomicUsize,
+    /// The last health probe: when, and whether the daemon accepted a connection.
+    probe: parking_lot::Mutex<Option<(Instant, bool)>>,
     pub time: TimePolicy,
 }
 
@@ -140,8 +146,31 @@ impl Judge {
             endpoint,
             permits: Semaphore::new(1),
             waiting: AtomicUsize::new(0),
+            probe: parking_lot::Mutex::new(None),
             time: TimePolicy { scale },
         })
+    }
+
+    /// Whether the daemon accepts a connection (no job is sent; the daemon ignores a
+    /// connection that closes without one). Answers are reused for [`PROBE_TTL`].
+    pub async fn reachable(&self) -> bool {
+        if let Some((at, up)) = *self.probe.lock()
+            && at.elapsed() < PROBE_TTL
+        {
+            return up;
+        }
+        let connect = async {
+            match &self.endpoint {
+                Endpoint::Unix(path) => UnixStream::connect(path).await.map(drop),
+                Endpoint::Tcp(address) => TcpStream::connect(address).await.map(drop),
+            }
+        };
+        let up = matches!(
+            tokio::time::timeout(PROBE_TIMEOUT, connect).await,
+            Ok(Ok(()))
+        );
+        *self.probe.lock() = Some((Instant::now(), up));
+        up
     }
 
     /// A problem's catalog entry.

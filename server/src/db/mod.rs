@@ -17,6 +17,7 @@ mod sqlite;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use duckdb::{Config, Connection, OptionalExt, params};
@@ -281,6 +282,19 @@ impl Store {
 
     fn with<T>(&self, f: impl FnOnce(&Connection) -> duckdb::Result<T>) -> Result<T> {
         Ok(f(&self.conn.lock())?)
+    }
+
+    /// Holds the connection, as a long query would.
+    #[cfg(test)]
+    pub fn hold(&self) -> parking_lot::MutexGuard<'_, Connection> {
+        self.conn.lock()
+    }
+
+    /// Whether the database answers a trivial query, waiting at most `wait` for the connection.
+    pub fn ping(&self, wait: Duration) -> bool {
+        self.conn
+            .try_lock_for(wait)
+            .is_some_and(|c| c.execute_batch("SELECT 1").is_ok())
     }
 
     /// Imports the SQLite database servers used before DuckDB, if there is one.
@@ -563,7 +577,7 @@ impl Store {
 
 #[cfg(test)]
 pub mod testing {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     /// A fresh directory under the system's temporary one, removed on drop.
@@ -584,6 +598,10 @@ pub mod testing {
 
         pub fn path(&self, name: &str) -> PathBuf {
             self.0.join(name)
+        }
+
+        pub fn root(&self) -> &Path {
+            &self.0
         }
     }
 

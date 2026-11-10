@@ -42,6 +42,7 @@ pub fn routes() -> Router<Shared> {
         .route("/submissions", get(code::submissions))
         .route("/submissions/{id}", get(code::submission))
         .route("/version", get(version))
+        .route("/health", get(crate::health::health))
         .route(
             "/deploy",
             post(deploy::deploy).layer(DefaultBodyLimit::max(deploy::MAX_BODY)),

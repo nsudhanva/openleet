@@ -1,9 +1,14 @@
 # The web app and JSON API (bin/openleet): HTTPS with its own certificate, progress in DuckDB.
+# It heals itself: systemd restarts it when it exits or stops pinging the watchdog (it pings
+# only while its database answers), and on start it migrates the database, or quarantines an
+# unusable one and restores the newest daily backup (STATE_DIR/backups).
 [Unit]
 Description=OpenLeet
 After=network-online.target openleet-judge.service
 Wants=network-online.target openleet-judge.service
 Requires=openleet.socket
+# Never give up restarting (the default stops after 5 starts in 10 s).
+StartLimitIntervalSec=0
 
 [Service]
 User=openleet
@@ -12,6 +17,10 @@ EnvironmentFile=/etc/openleet.env
 Environment=DATA_DIR=/opt/openleet/current/data STATE_DIR=/var/lib/openleet
 Environment=JUDGE_SOCKET=/run/openleet-judge/judge.sock
 ExecStart=/opt/openleet/current/bin/openleet
+# READY=1 once migrated and listening; WATCHDOG=1 every 15 s while healthy.
+Type=notify
+NotifyAccess=main
+WatchdogSec=30
 Restart=always
 RestartSec=1
 TimeoutStopSec=10

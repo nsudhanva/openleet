@@ -1,12 +1,14 @@
 //! The OpenLeet server: flashcards and coding practice. JSON API, embedded web app, and
 //! automatic HTTPS.
 
+mod acme;
 mod api;
 mod assets;
 mod db;
 mod deploy;
 mod error;
 mod fingerprint;
+mod health;
 mod judge;
 mod listen;
 mod state;
@@ -25,13 +27,13 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
 use parking_lot::RwLock;
 use rustls_acme::AcmeConfig;
-use rustls_acme::caches::DirCache;
-use tokio_stream::StreamExt;
+
 use tower_http::CompressionLevel;
 use tower_http::compression::CompressionLayer;
 
 use openleet::content::Content;
 
+use crate::acme::{CertificateSlot, ObservedCache};
 use crate::db::{Opening, Store};
 use crate::deploy::Deploy;
 use crate::judge::Judge;
@@ -173,6 +175,7 @@ fn load_state(config: &Config) -> Result<Shared> {
         store,
         judge,
         progress: RwLock::new(progress),
+        certificate: CertificateSlot::default(),
     }))
 }
 
@@ -223,18 +226,23 @@ async fn main() -> Result<()> {
     });
 
     tokio::spawn(back_up_daily(Arc::clone(&state)));
+    tokio::spawn(health::watchdog(Arc::clone(&state)));
 
+    let certificate = Arc::clone(&state.certificate);
     let router = app(state);
     let http = SocketAddr::from((Ipv6Addr::UNSPECIFIED, config.http_port));
     match config.tls_domains() {
         None => {
             tracing::info!("serving {} on {http}", config.site);
             let listener = tokio::net::TcpListener::from_std(sockets.take("http", http)?)?;
+            health::ready();
             axum::serve(listener, router)
                 .with_graceful_shutdown(shutdown())
                 .await?;
         }
-        Some(domains) => serve_tls(&config, domains, router, &mut sockets, http).await?,
+        Some(domains) => {
+            serve_tls(&config, domains, router, &mut sockets, http, certificate).await?;
+        }
     }
     Ok(())
 }
@@ -315,6 +323,7 @@ async fn serve_tls(
     router: Router,
     sockets: &mut Sockets,
     http: SocketAddr,
+    certificate: CertificateSlot,
 ) -> Result<()> {
     let Some((primary, aliases)) = domains.split_first() else {
         anyhow::bail!("SITE_ADDRESS names no domain");
@@ -323,21 +332,17 @@ async fn serve_tls(
         primary: primary.as_str().into(),
         aliases: aliases.into(),
     };
-    let mut acme = AcmeConfig::new(domains.iter().cloned())
-        .cache(DirCache::new(config.state_dir.join("acme")))
+    let acme_state = AcmeConfig::new(domains.iter().cloned())
+        .cache(ObservedCache::new(
+            config.state_dir.join("acme"),
+            Arc::clone(&certificate),
+        ))
         .directory_lets_encrypt(true)
         .state();
-    let mut rustls = (*acme.default_rustls_config()).clone();
+    let mut rustls = (*acme_state.default_rustls_config()).clone();
     rustls.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    let acceptor = acme.axum_acceptor(Arc::new(rustls));
-    tokio::spawn(async move {
-        while let Some(event) = acme.next().await {
-            match event {
-                Ok(ok) => tracing::info!("acme: {ok:?}"),
-                Err(error) => tracing::error!("acme: {error:?}"),
-            }
-        }
-    });
+    let acceptor = acme_state.axum_acceptor(Arc::new(rustls));
+    tokio::spawn(acme::drive(acme_state, certificate));
 
     let host = Arc::clone(&canonical.primary);
     let redirect = Router::new().fallback(move |uri: Uri| {
@@ -370,7 +375,9 @@ async fn serve_tls(
         shutdown().await;
         stopper.graceful_shutdown(Some(DRAIN));
     });
-    axum_server::from_tcp(https_listener)?
+    let server = axum_server::from_tcp(https_listener)?;
+    health::ready();
+    server
         .acceptor(acceptor)
         .handle(handle)
         .serve(
@@ -409,6 +416,7 @@ async fn shutdown() {
         () = term => {},
     }
     tracing::info!("shutting down");
+    health::stopping();
 }
 
 #[cfg(test)]
