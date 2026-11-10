@@ -9,7 +9,7 @@ from pathlib import Path
 import duckdb
 
 from openleet.data import cached_download, doocs_readme_path
-from openleet.judging import DATASET_DIR
+from openleet.judging import DATASET_DIR, MERCURY_VOTER
 
 HF = "https://huggingface.co/datasets"
 LEETCODE_DATASET = {
@@ -82,5 +82,5 @@ def sources_for(problem_id: int, slug: str) -> Sources:
     for i, code in enumerate(doocs_solutions(problem_id), 1):
         found.voters[f"doocs{i}"] = code
     for i, code in enumerate(mercury().get(slug, []), 1):
-        found.voters[f"mercury{i}"] = code
+        found.voters[f"{MERCURY_VOTER}{i}"] = code
     return found

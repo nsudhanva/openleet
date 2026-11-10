@@ -35,6 +35,15 @@ TESTS_PATH = JUDGE_DIR / "tests.duckdb"
 HARNESS_DIR = Path("judge/py")
 
 
+MERCURY_VOTER = "mercury"
+
+
+def trusted(voter: str) -> bool:
+    """Whether a reference is curated (LeetCodeDataset, doocs) rather than one of Mercury's
+    crowd submissions, which are used offline only (CC BY-NC) and are sometimes wrong."""
+    return not voter.startswith(MERCURY_VOTER)
+
+
 def unsupported(reason: str) -> dict:
     """The spec entry of a problem the judge cannot run."""
     return {"supported": False, "reason": reason}

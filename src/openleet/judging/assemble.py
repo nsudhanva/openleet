@@ -1,8 +1,10 @@
 """Step 3: decide each problem's checker and keep only the tests every reference agrees on.
 
 A reference solution (voter) counts for a problem only if it reproduces every statement
-example's official output. A test is kept only if every counting voter ran it and all of them
-agree under the problem's checker; the expected output is their shared answer.
+example's official output. An example or hidden test is kept only if every counting voter ran
+it and all of them agree under the problem's checker; the expected output is their shared
+answer. Stress tests need only the trusted (non-Mercury) voters to agree, backed by at least
+two voters in all (see `stress_answer`).
 """
 
 import hashlib
@@ -21,6 +23,7 @@ from openleet.judging import (
     TESTS_PATH,
     WORK_DIR,
     WORK_ITEMS_DIR,
+    trusted,
     unsupported,
 )
 
@@ -98,23 +101,40 @@ def agreed(results: list[Any], same: Matcher) -> bool:
     )
 
 
-def stress_tests(slug: str, voters: dict, same: Matcher, cpu: dict) -> list[dict]:
-    """Generated stress tests every reference answered alike; adds their CPU time to `cpu`."""
+def stress_answer(results: dict[str, Any], same: Matcher) -> dict | None:
+    """The result whose answer a stress input keeps, or None to drop the input.
+
+    The trusted references must all answer alike (all references, when none is trusted). A
+    Mercury submission that fails or disagrees is ignored rather than vetoing the input, but
+    at least two references must give the kept answer."""
+    trusted_results = [r for name, r in results.items() if trusted(name)]
+    deciding = trusted_results or list(results.values())
+    if not agreed(deciding, same):
+        return None
+    answer = deciding[0]
+    backers = sum(answered(r) and same(answer["out"], r["out"]) for r in results.values())
+    return answer if backers >= 2 else None
+
+
+def stress_tests(slug: str, voters: dict, same: Matcher) -> tuple[list[dict], dict[str, int]]:
+    """Generated stress tests the references agree on (see `stress_answer`), and the stress
+    CPU time of each reference that answered every stress input."""
     path = STRESS_DIR / f"{slug}.json"
-    if not path.exists():
-        return []
-    run = json.loads(path.read_text())
-    if not set(voters) <= set(run["voters"]):
-        return []
+    run = json.loads(path.read_text()) if path.exists() else None
+    if run is None or not set(voters) <= set(run["voters"]):
+        return [], dict.fromkeys(voters, 0)
     kept = []
     for k, (seed, sha) in enumerate(zip(run["seeds"], run["shas"], strict=True)):
-        outs = [run["voters"][name]["results"][k] for name in voters]
-        if agreed(outs, same):
+        results = {name: run["voters"][name]["results"][k] for name in voters}
+        if (answer := stress_answer(results, same)) is not None:
             test = {"gen": slug, "seed": seed, "sha": sha}
-            kept.append({"kind": "stress", "test": test, "expected": outs[0]["out"]})
-    for name in voters:
-        cpu[name] += run["voters"][name]["cpuMs"]
-    return kept
+            kept.append({"kind": "stress", "test": test, "expected": answer["out"]})
+    finished = {
+        name: run["voters"][name]["cpuMs"]
+        for name in voters
+        if all(answered(r) for r in run["voters"][name]["results"])
+    }
+    return kept, finished
 
 
 def judge_problem(item: dict, votes: dict) -> tuple[dict, list[dict]]:
@@ -151,8 +171,13 @@ def judge_problem(item: dict, votes: dict) -> tuple[dict, list[dict]]:
             kind = "example" if i < len(examples) else "hidden"
             expected = test["output"] if kind == "example" else outs[0]["out"]
             tests.append({"kind": kind, "test": {"input": test["input"]}, "expected": expected})
-    cpu = {name: votes[name]["cpuMs"] for name in voters}
-    tests += stress_tests(item["slug"], voters, same, cpu)
+    stress, stress_cpu = stress_tests(item["slug"], voters, same)
+    tests += stress
+    # Time limits come from the references that answered every stress input: the CPU time of
+    # one killed on an input says nothing about how long a correct answer takes.
+    cpu = {name: votes[name]["cpuMs"] + ms for name, ms in stress_cpu.items()} or {
+        name: votes[name]["cpuMs"] for name in voters
+    }
     entry = {
         "supported": True,
         "spec": item["spec"],
@@ -165,9 +190,7 @@ def judge_problem(item: dict, votes: dict) -> tuple[dict, list[dict]]:
         "slowCpuMs": max(cpu.values()),
         # Runs custom inputs for the expected answer. Mercury's submissions are used offline
         # only (CC BY-NC), so they are never shipped.
-        "reference": next(
-            (item["voters"][n] for n in sorted(voters) if not n.startswith("mercury")), None
-        ),
+        "reference": next((item["voters"][n] for n in sorted(voters) if trusted(n)), None),
     }
     return entry, tests
 
