@@ -25,6 +25,7 @@ const REQUEST_FILE: &str = "deploy-request";
 pub struct Deploy {
     secret: Box<[u8]>,
     request: PathBuf,
+    writer: std::sync::Arc<parking_lot::Mutex<()>>,
 }
 
 impl Deploy {
@@ -34,7 +35,22 @@ impl Deploy {
         secret.filter(|s| !s.is_empty()).map(|secret| Self {
             secret: secret.into_bytes().into_boxed_slice(),
             request: state_dir.join(REQUEST_FILE),
+            writer: std::sync::Arc::new(parking_lot::Mutex::new(())),
         })
+    }
+
+    async fn record(&self, revision: &str) -> std::io::Result<()> {
+        let writer = std::sync::Arc::clone(&self.writer);
+        let request = self.request.clone();
+        let contents = format!("{revision}\n");
+        // A cancelled HTTP request must not release the lock while its filesystem work is
+        // still running; both the write and rename finish in this one blocking task.
+        tokio::task::spawn_blocking(move || {
+            let _writer = writer.lock();
+            write_atomically(&request, &contents)
+        })
+        .await
+        .map_err(std::io::Error::other)?
     }
 }
 
@@ -87,10 +103,10 @@ fn valid_revision(revision: &str) -> bool {
 
 /// Writes `contents` to `path` through a temporary file and a rename, so the watcher never
 /// reads a half-written file.
-async fn write_atomically(path: &Path, contents: &str) -> std::io::Result<()> {
+fn write_atomically(path: &Path, contents: &str) -> std::io::Result<()> {
     let temporary = path.with_extension("tmp");
-    tokio::fs::write(&temporary, contents).await?;
-    tokio::fs::rename(&temporary, path).await
+    std::fs::write(&temporary, contents)?;
+    std::fs::rename(&temporary, path)
 }
 
 /// `POST /api/deploy`: 202 once the request is recorded, 401 for a bad signature, 404 when
@@ -115,7 +131,8 @@ pub async fn deploy(
     if !valid_revision(&request.revision) {
         return Err(ApiError::BadRequest("revision must be a git hash".into()));
     }
-    write_atomically(&deploy.request, &format!("{}\n", request.revision))
+    deploy
+        .record(&request.revision)
         .await
         .map_err(|e| ApiError::Internal(e.into()))?;
     tracing::info!("deploy of {} requested", request.revision);
@@ -187,9 +204,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("openleet-deploy-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("data")).expect("temp dir");
         let path = dir.join(REQUEST_FILE);
-        write_atomically(&path, "0123456789ab\n")
-            .await
-            .expect("write");
+        write_atomically(&path, "0123456789ab\n").expect("write");
         assert_eq!(
             std::fs::read_to_string(&path).expect("read"),
             "0123456789ab\n"
@@ -199,5 +214,23 @@ mod tests {
         std::fs::write(dir.join("REVISION"), "abc123\n").expect("write");
         assert_eq!(revision(&dir.join("data")), "abc123");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn concurrent_requests_write_complete_revisions() {
+        let dir = crate::db::testing::TempDir::new("deploy-concurrent");
+        let deploy = std::sync::Arc::new(Deploy::new(Some("s".into()), &dir.path("")).unwrap());
+        let mut requests = tokio::task::JoinSet::new();
+        for revision in 0..32 {
+            let deploy = std::sync::Arc::clone(&deploy);
+            requests.spawn(async move { deploy.record(&format!("{revision:040x}")).await });
+        }
+        while let Some(request) = requests.join_next().await {
+            request.unwrap().unwrap();
+        }
+        let contents = std::fs::read_to_string(&deploy.request).unwrap();
+        assert_eq!(contents.len(), 41);
+        assert!(valid_revision(contents.trim()));
+        assert!(!deploy.request.with_extension("tmp").exists());
     }
 }

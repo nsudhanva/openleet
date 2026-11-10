@@ -31,7 +31,7 @@ use openleet::model::{Attempt, Grade};
 pub use backup::Backup;
 use corpus::Corpus;
 pub use corpus::TestRow;
-use migrate::{Migrated, NewerSchema, Shape};
+use migrate::{Migrated, Shape};
 pub use sqlite::Imported;
 
 /// DuckDB's buffer pool; the whole box has 1 GB and the judge needs most of it.
@@ -111,7 +111,7 @@ pub enum Opening {
     Created,
     /// The existing one, migrated if it was behind.
     Existing(Migrated),
-    /// It could not be opened or migrated: its files were moved to `quarantined` and the
+    /// It could not be opened: its files were moved to `quarantined` and the
     /// newest usable backup restored, or an empty database created when there was none.
     Recovered {
         quarantined: PathBuf,
@@ -155,23 +155,33 @@ fn connect(path: &Path) -> Result<Connection> {
     Connection::open_with_flags(path, config).with_context(|| format!("opening {}", path.display()))
 }
 
+/// An openable database must survive a failed backup or schema change in place.
+#[derive(Debug, thiserror::Error)]
+#[error("preparing the database failed; leaving its files in place")]
+struct SetupFailed;
+
 /// Opens and migrates the database at `path`, first copying it aside when a migration is due
 /// (see [`backup::before_migrating`]).
 fn open_and_migrate(path: &Path, backups: &Path) -> Result<(Connection, Opening)> {
     let mut conn = connect(path)?;
-    let behind = match migrate::shape(&conn)? {
+    let opening = prepare_database(&mut conn, backups).context(SetupFailed)?;
+    Ok((conn, opening))
+}
+
+fn prepare_database(conn: &mut Connection, backups: &Path) -> Result<Opening> {
+    let behind = match migrate::shape(conn)? {
         Shape::Empty => false,
         Shape::Unversioned => true,
         Shape::Version(v) => v < migrate::latest(),
     };
     if behind {
-        let copy = backup::before_migrating(&conn, backups, &stamp())?;
+        let copy = backup::before_migrating(conn, backups, &stamp())?;
         tracing::info!(
             "migrating the progress database; a copy is kept at {}",
             copy.display()
         );
     }
-    let migrated = migrate::migrate(&mut conn)?;
+    let migrated = migrate::migrate(conn)?;
     if migrated.changed() {
         tracing::info!(
             "progress database migrated from {:?} to version {}",
@@ -184,7 +194,7 @@ fn open_and_migrate(path: &Path, backups: &Path) -> Result<(Connection, Opening)
     } else {
         Opening::Existing(migrated)
     };
-    Ok((conn, opening))
+    Ok(opening)
 }
 
 /// Whether a failure to open the database at `path` means the file itself is bad (so
@@ -192,7 +202,7 @@ fn open_and_migrate(path: &Path, backups: &Path) -> Result<(Connection, Opening)
 /// process holding it, and not a problem any database would have (settings, disk, memory),
 /// which a new scratch database next to it would hit too.
 fn recoverable(error: &anyhow::Error, path: &Path) -> bool {
-    if error.downcast_ref::<NewerSchema>().is_some()
+    if error.downcast_ref::<SetupFailed>().is_some()
         || format!("{error:#}").contains("Could not set lock")
     {
         return false;
@@ -216,7 +226,7 @@ fn recover(path: &Path, backups: &Path, quarantine: &Path) -> Result<(Connection
     for file in backup::newest_first(backups)? {
         let restored = backup::restore(&file, path).and_then(|()| {
             let mut conn = connect(path)?;
-            migrate::migrate(&mut conn)?;
+            migrate::migrate(&mut conn).context(SetupFailed)?;
             Ok(conn)
         });
         match restored {
@@ -229,6 +239,11 @@ fn recover(path: &Path, backups: &Path, quarantine: &Path) -> Result<(Connection
                         backup: Some(file),
                     },
                 ));
+            }
+            Err(error) if error.downcast_ref::<SetupFailed>().is_some() => {
+                return Err(error).with_context(|| {
+                    format!("restored {} but could not migrate it", file.display())
+                });
             }
             Err(error) => {
                 tracing::error!("backup {} does not restore: {error:#}", file.display());
@@ -253,8 +268,9 @@ fn recover(path: &Path, backups: &Path, quarantine: &Path) -> Result<(Connection
 
 impl Store {
     /// Opens (or creates) the progress database at `path` and migrates it, then attaches the
-    /// test corpus at `corpus` read-only. A database that cannot be opened or migrated is
-    /// quarantined and restored from `backups/` next to it (see [`Opening::Recovered`]).
+    /// test corpus at `corpus` read-only. A database that cannot be opened is quarantined and
+    /// restored from `backups/` next to it (see [`Opening::Recovered`]). Backup or migration
+    /// failures on an openable database stop startup and leave its files in place.
     pub fn open(path: &Path, corpus: &Path) -> Result<(Self, Opening)> {
         let dir = path.parent().unwrap_or_else(|| Path::new("."));
         std::fs::create_dir_all(dir)?;
@@ -1064,6 +1080,87 @@ mod tests {
             std::fs::read(quarantined.join("openleet.duckdb")).unwrap(),
             b"not a database"
         );
+    }
+
+    #[test]
+    fn setup_failures_never_replace_an_openable_database() {
+        for blocked_backup in [true, false] {
+            let dir = TempDir::new("db-setup-failure");
+            let path = dir.path("openleet.duckdb");
+            Connection::open(&path)
+                .unwrap()
+                .execute_batch(
+                    "CREATE TABLE notes (slug VARCHAR, text VARCHAR, at_ms BIGINT);
+                     INSERT INTO notes VALUES ('a', 'keep this note', 123);
+                     CREATE TABLE attempts (unexpected VARCHAR);",
+                )
+                .unwrap();
+            if blocked_backup {
+                std::fs::write(dir.path("backups"), "not a directory").unwrap();
+            }
+            let error = match Store::open(&path, &dir.path("none")) {
+                Ok(_) => panic!("setup should fail"),
+                Err(error) => error,
+            };
+            assert!(error.downcast_ref::<SetupFailed>().is_some(), "{error:#}");
+            assert!(!dir.path("quarantine").exists());
+            let conn = Connection::open(&path).unwrap();
+            let note: String = conn
+                .query_row("SELECT text FROM notes", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(note, "keep this note");
+            assert_eq!(migrate::shape(&conn).unwrap(), Shape::Unversioned);
+        }
+    }
+
+    #[test]
+    fn recovery_does_not_skip_a_newer_schema_for_an_older_backup() {
+        let dir = TempDir::new("db-recover-newer");
+        let path = dir.path("openleet.duckdb");
+        {
+            let (store, _) = Store::open(&path, &dir.path("none")).unwrap();
+            store.backup(Date::new(2026, 11, 9).unwrap()).unwrap();
+            store.save_note("a", "latest data", 1).unwrap();
+            store
+                .with(|conn| {
+                    conn.execute(
+                        "INSERT INTO schema_migrations (version, name) VALUES (?, 'future')",
+                        [migrate::latest() + 1],
+                    )
+                })
+                .unwrap();
+            store.backup(Date::new(2026, 11, 10).unwrap()).unwrap();
+        }
+        std::fs::write(&path, b"not a database").unwrap();
+        let error = match Store::open(&path, &dir.path("none")) {
+            Ok(_) => panic!("a newer backup must stop recovery, not roll back its data"),
+            Err(error) => error,
+        };
+        assert!(
+            error.downcast_ref::<migrate::NewerSchema>().is_some(),
+            "{error:#}"
+        );
+        let conn = Connection::open(&path).unwrap();
+        let note: String = conn
+            .query_row("SELECT body FROM notes", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(note, "latest data");
+    }
+
+    #[test]
+    fn backup_quotes_the_source_database_name() {
+        let dir = TempDir::new("db-backup-quoted");
+        let (store, _) = Store::open(&dir.path("my\"progress.duckdb"), &dir.path("none")).unwrap();
+        store.save_note("a", "preserved", 1).unwrap();
+        let backup = store
+            .backup(Date::new(2026, 11, 10).unwrap())
+            .unwrap()
+            .unwrap();
+        let conn = Connection::open(&backup.file).unwrap();
+        let note: String = conn
+            .query_row("SELECT body FROM notes", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(note, "preserved");
     }
 
     #[test]

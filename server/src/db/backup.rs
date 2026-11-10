@@ -67,13 +67,15 @@ fn copy(conn: &Connection, file: &Path) -> Result<()> {
     let partial = dir.join(format!("{PARTIAL}{name}"));
     remove_with_wal(&partial)?;
     let source: String = conn.query_row("SELECT current_database()", [], |r| r.get(0))?;
-    conn.execute_batch(&format!(
-        "ATTACH {} AS backup_target;
-         COPY FROM DATABASE \"{source}\" TO backup_target;
-         DETACH backup_target;",
-        sql_string(&partial)
-    ))
-    .with_context(|| format!("copying the database to {}", partial.display()))?;
+    conn.execute_batch(&format!("ATTACH {} AS backup_target", sql_string(&partial)))?;
+    let copied = conn.execute_batch(&format!(
+        "COPY FROM DATABASE \"{}\" TO backup_target",
+        source.replace('"', "\"\"")
+    ));
+    // Even a failed copy must release the alias and file before the next backup attempt.
+    let detached = conn.execute_batch("DETACH backup_target");
+    copied.with_context(|| format!("copying the database to {}", partial.display()))?;
+    detached?;
     std::fs::rename(&partial, file)?;
     Ok(())
 }

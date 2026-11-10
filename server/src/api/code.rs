@@ -204,9 +204,9 @@ pub async fn submit(
         (result.verdict, result.passed, result.total, result.cpu_ms);
     let code = input.code;
     result.id = state
-        .db_for(&input.slug, move |store, slug| {
-            store.insert_submission(&NewSubmission {
-                slug,
+        .update_progress(move |state| {
+            let id = state.store.insert_submission(&NewSubmission {
+                slug: &input.slug,
                 at: now_ms(),
                 code: &code,
                 verdict,
@@ -214,12 +214,13 @@ pub async fn submit(
                 total,
                 cpu_ms,
                 detail: &detail,
-            })
+            })?;
+            if verdict == Verdict::Accepted.as_str() {
+                state.progress.write().solved.insert(input.slug);
+            }
+            Ok(id)
         })
         .await?;
-    if outcome.verdict == Verdict::Accepted {
-        state.progress.write().solved.insert(input.slug);
-    }
     Ok(Json(result))
 }
 

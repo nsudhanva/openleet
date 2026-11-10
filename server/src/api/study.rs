@@ -106,11 +106,16 @@ pub async fn record_attempt(
     Json(input): Json<AttemptInput>,
 ) -> ApiResult<impl IntoResponse> {
     input.validate()?;
-    let attempt = service::new_attempt(&state.content, input, now_ms())?;
-    let score = attempt.score;
-    let stored = attempt.clone();
-    state.db(move |store| store.insert_attempt(&stored)).await?;
-    state.progress.write().push(attempt);
+    state.problem(&input.slug)?;
+    let score = state
+        .update_progress(move |state| {
+            let attempt = service::new_attempt(&state.content, input, now_ms())?;
+            let score = attempt.score;
+            state.store.insert_attempt(&attempt)?;
+            state.progress.write().push(attempt);
+            Ok(score)
+        })
+        .await?;
     state.refresh_scores().await?;
     Ok((StatusCode::CREATED, Json(Scored { score })))
 }
@@ -139,17 +144,22 @@ pub async fn save_note(
         )));
     }
     let stored = text.clone();
+    state.problem(&input.slug)?;
     state
-        .db_for(&input.slug, move |store, slug| {
-            store.save_note(slug, &stored, now_ms())
+        .update_progress(move |state| {
+            state.store.save_note(&input.slug, &stored, now_ms())?;
+            let mut progress = state.progress.write();
+            if stored.is_empty() {
+                progress.notes.remove(&input.slug);
+            } else {
+                progress.notes.insert(input.slug, stored);
+            }
+            Ok(())
         })
         .await?;
-    let mut progress = state.progress.write();
     if text.is_empty() {
-        progress.notes.remove(&input.slug);
         return Ok(Json(Note { note: None }));
     }
-    progress.notes.insert(input.slug, text.clone());
     Ok(Json(Note { note: Some(text) }))
 }
 
@@ -158,22 +168,18 @@ pub async fn reset_progress(
     State(state): State<Shared>,
     Query(params): Params,
 ) -> ApiResult<StatusCode> {
-    match (param(&params, "slug"), param(&params, "all"), params.len()) {
-        (Some(slug), None, 1) if !slug.is_empty() => {
-            let slug = state
-                .db_for(slug, |store, slug| {
-                    store.delete_attempts(Some(slug))?;
-                    Ok(slug.to_owned())
-                })
-                .await?;
-            state.progress.write().clear(Some(&slug));
-        }
-        (None, Some("true"), 1) => {
-            state.db(|store| store.delete_attempts(None)).await?;
-            state.progress.write().clear(None);
-        }
+    let slug = match (param(&params, "slug"), param(&params, "all"), params.len()) {
+        (Some(slug), None, 1) if !slug.is_empty() => Some(state.problem(slug)?.slug.clone()),
+        (None, Some("true"), 1) => None,
         _ => return Err(ApiError::BadRequest("Give either slug or all=true".into())),
-    }
+    };
+    state
+        .update_progress(move |state| {
+            state.store.delete_attempts(slug.as_deref())?;
+            state.progress.write().clear(slug.as_deref());
+            Ok(())
+        })
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

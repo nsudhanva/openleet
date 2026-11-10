@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use anyhow::Result;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 
 use openleet::content::Content;
 use openleet::model::{Attempt, CompanyFilter, Problem};
@@ -90,6 +90,8 @@ pub struct AppState {
     pub store: Store,
     pub judge: Judge,
     pub progress: RwLock<Progress>,
+    /// Serializes durable progress writes with publication to the in-memory cache.
+    pub progress_updates: Mutex<()>,
     /// The HTTPS certificate in use, for `GET /api/health`.
     pub certificate: CertificateSlot,
 }
@@ -130,9 +132,29 @@ impl AppState {
             .map_err(ApiError::Internal)
     }
 
+    /// Finishes a durable write and its cache update together, even if the HTTP request is
+    /// cancelled. The cache lock is only held when publishing, so reads need not wait on IO.
+    pub async fn update_progress<T: Send + 'static>(
+        self: &Arc<Self>,
+        work: impl FnOnce(&Self) -> Result<T> + Send + 'static,
+    ) -> ApiResult<T> {
+        let state = Arc::clone(self);
+        tokio::task::spawn_blocking(move || {
+            let _update = state.progress_updates.lock();
+            work(&state)
+        })
+        .await
+        .map_err(|e| ApiError::Internal(e.into()))?
+        .map_err(ApiError::Internal)
+    }
+
     /// Recomputes the default company's report and stores today's scores. Other companies'
     /// reports are recomputed when next read.
     pub async fn refresh_scores(self: &Arc<Self>) -> ApiResult<()> {
+        self.update_progress(|state| state.save_scores()).await
+    }
+
+    fn save_scores(&self) -> Result<()> {
         let now = now_ms();
         let score = {
             let mut progress = self.progress.write();
@@ -146,8 +168,7 @@ impl AppState {
             })
         };
         if let Some(score) = score {
-            self.db(move |store| store.save_daily_score(now, &score))
-                .await?;
+            self.store.save_daily_score(now, &score)?;
         }
         Ok(())
     }
@@ -175,6 +196,69 @@ pub fn test_state_with(dir: &std::path::Path, judge: &str, content: Content) -> 
         store,
         judge,
         progress: RwLock::new(Progress::new(Vec::new(), HashMap::new(), HashSet::new())),
+        progress_updates: Mutex::new(()),
         certificate: CertificateSlot::default(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::testing::TempDir;
+
+    #[tokio::test]
+    async fn cancelled_updates_finish_and_publish_in_order() {
+        let dir = TempDir::new("progress-updates");
+        let state = test_state(&dir.path(""), "tcp://127.0.0.1:1");
+        let (written, writing) = tokio::sync::oneshot::channel();
+        let (resume, paused) = std::sync::mpsc::channel();
+        let first_state = Arc::clone(&state);
+        let first = tokio::spawn(async move {
+            first_state
+                .update_progress(move |state| {
+                    state.store.save_note("a", "first", 1)?;
+                    written.send(()).unwrap();
+                    paused.recv().unwrap();
+                    state
+                        .progress
+                        .write()
+                        .notes
+                        .insert("a".into(), "first".into());
+                    Ok(())
+                })
+                .await
+        });
+        writing.await.unwrap();
+        // Drop the HTTP task after the durable write, before publication.
+        first.abort();
+        assert!(first.await.unwrap_err().is_cancelled());
+        let second_state = Arc::clone(&state);
+        let (entered, mut entering) = tokio::sync::oneshot::channel();
+        let second = tokio::spawn(async move {
+            second_state
+                .update_progress(move |state| {
+                    entered.send(()).unwrap();
+                    state.store.save_note("a", "second", 2)?;
+                    state
+                        .progress
+                        .write()
+                        .notes
+                        .insert("a".into(), "second".into());
+                    Ok(())
+                })
+                .await
+        });
+        let entered_early =
+            tokio::time::timeout(std::time::Duration::from_millis(30), &mut entering)
+                .await
+                .is_ok();
+        resume.send(()).unwrap();
+        second.await.unwrap().unwrap();
+        assert!(
+            !entered_early,
+            "the later update overtook an unfinished write"
+        );
+        assert_eq!(state.progress.read().notes, state.store.notes().unwrap());
+        assert_eq!(state.progress.read().notes["a"], "second");
+    }
 }

@@ -179,6 +179,7 @@ fn load_state(config: &Config) -> Result<Shared> {
         store,
         judge,
         progress: RwLock::new(progress),
+        progress_updates: parking_lot::Mutex::new(()),
         certificate: CertificateSlot::default(),
     }))
 }
