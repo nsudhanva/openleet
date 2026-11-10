@@ -1,12 +1,14 @@
 """Wiggle Subsequence at the maximum n = 1000 with long flat runs and monotone stretches, so
 equal neighbours and plateaus must be handled."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 1000
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         nums = [rng.randint(0, 1000) for _ in range(N)]
     elif shape == 1:

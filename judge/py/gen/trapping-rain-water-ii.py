@@ -1,13 +1,15 @@
 """Trapping Rain Water II on a 200 x 200 map: a tall rim around a random basin, nested rings
 of descending walls, or random heights, punishing repeated flooding passes."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 SIZE = 200
 TOP = 2 * 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     m = SIZE
     n = SIZE if rng.random() < 0.7 else rng.randint(1, SIZE)
     if shape == 0:

@@ -1,13 +1,15 @@
 """atoi at the maximum length of 200: leading spaces, a sign, leading zeros and a long digit
 run that overflows (or just fits), followed by junk."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 200
 
 
 def generate(rng):
     s = " " * rng.randint(0, 40) + rng.choice(["", "+", "-"]) + "0" * rng.randint(0, 60)
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         digits = str(rng.randint(1, 9)) + "".join(rng.choice("0123456789") for _ in range(80))
     elif shape == 1:

@@ -1,12 +1,14 @@
 """Subarray Product Less Than K at n = 3 * 10^4: all ones with a huge k (every one of the
 ~4.5 * 10^8 subarrays counts), or small values so windows grow long."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 3 * 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         return {"nums": [1] * N, "k": 10**6}
     if shape == 1:

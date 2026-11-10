@@ -1,12 +1,14 @@
 """Shortest Path in Binary Matrix on a 100 x 100 grid: open with sparse walls, or a serpentine
 maze forcing a very long path."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 100
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     if shape == 0:
         grid = [[1 if rng.random() < 0.2 else 0 for _ in range(N)] for _ in range(N)]
         grid[0][0] = grid[N - 1][N - 1] = 0

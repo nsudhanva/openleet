@@ -1,13 +1,13 @@
 """Smallest String From Leaf with 8500 nodes: a deep chain with side leaves (long strings to
 compare), or a random tree of mostly equal letters so leaf strings tie for a long time."""
 
-from _shapes import level_order
+from _shapes import level_order, pick_shape
 
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     n = 8500
     left, right = [None] * n, [None] * n
     if shape == 0:

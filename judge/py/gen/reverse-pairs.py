@@ -1,13 +1,15 @@
 """Reverse Pairs at n = 5 * 10^4: full 32-bit range (overflow traps) or strictly decreasing so
 nearly every pair counts and a quadratic scan does ~1.25 * 10^9 checks."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 5 * 10**4
 LO, HI = -(2**31), 2**31 - 1
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     if shape == 0:
         return {"nums": [rng.randint(LO, HI) for _ in range(N)]}
     if shape == 1:

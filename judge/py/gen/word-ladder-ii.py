@@ -1,6 +1,8 @@
 """Word Ladder II with 500 words of length 3-5 over small alphabets: dense graphs with many
 equal-length shortest paths, the total output kept under 10^5 words."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 500
 CAP = 10**5
@@ -27,7 +29,7 @@ def shortest_paths_size(begin, end, words):
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     length, letters = [(4, "abcdef"), (5, "abcd"), (3, "abcdefghi")][shape]
     pool = set()
     while len(pool) < N:

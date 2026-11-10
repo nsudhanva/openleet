@@ -1,12 +1,14 @@
 """Strings of length 10^4: a long block repeated (true) or a near-periodic string broken at the
 last character (false), so every candidate period must be checked to the end."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     if shape == 0:
         # Long period: 5000 repeated twice.
         block = "".join(rng.choice("ab") for _ in range(N // 2))

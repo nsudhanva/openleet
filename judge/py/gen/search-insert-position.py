@@ -1,11 +1,13 @@
 """Search Insert Position on 10^4 distinct sorted values, target present, absent, or beyond
 either end."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     nums = sorted(rng.sample(range(-(10**4), 10**4 + 1), 10**4))
     present = set(nums)
     if shape == 0:

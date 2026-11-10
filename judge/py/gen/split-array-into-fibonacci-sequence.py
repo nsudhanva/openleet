@@ -1,11 +1,13 @@
 """Split Array into Fibonacci at up to 200 digits: a real Fibonacci-like chain running up to the
 32-bit limit, the same with one digit changed, or a long run of a repeated digit."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     if shape == 2:
         return {"num": rng.choice("019") * 200}
     a, b = rng.randint(0, 999), rng.randint(0, 999)

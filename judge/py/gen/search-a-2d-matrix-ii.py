@@ -1,11 +1,13 @@
 """Search a 2D Matrix II on a 300 x 300 matrix sorted along rows and columns, target present,
 absent, or in the far corner."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     m, n = 300, 300
     step = rng.choice([3, 1000, 10**6])
     mat = [[0] * n for _ in range(m)]

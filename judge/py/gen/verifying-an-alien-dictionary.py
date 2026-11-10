@@ -1,13 +1,15 @@
 """Verifying an Alien Dictionary at the maximum 100 words of up to 20 letters: sorted under a
 random order with long shared prefixes, sometimes with a prefix placed after its extension."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 100
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     order = list(LETTERS)
     rng.shuffle(order)
     rank = {c: i for i, c in enumerate(order)}

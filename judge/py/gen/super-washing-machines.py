@@ -1,12 +1,14 @@
 """Super Washing Machines at n = 10^4 with loads up to 10^5: everything piled on one end, or
 a random spread whose total divides evenly (with one unsolvable case)."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         machines = [0] * N
         machines[rng.choice([0, N - 1])] = 10**5  # 10 per machine after balancing

@@ -1,11 +1,13 @@
 """Word Search on a full 6 x 6 board of one letter with a 15-letter word that fails only on
 its last letter: the backtracking worst case; or a random board with a planted path."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         board = [["A"] * 6 for _ in range(6)]
         return {"board": board, "word": "A" * 14 + "B"}

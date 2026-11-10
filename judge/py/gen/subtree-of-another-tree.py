@@ -1,7 +1,7 @@
 """Subtree of Another Tree at the maximum sizes (2000 and 1000 nodes): all-equal values where
 every candidate matches until a deep leaf, or a real copied subtree, punishing naive matching."""
 
-from _shapes import level_order, random_tree
+from _shapes import level_order, pick_shape, random_tree
 
 SEEDS = 3
 N = 2000
@@ -13,7 +13,7 @@ def chain(n, vals):
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         # Left chains of ones; subRoot ends in 2 so it matches only at the very bottom (or never).
         root_vals = [1] * N

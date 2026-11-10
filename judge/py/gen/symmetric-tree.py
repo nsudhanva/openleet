@@ -1,14 +1,14 @@
 """Symmetric Tree at 999 nodes: a random half mirrored (true), or the same with one value or
 one child moved deep in the tree (false at the last comparison)."""
 
-from _shapes import level_order
+from _shapes import level_order, pick_shape
 
 SEEDS = 3
 HALF = 499
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     # Build the left half as parallel arrays, then mirror it.
     left, right = [None] * HALF, [None] * HALF
     slots = [(0, 0), (0, 1)]

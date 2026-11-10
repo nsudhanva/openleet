@@ -1,12 +1,14 @@
 """Word Ladder with 5000 words over a tiny alphabet so the graph is dense (every word has
 many neighbours), and begin/end at opposite corners or unreachable."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 5000
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         length, letters = 6, "abcde"
     elif shape == 1:

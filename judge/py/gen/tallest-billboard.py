@@ -1,13 +1,15 @@
 """Tallest Billboard at the maximum 20 rods with the sum near 5000, so 3^20 brute force is
 hopeless and only the difference DP is fast."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 20
 SUM = 5000
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         rods = [rng.randint(1, 500) for _ in range(N)]
     elif shape == 1:

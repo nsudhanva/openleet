@@ -2,11 +2,13 @@
 from overlapping runs of length >= 3 (true), the same with one value removed (often false), or
 random sorted."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     if shape == 2:
         return {"nums": sorted(rng.randint(-1000, 1000) for _ in range(10**4))}
     nums = []

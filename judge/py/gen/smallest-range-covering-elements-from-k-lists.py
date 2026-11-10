@@ -1,11 +1,13 @@
 """Smallest Range Covering K Lists with k = 3500 sorted lists of 50 values each (175,000
 values), random or in disjoint bands so the window must sweep everything."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     k = 3500
     nums = []
     for i in range(k):

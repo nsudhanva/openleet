@@ -1,12 +1,14 @@
 """Swap Adjacent in LR String at length 10^4: reachable results built by real moves (every L
 pushed far left, or many random moves) and a perturbed, likely unreachable, result."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     p = rng.uniform(0.1, 0.5)
     start = [rng.choice("LR") if rng.random() < p else "X" for _ in range(N)]
     if shape == 0:

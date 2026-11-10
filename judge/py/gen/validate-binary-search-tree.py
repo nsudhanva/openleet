@@ -2,7 +2,7 @@
 a valid BST, or one deep leaf that obeys its parent but breaks an ancestor's bound or
 equals it."""
 
-from _shapes import insert_bst, level_order
+from _shapes import insert_bst, level_order, pick_shape
 
 SEEDS = 3
 N = 10**4
@@ -10,7 +10,7 @@ LO, HI = -(2**31), 2**31 - 1
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     values = [*rng.sample(range(LO + 1, HI), N - 2), LO, HI]
     rng.shuffle(values)
     left, right = insert_bst(values, range(N))

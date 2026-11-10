@@ -1,7 +1,7 @@
 """Two Sum IV at 10^4 BST nodes: a degenerate chain or a random BST, with k either a real
 pair sum (the pair deep in the tree) or unreachable."""
 
-from _shapes import insert_bst, level_order
+from _shapes import insert_bst, level_order, pick_shape
 
 SEEDS = 3
 N = 10**4
@@ -9,7 +9,7 @@ TOP = 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     values = rng.sample(range(-TOP, TOP + 1), N)
     if shape == 0:
         values.sort()

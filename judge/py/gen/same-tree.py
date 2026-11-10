@@ -1,7 +1,7 @@
 """Same Tree on 100-node trees (random or a skewed chain): identical, one value changed deep,
 or one structural difference."""
 
-from _shapes import level_order
+from _shapes import level_order, pick_shape
 
 SEEDS = 3
 
@@ -20,7 +20,7 @@ def build(rng, n, chain):
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     n = 100
     left, right = build(rng, n, rng.random() < 0.4)
     vals = [rng.randint(-(10**4), 10**4) for _ in range(n)]

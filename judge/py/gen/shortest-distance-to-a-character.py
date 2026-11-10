@@ -1,11 +1,13 @@
 """Shortest Distance to a Character on 10^4 letters where c is rare (sometimes only at one end),
 so per-position scans run long."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     n = 10**4
     c = rng.choice("abcdefghijklmnopqrstuvwxyz")
     others = [x for x in "abcdefghijklmnopqrstuvwxyz" if x != c]

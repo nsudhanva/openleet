@@ -1,12 +1,14 @@
 """Russian Doll Envelopes at n = 10^5: random, few distinct widths (tie-handling trap), or a
 long nesting chain shuffled, so an O(n^2) DP does 10^10 work."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**5
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     if shape == 0:
         env = [[rng.randint(1, 10**5), rng.randint(1, 10**5)] for _ in range(N)]
     elif shape == 1:

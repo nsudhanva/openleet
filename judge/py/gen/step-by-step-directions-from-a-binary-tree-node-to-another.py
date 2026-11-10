@@ -1,13 +1,13 @@
 """Step-By-Step Directions at n = 10^5: two 50,000-deep chains with start and dest at their
 ends (long path, deep recursion), a single chain, or a random tree."""
 
-from _shapes import level_order
+from _shapes import level_order, pick_shape
 
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     n = 10**5
     left, right = [None] * n, [None] * n
     if shape == 0:

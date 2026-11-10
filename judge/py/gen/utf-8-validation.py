@@ -1,6 +1,8 @@
 """UTF-8 Validation at 2 * 10^4 bytes: a long valid stream of 1-4 byte characters, the same
 with one byte corrupted or truncated near the end."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 2 * 10**4
 
@@ -14,7 +16,7 @@ def char(rng):
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     data = []
     while True:
         c = char(rng)

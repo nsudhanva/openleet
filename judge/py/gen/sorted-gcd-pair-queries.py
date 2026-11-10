@@ -1,11 +1,13 @@
 """Sorted GCD Pair Queries at n = 10^5 values up to 5 * 10^4 with 10^5 queries over the ~5 * 10^9
 pairs, so listing the pairs is impossible."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     n = 10**5
     if shape == 0:
         nums = [rng.randint(1, 5 * 10**4) for _ in range(n)]

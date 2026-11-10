@@ -1,11 +1,13 @@
 """Split Array With Same Average at the maximum n = 30 (2^30 subsets): random values, values
 that can never balance, or a constructed true case."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     n = 30
     if shape == 0:
         nums = [rng.randint(0, 10**4) for _ in range(n)]

@@ -1,12 +1,14 @@
 """Wildcard Matching at 2000 x 2000: many stars between repeated letters with a mismatch at
 the very end (exponential for naive backtracking), or a real match built from s."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 2000
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         s = "a" * N
         p = ("*a" * 999)[: N - 1] + "b"

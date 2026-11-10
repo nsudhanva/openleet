@@ -1,12 +1,14 @@
 """Swapping Nodes in a Linked List at n = 10^5 with k near the middle, the ends, or exactly
 the centre of an odd list."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**5
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     n = N - 1 if shape == 2 else N
     head = [rng.randint(0, 100) for _ in range(n)]
     if shape == 0:

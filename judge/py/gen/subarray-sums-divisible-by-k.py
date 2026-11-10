@@ -1,12 +1,14 @@
 """Subarray Sums Divisible by K at n = 3 * 10^4 with negative values (the negative-modulo
 trap) and multiples of k, punishing the quadratic scan."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 3 * 10**4
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     k = rng.randint(2, 10**4)
     if shape == 0:
         nums = [rng.randint(-(10**4 // k), 10**4 // k) * k for _ in range(N)]

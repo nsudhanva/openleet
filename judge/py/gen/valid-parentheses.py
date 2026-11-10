@@ -1,13 +1,15 @@
 """Valid Parentheses at length 10^4: one deep nest of mixed brackets, a long valid random
 sequence, or the same with one bracket type swapped at the end."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 10**4
 PAIRS = ["()", "[]", "{}"]
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         opens = [rng.choice(PAIRS) for _ in range(N // 2)]
         s = "".join(p[0] for p in opens) + "".join(p[1] for p in reversed(opens))

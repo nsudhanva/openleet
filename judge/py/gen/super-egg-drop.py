@@ -1,11 +1,13 @@
 """Super Egg Drop at n = 10^4 floors with many eggs or very few, the sizes where the O(k n^2)
 DP is far too slow."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         return {"k": 100, "n": 10**4}
     if shape == 1:

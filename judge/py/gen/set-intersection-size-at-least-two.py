@@ -1,11 +1,13 @@
 """Set Intersection Size At Least Two with 3000 intervals in [0, 10^8]: random wide intervals,
 heavily nested ones, or many short touching ones."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     out = []
     for _ in range(3000):
         if shape == 0:

@@ -2,11 +2,13 @@
 count overflows any fixed-width integer) with k up to 10^6, or few letters so k may exceed the
 count."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     n = rng.choice([10**4, 10**4 - 1])
     if shape == 0:
         half = [rng.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(n // 2)]

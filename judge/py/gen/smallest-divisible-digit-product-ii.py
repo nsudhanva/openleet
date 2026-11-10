@@ -1,12 +1,14 @@
 """Smallest Divisible Digit Product II with a 2 * 10^5-digit num (zeros, digit runs) and t up
 to 10^14 made of 2, 3, 5, 7 (solvable) or with a larger prime factor (answer -1)."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 2 * 10**5
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3
+    shape = pick_shape(rng)
     if shape == 0:
         # A zero early forces the suffix to be rebuilt.
         digits = [rng.choice("123456789")] + [rng.choice("0123456789") for _ in range(N - 1)]

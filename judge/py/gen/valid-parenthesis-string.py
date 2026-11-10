@@ -1,12 +1,14 @@
 """Valid Parenthesis String at the maximum length 100, heavy with '*' so trying all three
 meanings of each star is exponential."""
 
+from _shapes import pick_shape
+
 SEEDS = 3
 N = 100
 
 
 def generate(rng):
-    shape = rng.getrandbits(6) % 3  # seeds 0-2 land on three different shapes
+    shape = pick_shape(rng)
     if shape == 0:
         s = [rng.choice("(*") for _ in range(N // 2)] + [rng.choice(")*") for _ in range(N // 2)]
     elif shape == 1:
