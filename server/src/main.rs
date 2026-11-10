@@ -67,7 +67,6 @@ struct Config {
     http_port: u16,
     https_port: u16,
     judge: openleet_proto::Endpoint,
-    cpu_scale: f64,
     /// Enables `POST /api/deploy`.
     deploy_secret: Option<String>,
 }
@@ -87,9 +86,6 @@ impl Config {
             http_port: var("HTTP_PORT", "8080").parse().context("HTTP_PORT")?,
             https_port: var("HTTPS_PORT", "443").parse().context("HTTPS_PORT")?,
             judge: var("JUDGE_SOCKET", openleet_proto::DEFAULT_SOCKET).parse()?,
-            cpu_scale: var("JUDGE_CPU_SCALE", "2.5")
-                .parse()
-                .context("JUDGE_CPU_SCALE")?,
             deploy_secret: std::env::var("DEPLOY_SECRET").ok(),
         })
     }
@@ -167,7 +163,6 @@ fn load_state(config: &Config) -> Result<Shared> {
     let judge = Judge::load(
         &config.data_dir.join("judge/specs.json"),
         config.judge.clone(),
-        config.cpu_scale,
     )?;
     let progress = Progress::new(
         store.attempts()?,
@@ -479,7 +474,6 @@ mod tests {
             judge: openleet_proto::DEFAULT_SOCKET
                 .parse()
                 .expect("default socket"),
-            cpu_scale: 1.0,
             deploy_secret: None,
         }
     }

@@ -24,7 +24,7 @@ container:
 ```bash
 uv sync && uv run openleet judge fetch && bun install && bun run build
 docker compose --profile dev up -d judge-dev   # judge on 127.0.0.1:7777
-JUDGE_SOCKET=tcp://127.0.0.1:7777 JUDGE_CPU_SCALE=1 cargo run --release -p openleet
+JUDGE_SOCKET=tcp://127.0.0.1:7777 cargo run --release -p openleet
 ```
 
 The app is at <http://localhost:8080>. `bun run dev` serves the web app with hot reload on

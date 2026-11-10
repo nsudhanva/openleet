@@ -82,8 +82,6 @@ if [ ! -f "$ENV_FILE" ]; then
 SITE_ADDRESS=openleet.example.com
 # Day boundaries for streaks, such as America/Los_Angeles.
 TZ=UTC
-# How much slower this machine runs Python than the one that measured reference times.
-JUDGE_CPU_SCALE=3.25
 # Shared with the GitHub secret DEPLOY_SECRET; CI signs its deploy requests with it.
 DEPLOY_SECRET=
 ENV

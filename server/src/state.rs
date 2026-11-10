@@ -203,7 +203,7 @@ pub fn test_state_with(dir: &std::path::Path, judge: &str, content: Content) -> 
     let none = dir.join("none.json");
     let (store, _) =
         Store::open(&dir.join("openleet.duckdb"), &dir.join("none.duckdb")).expect("database");
-    let judge = Judge::load(&none, judge.parse().expect("endpoint"), 1.0).expect("judge");
+    let judge = Judge::load(&none, judge.parse().expect("endpoint")).expect("judge");
     Arc::new(AppState {
         companies: crate::api::companies_response(&content),
         content,

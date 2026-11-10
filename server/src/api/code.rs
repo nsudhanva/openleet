@@ -90,9 +90,7 @@ pub async fn code_info(
             examples: counts.map_or(0, |c| c.example),
             hidden: counts.map_or(0, |c| c.hidden),
             stress: counts.map_or(0, |c| c.stress),
-            time_limit_ms: entry
-                .filter(|_| supported)
-                .map(|e| state.judge.time.limit_ms(e)),
+            time_limit_ms: entry.filter(|_| supported).map(Entry::limit_ms),
         },
         examples,
         solved: state.progress.read().solved.contains(&slug),
@@ -193,7 +191,15 @@ pub async fn submit(
     let entry = judged(&state, &input.slug)?;
     let tests = tests(&state, &input.slug).await?;
     let (outcome, limit_ms) = state.judge.submit(entry, &tests, &input.code).await?;
-    let mut result = judge::submit_result(entry, &tests, &outcome, limit_ms);
+    if outcome.rerun {
+        tracing::info!(
+            "judge: {} ran twice, the machine slowed to {:.1}x the reference",
+            input.slug,
+            outcome.slowdown
+        );
+    }
+    let approach = state.content.approach(&input.slug);
+    let mut result = judge::submit_result(entry, &tests, &outcome, limit_ms, approach);
     // A fault of the judge is not the solution's: report it without recording it.
     if outcome.verdict == Verdict::InternalError {
         return Ok(Json(result));

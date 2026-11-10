@@ -6,7 +6,9 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use openleet_proto::{Checker, Endpoint, Expected, Job, Outcome, Verdict};
+use openleet_proto::{
+    Checker, Endpoint, Expected, Job, MAX_RUN_CPU_MS, Outcome, Verdict, wall_limit_ms,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_json::value::RawValue;
@@ -16,6 +18,7 @@ use tokio::sync::Semaphore;
 
 use crate::db::TestRow;
 use crate::error::{ApiError, ApiResult};
+use openleet::model::Approach;
 
 /// Most jobs that may wait for the judge; more get "busy".
 const MAX_WAITING: usize = 4;
@@ -47,10 +50,9 @@ pub struct Entry {
     pub checker: Checker,
     #[serde(default)]
     pub floats: bool,
-    /// CPU time of the fastest reference solution over every test.
-    pub ref_cpu_ms: Option<u32>,
-    /// CPU time of the slowest reference solution over every test.
-    pub slow_cpu_ms: Option<u32>,
+    /// The time limit for all tests together, in reference milliseconds, from the trusted
+    /// reference solutions' times (src/openleet/judging/limits.py).
+    pub limit_ms: Option<u32>,
     /// A reference solution, which answers custom Run cases.
     pub reference: Option<String>,
     #[serde(default)]
@@ -85,33 +87,24 @@ struct Param {
     name: String,
 }
 
-/// How CPU time on this machine compares with the machine that measured the references
-/// (`scale`), and how a problem's limit follows from its references' times.
-pub struct TimePolicy {
-    pub scale: f64,
+/// Time limits, in reference milliseconds: the judge measures how fast its machine is during
+/// each job and scales them itself, so they hold on any machine under any load.
+pub mod limits {
+    /// Without a measured limit (specs.json from before the limits were measured).
+    pub const DEFAULT_MS: u32 = 2000;
+    /// The judge's own cap (it refuses more, whatever the server asks).
+    pub const MAX_MS: u32 = 30_000;
+    /// Run mode executes only a few small cases.
+    pub const RUN_MS: u32 = 5000;
 }
 
-impl TimePolicy {
-    /// A solution may be this many times slower than the fastest reference...
-    const FASTEST_FACTOR: f64 = 4.0;
-    /// ...and every reference passes: they include submissions LeetCode accepted.
-    const SLOWEST_FACTOR: f64 = 1.25;
-    const MIN_MS: f64 = 2000.0;
-    /// The judge's own cap (it refuses more, whatever the server asks).
-    const MAX_MS: f64 = 30_000.0;
-    /// Run mode executes only a few small cases.
-    const RUN_MS: u32 = 5000;
-
-    /// Total CPU time for one submission's tests.
+impl Entry {
+    /// Total CPU time for one submission's tests, in reference milliseconds.
     #[must_use]
-    pub fn limit_ms(&self, entry: &Entry) -> u32 {
-        let fastest = f64::from(entry.ref_cpu_ms.unwrap_or(0)) * Self::FASTEST_FACTOR;
-        let slowest = f64::from(entry.slow_cpu_ms.unwrap_or(0)) * Self::SLOWEST_FACTOR;
-        let ms = (fastest.max(slowest) * self.scale + 500.0).clamp(Self::MIN_MS, Self::MAX_MS);
-        // Clamped to a small positive range, so the conversion cannot truncate or wrap.
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let ms = ms as u32;
-        ms
+    pub fn limit_ms(&self) -> u32 {
+        self.limit_ms
+            .unwrap_or(limits::DEFAULT_MS)
+            .min(limits::MAX_MS)
     }
 }
 
@@ -126,12 +119,15 @@ pub struct Judge {
     queue: Semaphore,
     /// The last health probe: when, and whether the daemon accepted a connection.
     probe: parking_lot::Mutex<Option<(Instant, bool)>>,
-    pub time: TimePolicy,
 }
+
+/// The longest the daemon may take over one job: it runs a job at most twice, each run within
+/// its wall-clock limit at the most CPU it ever allows, with a calibration before each.
+const JOB_TIMEOUT: Duration = Duration::from_millis(2 * wall_limit_ms(MAX_RUN_CPU_MS) + 60_000);
 
 impl Judge {
     /// Reads specs.json (a missing file means no problem can be judged).
-    pub fn load(specs: &Path, endpoint: Endpoint, scale: f64) -> Result<Self> {
+    pub fn load(specs: &Path, endpoint: Endpoint) -> Result<Self> {
         let mut entries: HashMap<String, Entry> = if specs.exists() {
             serde_json::from_slice(&std::fs::read(specs)?).context("reading specs.json")?
         } else {
@@ -153,7 +149,6 @@ impl Judge {
             permits: Semaphore::new(1),
             queue: Semaphore::new(1 + MAX_WAITING),
             probe: parking_lot::Mutex::new(None),
-            time: TimePolicy { scale },
         })
     }
 
@@ -192,8 +187,7 @@ impl Judge {
             .acquire()
             .await
             .map_err(|_| ApiError::JudgeDown)?;
-        let wall = Duration::from_millis(u64::from(job.cpu_limit_ms) * 6 + 30_000);
-        tokio::time::timeout(wall, self.round_trip(job))
+        tokio::time::timeout(JOB_TIMEOUT, self.round_trip(job))
             .await
             .map_err(|_| ApiError::JudgeDown)?
             .map_err(|error| {
@@ -371,6 +365,15 @@ pub struct Failing {
     pub expected: Option<String>,
     pub stdout: String,
     pub kind: String,
+    /// How big the test's input is, as "nums: 100,000 items".
+    pub size: Option<String>,
+}
+
+/// The intended solution's complexity, from the problem's worked approach.
+#[derive(Serialize)]
+pub struct Complexity {
+    pub time: String,
+    pub space: String,
 }
 
 /// The result of `POST /api/submit`.
@@ -385,6 +388,8 @@ pub struct SubmitResult {
     pub limit_ms: u32,
     pub error: Option<String>,
     pub failing: Option<Failing>,
+    /// Shown only with a result: it gives part of the answer away.
+    pub intended: Option<Complexity>,
 }
 
 /// What a stored submission keeps of its result page (its shape depends on the verdict).
@@ -474,7 +479,7 @@ impl Judge {
             expected: all_known.then(|| expected.iter().flatten().cloned().collect()),
             checker: entry.checker,
             floats: entry.floats,
-            cpu_limit_ms: TimePolicy::RUN_MS,
+            cpu_limit_ms: limits::RUN_MS,
             stop_on_failure: false,
             capture_stdout: true,
         };
@@ -522,7 +527,7 @@ impl Judge {
             expected: None,
             checker: entry.checker,
             floats: entry.floats,
-            cpu_limit_ms: TimePolicy::RUN_MS,
+            cpu_limit_ms: limits::RUN_MS,
             stop_on_failure: false,
             capture_stdout: false,
         };
@@ -544,7 +549,7 @@ impl Judge {
         if tests.is_empty() {
             return Err(ApiError::BadRequest("This problem has no tests yet".into()));
         }
-        let limit_ms = self.time.limit_ms(entry);
+        let limit_ms = entry.limit_ms();
         let job = Job {
             spec: spec_of(entry)?,
             code: code.to_owned(),
@@ -563,12 +568,14 @@ impl Judge {
     }
 }
 
-/// The result page for a submission, from the judge's outcome; `id` is set once stored.
+/// The result page for a submission, from the judge's outcome and the problem's worked
+/// approach; `id` is set once stored.
 pub fn submit_result(
     entry: &Entry,
     tests: &[TestRow],
     outcome: &Outcome,
     limit_ms: u32,
+    approach: Option<&Approach>,
 ) -> SubmitResult {
     let total = u16::try_from(tests.len()).unwrap_or(u16::MAX);
     let passed = u16::try_from(outcome.cases.iter().filter(|c| c.ok == Some(true)).count())
@@ -584,6 +591,7 @@ pub fn submit_result(
             expected: Some(show_expected(&test.expected)),
             stdout: case.map(|c| c.stdout.clone()).unwrap_or_default(),
             kind: test.kind.clone(),
+            size: outcome.failed_size.clone(),
         })
     });
     SubmitResult {
@@ -595,6 +603,10 @@ pub fn submit_result(
         limit_ms,
         error: outcome.error.clone(),
         failing,
+        intended: approach.map(|a| Complexity {
+            time: a.time.clone(),
+            space: a.space.clone(),
+        }),
     }
 }
 
@@ -613,7 +625,7 @@ mod tests {
     async fn silent_judge() -> (Judge, tokio::net::TcpListener) {
         let daemon = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("tcp://{}", daemon.local_addr().unwrap());
-        let judge = Judge::load(Path::new("missing.json"), endpoint.parse().unwrap(), 1.0).unwrap();
+        let judge = Judge::load(Path::new("missing.json"), endpoint.parse().unwrap()).unwrap();
         (judge, daemon)
     }
 
