@@ -31,6 +31,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "plans",
         sql: include_str!("migrations/0002_plans.sql"),
     },
+    Migration {
+        version: 3,
+        name: "shaky_plans",
+        sql: include_str!("migrations/0003_shaky_plans.sql"),
+    },
 ];
 
 /// The version this build migrates databases to.
@@ -255,7 +260,7 @@ mod tests {
             migrated,
             Migrated {
                 from: Shape::Version(1),
-                to: 2
+                to: latest()
             }
         );
         assert_eq!(
@@ -271,7 +276,7 @@ mod tests {
         );
         assert_eq!(
             strings(&conn, "SELECT name FROM schema_migrations ORDER BY version"),
-            ["progress", "plans"]
+            ["progress", "plans", "shaky_plans"]
         );
         // The new table takes plans, with NULL filters, and rejects impossible ones.
         let id: i64 = conn
@@ -310,6 +315,55 @@ mod tests {
         }
         let too_long = format!("'google', '6m', 'all', 'rank', '{}'", "x".repeat(61));
         assert!(insert(", name", &too_long).is_err());
+    }
+
+    #[test]
+    fn migrates_version_2_plans_to_take_the_shaky_status() {
+        let dir = TempDir::new("migrate-v2");
+        let path = dir.path("p.duckdb");
+        {
+            let mut conn = Connection::open(&path).unwrap();
+            migrate_to(&mut conn, 2).unwrap();
+            conn.execute_batch(
+                "INSERT INTO plans (company, period, topic, status, sort_order, name, pinned,
+                    created_at, used_at)
+                 VALUES ('google', '6m', 'Graph', 'untried', 'rank', 'Graphs', true,
+                    to_timestamp(1), to_timestamp(2))",
+            )
+            .unwrap();
+            assert!(
+                conn.execute_batch(
+                    "INSERT INTO plans (company, period, status, sort_order, created_at, used_at)
+                     VALUES ('google', '6m', 'shaky', 'rank', now(), now())"
+                )
+                .is_err()
+            );
+        }
+        let mut conn = Connection::open(&path).unwrap();
+        assert_eq!(migrate(&mut conn).unwrap().from, Shape::Version(2));
+        assert_eq!(
+            strings(
+                &conn,
+                "SELECT format('{}|{}|{}|{}|{}', id, status, topic, name, pinned) FROM plans"
+            ),
+            ["1|untried|Graph|Graphs|true"]
+        );
+        let id: i64 = conn
+            .query_row(
+                "INSERT INTO plans (company, period, status, sort_order, created_at, used_at)
+                 VALUES ('google', '6m', 'shaky', 'rank', now(), now()) RETURNING id",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(id, 2, "the id sequence goes on");
+        assert!(
+            conn.execute_batch(
+                "INSERT INTO plans (company, period, status, sort_order, created_at, used_at)
+                 VALUES ('google', '6m', 'solved', 'rank', now(), now())"
+            )
+            .is_err()
+        );
     }
 
     #[test]

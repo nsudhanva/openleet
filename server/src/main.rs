@@ -167,7 +167,7 @@ fn load_state(config: &Config) -> Result<Shared> {
     let progress = Progress::new(
         store.attempts()?,
         store.notes()?,
-        store.submitted()?,
+        store.coding_log()?,
         store.plans()?,
     );
     let companies = api::companies_response(&content);

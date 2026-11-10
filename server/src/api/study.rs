@@ -8,7 +8,8 @@ use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 
 use openleet::content::Content;
-use openleet::scorer::ScoreReport;
+use openleet::insights::{Insights, Learner, insights};
+use openleet::scorer::{ScoreReport, local_zone};
 use openleet::service::{self, AttemptInput, DeckParams, DeckQuery, ProblemParams, ProblemQuery};
 
 use super::{Params, param};
@@ -239,16 +240,33 @@ pub async fn search(State(state): State<Shared>, Query(params): Params) -> ApiRe
 struct ReportPage<'a> {
     report: &'a ScoreReport,
     history: Vec<DailyScore>,
+    #[serde(flatten)]
+    insights: Insights<'a>,
 }
 
-/// `?company=` (default google): the report for that company's 6-month list. The daily
-/// history is the default company's.
+/// `?company=` (default google): the report for that company's 6-month list, with the coding
+/// progress, shaky solves, topic map and activity calendar over the same list. The daily
+/// history is the default company's. All but the history comes from memory.
 pub async fn report(State(state): State<Shared>, Query(params): Params) -> ApiResult<Response> {
-    let company = state.content.company_or_default(param(&params, "company"));
+    let content = &state.content;
+    let company = content.company_or_default(param(&params, "company"));
     let history = state.db(|store| store.daily_scores(HISTORY_DAYS)).await?;
+    let now = now_ms();
     let mut progress = state.progress.write();
-    let report = progress.report(&state.content, company, now_ms());
-    Ok(Json(&ReportPage { report, history }).into_response())
+    let report = progress.report(content, company, now).clone();
+    let learner = Learner {
+        attempts: &progress.attempts,
+        states: &progress.states,
+        coding: &progress.coding,
+        recall: &report.topics,
+    };
+    let insights = insights(content, company, learner, now, &local_zone());
+    Ok(Json(&ReportPage {
+        report: &report,
+        history,
+        insights,
+    })
+    .into_response())
 }
 
 #[derive(Serialize)]
@@ -409,6 +427,73 @@ mod tests {
         .await;
         assert_ne!(lc.len(), 0);
         assert!(lc.iter().all(|r| r["id"].as_u64() <= Some(1000)));
+    }
+
+    #[tokio::test]
+    async fn report_adds_coding_shaky_solves_topics_and_activity() {
+        use openleet_proto::Verdict::{Accepted, CompileError, TimeLimitExceeded, WrongAnswer};
+        let dir = TempDir::new("api-report");
+        let state = state(&dir);
+        let now = now_ms();
+        {
+            let mut progress = state.progress.write();
+            for (slug, verdict) in [
+                ("two-sum", Accepted),
+                ("add-two-numbers", CompileError),
+                ("add-two-numbers", WrongAnswer),
+                ("add-two-numbers", TimeLimitExceeded),
+                ("add-two-numbers", Accepted),
+            ] {
+                progress.coding.record(slug, now, verdict);
+            }
+            progress.push(openleet::model::Attempt {
+                slug: "two-sum".into(),
+                at: now,
+                grade: openleet::model::Grade::Good,
+                guessed: vec!["Array".into()],
+                score: Some(0.5),
+                hints: 0,
+            });
+        }
+        let page = json(
+            report(State(Arc::clone(&state)), query(&[("company", "google")]))
+                .await
+                .expect("report"),
+        )
+        .await;
+        assert_eq!(page["report"]["graded"], 1);
+        let coding = &page["coding"];
+        assert_eq!(coding["byDifficulty"][0]["difficulty"], "Easy");
+        let solved: u64 = coding["byDifficulty"]
+            .as_array()
+            .expect("groups")
+            .iter()
+            .map(|d| d["solved"].as_u64().expect("solved"))
+            .sum();
+        assert_eq!(
+            (solved, &coding["firstTry"], &coding["tried"]),
+            (2, &1.into(), &2.into())
+        );
+        assert_eq!(coding["failures"]["compileError"], 1);
+        assert_eq!(page["shaky"][0]["slug"], "add-two-numbers");
+        assert_eq!(page["shaky"][0]["failures"]["timeLimitExceeded"], 1);
+        assert!(page["shaky"][0].get("topics").is_none());
+        let map = page["topicMap"].as_array().expect("topics");
+        let weights: Vec<u64> = map
+            .iter()
+            .map(|t| t["weight"].as_u64().expect("w"))
+            .collect();
+        assert!(weights.windows(2).all(|w| w[0] >= w[1]));
+        let array = map.iter().find(|t| t["topic"] == "Array").expect("Array");
+        assert!(array["covered"].as_u64() >= Some(1));
+        assert_eq!(array["recall"], 1.0);
+        let days = page["activity"]["days"].as_array().expect("days");
+        assert_eq!(days.len(), 1);
+        assert_eq!(
+            (&days[0]["reviews"], &days[0]["submissions"]),
+            (&1.into(), &5.into())
+        );
+        assert_eq!(days[0]["day"], page["activity"]["today"]);
     }
 
     #[tokio::test]

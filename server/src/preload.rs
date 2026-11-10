@@ -21,7 +21,7 @@ const PERIODS: &[&str] = &["30d", "3m", "6m", "all", "lc1000"];
 const DIFFICULTIES: &[&str] = &["Easy", "Medium", "Hard"];
 /// The plan statuses and orders the problem table sends, all but their defaults (lib/plan.ts):
 /// the table shows every problem in list order when they are left out.
-const STATUSES: &[&str] = &["unsolved", "untried"];
+const STATUSES: &[&str] = &["unsolved", "untried", "shaky"];
 const ORDERS: &[&str] = &["number", "easy-first", "random"];
 const DEFAULT_SET: &str = "smart";
 const DEFAULT_PERIOD: &str = "6m";

@@ -321,7 +321,11 @@ mod tests {
         let total = first["progress"]["total"].as_u64().expect("total");
         assert!(total > 100);
 
-        state.progress.write().solved.insert("two-sum".into());
+        state
+            .progress
+            .write()
+            .coding
+            .record("two-sum", 1, openleet_proto::Verdict::Accepted);
         let after = next_of(&state, &[("slug", "two-sum")]).await;
         assert_ne!(after["next"]["slug"], "two-sum");
         assert_eq!(after["progress"]["solved"], 1);

@@ -16,7 +16,7 @@ pub mod migrate;
 mod plans;
 mod sqlite;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -27,6 +27,7 @@ use parking_lot::Mutex;
 use serde::Serialize;
 use serde_json::value::RawValue;
 
+use openleet::coding::{CodingLog, verdict_named};
 use openleet::model::{Attempt, Grade};
 
 pub use backup::Backup;
@@ -104,15 +105,6 @@ pub struct NewSubmission<'a> {
     pub total: u16,
     pub cpu_ms: u32,
     pub detail: &'a str,
-}
-
-/// What the submissions say about each problem, loaded at startup.
-#[derive(Debug, Default)]
-pub struct Submitted {
-    /// Slugs with an accepted submission.
-    pub solved: HashSet<String>,
-    /// Slugs with any recorded submission.
-    pub tried: HashSet<String>,
 }
 
 /// How [`Store::open`] found the progress database.
@@ -600,31 +592,22 @@ impl Store {
         })
     }
 
-    /// Problems with at least one accepted submission.
-    pub fn solved(&self) -> Result<HashSet<String>> {
-        self.with(|c| {
-            let mut stmt =
-                c.prepare("SELECT DISTINCT slug FROM submissions WHERE verdict = 'accepted'")?;
-            let rows = stmt.query_map([], |r| r.get(0))?;
+    /// Every stored submission's problem, time and verdict, replayed in the order they were
+    /// judged. Submissions pruned for space (see [`Self::insert_submission`]) are not in it.
+    pub fn coding_log(&self) -> Result<CodingLog> {
+        let rows: Vec<(String, i64, String)> = self.with(|c| {
+            let mut stmt = c.prepare(
+                "SELECT slug, epoch_ms(submitted_at), verdict::VARCHAR FROM submissions ORDER BY id",
+            )?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
             rows.collect()
-        })
-    }
-
-    /// Problems with any recorded submission.
-    pub fn tried(&self) -> Result<HashSet<String>> {
-        self.with(|c| {
-            let mut stmt = c.prepare("SELECT DISTINCT slug FROM submissions")?;
-            let rows = stmt.query_map([], |r| r.get(0))?;
-            rows.collect()
-        })
-    }
-
-    /// The solved and the tried problems.
-    pub fn submitted(&self) -> Result<Submitted> {
-        Ok(Submitted {
-            solved: self.solved()?,
-            tried: self.tried()?,
-        })
+        })?;
+        let mut log = CodingLog::default();
+        for (slug, at, verdict) in rows {
+            let verdict = verdict_named(&verdict).context("an unknown verdict in submissions")?;
+            log.record(&slug, at, verdict);
+        }
+        Ok(log)
     }
 
     /// Flushes the write-ahead log into the database file.
@@ -868,7 +851,8 @@ mod tests {
         assert_eq!(one.code.as_deref(), Some("print(1)"));
         let detail: serde_json::Value = serde_json::from_str(one.detail.unwrap().get()).unwrap();
         assert_eq!(detail["failing"]["kind"], "hidden");
-        assert_eq!(store.solved().unwrap(), HashSet::from(["a".to_owned()]));
+        let log = store.coding_log().unwrap();
+        assert!(log.solved("a") && !log.problem("a").unwrap().first_try());
     }
 
     #[test]
@@ -898,7 +882,8 @@ mod tests {
         assert_eq!(kept.len(), SUBMISSIONS_KEPT + 1);
         assert_eq!(kept[0].id, last);
         assert_eq!(kept[SUBMISSIONS_KEPT].id, accepted);
-        assert!(store.solved().unwrap().contains("a"));
+        // The first Accepted is kept, so the problem stays solved after a restart.
+        assert!(store.coding_log().unwrap().solved("a"));
         assert_eq!(store.submissions("b", 10).unwrap()[0].id, other);
     }
 

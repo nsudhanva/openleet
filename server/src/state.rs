@@ -1,11 +1,12 @@
 //! Shared server state: static content, the in-memory progress cache, storage and the judge.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
 use parking_lot::{Mutex, RwLock};
 
+use openleet::coding::CodingLog;
 use openleet::content::Content;
 use openleet::model::{Attempt, CompanyFilter, Problem};
 use openleet::plan::Marks;
@@ -14,7 +15,7 @@ use openleet::scorer::{ScoreReport, day_key, score_report};
 use openleet::service;
 
 use crate::acme::CertificateSlot;
-use crate::db::{DailyScore, SavedPlan, Store, Submitted};
+use crate::db::{DailyScore, SavedPlan, Store};
 use crate::error::{ApiError, ApiResult};
 use crate::judge::Judge;
 
@@ -26,10 +27,8 @@ pub struct Progress {
     pub states: CardStates,
     /// Your answer per slug.
     pub notes: HashMap<String, String>,
-    /// Slugs with an accepted submission.
-    pub solved: HashSet<String>,
-    /// Slugs with any recorded submission.
-    pub tried: HashSet<String>,
+    /// Every judged submission, aggregated per problem (solved, tried, shaky, ...).
+    pub coding: CodingLog,
     /// Practice plans used, as [`Store::plans`] lists them; replaced after every plan write.
     pub plans: Vec<SavedPlan>,
     /// Reports per company, computed on first read after the log changed.
@@ -41,7 +40,7 @@ impl Progress {
     pub fn new(
         attempts: Vec<Attempt>,
         notes: HashMap<String, String>,
-        submitted: Submitted,
+        coding: CodingLog,
         plans: Vec<SavedPlan>,
     ) -> Self {
         let states = card_states(&attempts);
@@ -49,8 +48,7 @@ impl Progress {
             attempts,
             states,
             notes,
-            solved: submitted.solved,
-            tried: submitted.tried,
+            coding,
             plans,
             reports: HashMap::new(),
         }
@@ -58,10 +56,7 @@ impl Progress {
 
     /// What the learner did in the judge, for plans.
     pub fn marks(&self) -> Marks<'_> {
-        Marks {
-            solved: &self.solved,
-            tried: &self.tried,
-        }
+        &self.coding
     }
 
     /// Records a new attempt.
@@ -214,7 +209,7 @@ pub fn test_state_with(dir: &std::path::Path, judge: &str, content: Content) -> 
         progress: RwLock::new(Progress::new(
             Vec::new(),
             HashMap::new(),
-            Submitted::default(),
+            CodingLog::default(),
             Vec::new(),
         )),
         progress_updates: Mutex::new(()),

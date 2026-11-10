@@ -398,11 +398,12 @@ pub fn new_attempt(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
     use serde_json::json;
 
     use super::*;
+    use crate::coding::CodingLog;
     use crate::model::fixtures::{
         GOOGLE, META, T0, asked, attempt, classic, companies, problem, with,
     };
@@ -523,16 +524,11 @@ mod tests {
         states: &CardStates,
         now: i64,
     ) -> Vec<ProblemRow<'a>> {
-        let none = HashSet::new();
-        let marks = Marks {
-            solved: &none,
-            tried: &none,
-        };
         problem_rows(
             content,
             &ProblemQuery::parse(content, params),
             states,
-            marks,
+            &CodingLog::default(),
             now,
         )
     }
@@ -564,10 +560,7 @@ mod tests {
                 order: PlanOrder::Rank,
             },
             &states,
-            Marks {
-                solved: &HashSet::new(),
-                tried: &HashSet::new(),
-            },
+            &CodingLog::default(),
             T0,
         );
         let lc: Vec<_> = lc.iter().map(|r| (r.id, r.rank, r.frequency)).collect();
@@ -641,12 +634,8 @@ mod tests {
     fn rows_follow_the_status_and_order() {
         let content = tagged();
         let states = CardStates::new();
-        let solved: HashSet<String> = ["p1".to_owned()].into();
-        let tried: HashSet<String> = ["p1".to_owned(), "p2".to_owned()].into();
-        let marks = Marks {
-            solved: &solved,
-            tried: &tried,
-        };
+        let log = crate::coding::log_of(&["p1"], &["p2"]);
+        let marks = &log;
         let ids = |status, order, q| {
             let params = ProblemParams {
                 status,

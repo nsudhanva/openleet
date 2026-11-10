@@ -93,7 +93,7 @@ pub async fn code_info(
             time_limit_ms: entry.filter(|_| supported).map(Entry::limit_ms),
         },
         examples,
-        solved: state.progress.read().solved.contains(&slug),
+        solved: state.progress.read().coding.solved(&slug),
     };
     Ok(Json(&info).into_response())
 }
@@ -211,9 +211,10 @@ pub async fn submit(
     let code = input.code;
     result.id = state
         .update_progress(move |state| {
+            let at = now_ms();
             let id = state.store.insert_submission(&NewSubmission {
                 slug: &input.slug,
-                at: now_ms(),
+                at,
                 code: &code,
                 verdict,
                 passed,
@@ -221,11 +222,11 @@ pub async fn submit(
                 cpu_ms,
                 detail: &detail,
             })?;
-            let mut progress = state.progress.write();
-            if verdict == Verdict::Accepted.as_str() {
-                progress.solved.insert(input.slug.clone());
-            }
-            progress.tried.insert(input.slug);
+            state
+                .progress
+                .write()
+                .coding
+                .record(&input.slug, at, outcome.verdict);
             Ok(id)
         })
         .await?;

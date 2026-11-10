@@ -6,9 +6,9 @@
 //! Topics stay hidden unless asked for: a plan's next problem carries no topics, and only the
 //! pivots, offered after the current problem is solved, name the current problem's topics.
 
-use std::collections::HashSet;
-
 use serde::Serialize;
+
+use crate::coding::CodingLog;
 
 use crate::content::{ANY_COMPANY, Content};
 use crate::lists::{ListEntry, ListId, ProblemFilter};
@@ -23,6 +23,8 @@ wire_enum! {
         Unsolved = "unsolved",
         /// No submission at all.
         Untried = "untried",
+        /// Solved, but shakily: after two or more failed submissions, or a time limit.
+        Shaky = "shaky",
         /// Every problem, solved or not.
         All = "all",
     }
@@ -61,23 +63,17 @@ wire_enum! {
 /// Most pivots offered after a solve.
 pub const MAX_PIVOTS: usize = 4;
 
-/// What the learner has done in the judge: problems with an accepted submission, and
-/// problems with any submission.
-#[derive(Debug, Clone, Copy)]
-pub struct Marks<'a> {
-    /// Slugs with an accepted submission.
-    pub solved: &'a HashSet<String>,
-    /// Slugs with any recorded submission.
-    pub tried: &'a HashSet<String>,
-}
+/// What the learner has done in the judge: every submission, aggregated per problem.
+pub type Marks<'a> = &'a CodingLog;
 
 impl PlanStatus {
     /// Whether a problem still counts under this status.
     #[must_use]
     pub fn keeps(self, slug: &str, marks: Marks<'_>) -> bool {
         match self {
-            Self::Unsolved => !marks.solved.contains(slug),
-            Self::Untried => !marks.tried.contains(slug),
+            Self::Unsolved => !marks.solved(slug),
+            Self::Untried => !marks.tried(slug),
+            Self::Shaky => marks.shaky(slug),
             Self::All => true,
         }
     }
@@ -86,6 +82,7 @@ impl PlanStatus {
         match self {
             Self::Unsolved => Some("Unsolved"),
             Self::Untried => Some("Untried"),
+            Self::Shaky => Some("Shaky solves"),
             Self::All => None,
         }
     }
@@ -327,7 +324,7 @@ pub fn walk<'a>(
     let entries = plan.entries(content);
     let solved = entries
         .iter()
-        .filter(|e| marks.solved.contains(&content.problem_at(e).slug))
+        .filter(|e| marks.solved(&content.problem_at(e).slug))
         .count();
     let start = after
         .and_then(|slug| {
@@ -458,6 +455,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
+    use crate::coding::log_of;
     use crate::model::fixtures::{GOOGLE, companies, problem};
 
     /// Google 6 months, in rank order: p1 Easy [Graph], p2 Hard [Graph, Array],
@@ -499,10 +497,6 @@ mod tests {
             .collect()
     }
 
-    fn set(slugs: &[&str]) -> HashSet<String> {
-        slugs.iter().map(|s| (*s).to_owned()).collect()
-    }
-
     #[test]
     fn orders_by_rank_number_difficulty_and_a_stable_shuffle() {
         let content = content();
@@ -526,12 +520,8 @@ mod tests {
     #[test]
     fn walks_to_the_next_problem_that_still_counts_and_wraps() {
         let content = content();
-        let solved = set(&["p2", "p3"]);
-        let tried = set(&["p2", "p3", "p4"]);
-        let marks = Marks {
-            solved: &solved,
-            tried: &tried,
-        };
+        let log = log_of(&["p2", "p3"], &["p4"]);
+        let marks = &log;
         let next = |status, after| {
             let plan = Plan {
                 status,
@@ -560,23 +550,46 @@ mod tests {
     }
 
     #[test]
+    fn a_shaky_plan_walks_the_solves_that_needed_failures() {
+        use openleet_proto::Verdict::{Accepted, CompileError, TimeLimitExceeded, WrongAnswer};
+        let content = content();
+        let mut log = CodingLog::default();
+        for (slug, verdict) in [
+            ("p1", Accepted),
+            ("p2", TimeLimitExceeded),
+            ("p2", Accepted),
+            ("p4", CompileError),
+            ("p4", CompileError),
+            ("p4", Accepted),
+            ("p5", WrongAnswer),
+            ("p5", WrongAnswer),
+        ] {
+            log.record(slug, 0, verdict);
+        }
+        let shaky = Plan {
+            status: PlanStatus::Shaky,
+            ..plan(&content, PlanOrder::Rank)
+        };
+        assert_eq!(shaky.label(&content), "Google · 6 months · Shaky solves");
+        let walked = walk(&content, &shaky, None, &log);
+        assert_eq!(walked.next.map(|n| n.slug), Some("p2"));
+        // p2 is the only one: from it, nothing else to offer.
+        assert_eq!(walk(&content, &shaky, Some("p2"), &log).next, None);
+        assert_eq!("shaky".parse(), Ok(PlanStatus::Shaky));
+    }
+
+    #[test]
     fn an_exhausted_plan_has_no_next_problem() {
         let content = content();
-        let solved = set(&["p1", "p2", "p3", "p4", "p5"]);
-        let marks = Marks {
-            solved: &solved,
-            tried: &solved,
-        };
+        let log = log_of(&["p1", "p2", "p3", "p4", "p5"], &[]);
+        let marks = &log;
         let plan = plan(&content, PlanOrder::Rank);
         let walked = walk(&content, &plan, Some("p3"), marks);
         assert_eq!(walked.next, None);
         assert_eq!(walked.progress.solved, 5);
         // Only the current problem left: still nothing to offer.
-        let almost = set(&["p1", "p2", "p4", "p5"]);
-        let marks = Marks {
-            solved: &almost,
-            tried: &almost,
-        };
+        let almost = log_of(&["p1", "p2", "p4", "p5"], &[]);
+        let marks = &almost;
         assert_eq!(walk(&content, &plan, Some("p3"), marks).next, None);
         let page = next_page(&content, &plan, content.problem("p3"), marks, None);
         assert_eq!((page.next, page.progress.total), (None, 5));
@@ -606,30 +619,16 @@ mod tests {
                 "difficulty": "Hard", "status": "all", "order": "easy-first",
                 "label": "LC 1–1000 · Graph · Hard · Easy first"})
         );
-        let next = serde_json::to_value(
-            walk(
-                &content,
-                &plan,
-                None,
-                Marks {
-                    solved: &HashSet::new(),
-                    tried: &HashSet::new(),
-                },
-            )
-            .next,
-        )
-        .expect("json");
+        let next = serde_json::to_value(walk(&content, &plan, None, &CodingLog::default()).next)
+            .expect("json");
         assert!(next.get("topics").is_none(), "{next}");
     }
 
     #[test]
     fn pivots_from_the_solved_problem_without_repeats() {
         let content = content();
-        let solved = set(&["p2"]);
-        let marks = Marks {
-            solved: &solved,
-            tried: &solved,
-        };
+        let log = log_of(&["p2"], &[]);
+        let marks = &log;
         let graph = Plan {
             filter: content.problem_filter(Some("Graph"), None),
             ..plan(&content, PlanOrder::Rank)
@@ -710,11 +709,8 @@ mod tests {
             ],
             HashMap::new(),
         );
-        let none = HashSet::new();
-        let marks = Marks {
-            solved: &none,
-            tried: &none,
-        };
+        let none = CodingLog::default();
+        let marks = &none;
         let a = Plan {
             filter: content.problem_filter(Some("A"), None),
             ..plan(&content, PlanOrder::Rank)
