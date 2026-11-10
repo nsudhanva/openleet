@@ -121,7 +121,7 @@ def user_traceback(error: BaseException) -> str:
     """The error as LeetCode shows it: the exception, then the solution's lines it went through."""
     frames = [f for f in traceback.extract_tb(error.__traceback__) if f.filename == SOLUTION_FILE]
     lines = [f"{type(error).__name__}: {error}".rstrip(": ")]
-    lines += [f"    {f.line}\nLine {f.lineno} in {f.name} (Solution.py)" for f in frames]
+    lines += [f"    {f.line}\nLine {f.lineno} in {f.name} ({SOLUTION_FILE})" for f in frames]
     return "\n".join(lines)
 
 

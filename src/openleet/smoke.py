@@ -531,8 +531,8 @@ class Smoke:
 
         def traceback(body: dict) -> str | None:
             error = body.get("error") or ""
-            if "Solution.py" not in error or "ZeroDivisionError" not in error:
-                return "traceback lacks Solution.py / ZeroDivisionError"
+            if "solution.py" not in error or "ZeroDivisionError" not in error:
+                return "traceback lacks solution.py / ZeroDivisionError"
             return failed_at(body)
 
         self.check(
