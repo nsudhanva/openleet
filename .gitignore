@@ -2,28 +2,16 @@
 .venv/
 __pycache__/
 *.py[cod]
-*.egg-info/
 .ruff_cache/
-.pytest_cache/
-.coverage
-htmlcov/
-dist/
-build/
 
-# JS / TanStack Start (web/ has its own .gitignore too)
+# JS (web/ has its own .gitignore for its build output)
 node_modules/
-.tanstack/
-.output/
-.nitro/
-.vinxi/
-.wrangler/
 *.tsbuildinfo
-coverage/
-
-# Logs
 *.log
-npm-debug.log*
-bun-debug.log*
+
+# Rust, and the release archive CI packs
+target/
+dist/
 
 # Secrets
 .env
@@ -42,15 +30,13 @@ client_secret*.json
 # Claude Code local settings
 .claude/settings.local.json
 
-# Flashcard data: fetched sources and the progress database
+# Fetched sources and local server state: DuckDB, the old SQLite progress database it imports,
+# and the HTTPS certificate cache (STATE_DIR=data)
 data/.cache/
 data/*.db
 data/*.db-*
-
-# Local server state (DuckDB); the judge corpus in data/judge is committed
 data/*.duckdb
 data/*.duckdb.wal
 data/acme/
-
-# Rust build output
-target/
+# A release asset ("corpus"), named in data/judge/corpus.json: uv run openleet judge fetch
+data/judge/tests.duckdb

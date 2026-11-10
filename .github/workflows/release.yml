@@ -1,9 +1,7 @@
-# CI/CD: every push to main is checked, built natively, published as the "edge" GitHub release
-# and deployed. CI asks the server to update (a signed POST /api/deploy); systemd then runs
-# deploy/update.sh as root, which installs the release and restarts the services without
-# dropping connections. The job ends when /api/version reports the new revision.
-# The archive holds bin/openleet (web app embedded), bin/openleet-judge, the judge's Python, the data and
-# deploy/ (systemd units and scripts, which update themselves on the server).
+# Every push to main is checked, built, published as the "edge" release and deployed: CI sends a
+# signed POST /api/deploy, systemd runs deploy/update.sh as root, and the job ends when
+# /api/version reports the new revision. The archive holds bin/openleet (web app embedded),
+# bin/openleet-judge, the judge's Python, the data and deploy/ (units and scripts).
 name: release
 
 on:
@@ -22,6 +20,7 @@ on:
       - Cargo.lock
       - package.json
       - bun.lock
+      - biome.json
       - .github/workflows/release.yml
   workflow_dispatch:
 
@@ -32,9 +31,14 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
 jobs:
   release:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     env:
       # Every GCP e2 machine has AVX2.
       RUSTFLAGS: -C target-cpu=x86-64-v3
@@ -42,16 +46,32 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
-      - name: Web app
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Lint
         run: |
           bun install --frozen-lockfile
           bun run check
+          cargo fmt --all --check
           bun run typecheck
+      - name: Web app
+        run: |
           bun run test
           bun run build
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
+      - name: Test corpus
+        # tests.duckdb is too big for git; corpus.json names its asset on the "corpus" release.
+        run: |
+          asset=$(jq -r .asset data/judge/corpus.json)
+          sha256=$(jq -r .sha256 data/judge/corpus.json)
+          curl -fsSL --retry 3 -o data/judge/tests.duckdb \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/corpus/$asset"
+          echo "$sha256  data/judge/tests.duckdb" | sha256sum -c -
       - uses: Swatinem/rust-cache@v2
       - name: Test and build
         run: |
@@ -68,8 +88,8 @@ jobs:
           cp -r data/judge "$out/data/judge"
           cp -r judge/py "$out/judge/py"
           cp -r deploy "$out/deploy"
-          echo "$rev" > "$out/REVISION"
           echo "$rev" > dist/REVISION
+          cp dist/REVISION "$out/REVISION"
           tar --zstd -cf "dist/openleet-$rev.tar.zst" -C "$out" .
           (cd dist && sha256sum "openleet-$rev.tar.zst" > "openleet-$rev.tar.zst.sha256")
           echo "REV=$rev" >> "$GITHUB_ENV"
@@ -77,28 +97,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view edge >/dev/null 2>&1 || \
-            gh release create edge --prerelease --title "edge" --notes "Latest build of main."
+          gh release view edge >/dev/null 2>&1 ||
+            gh release create edge --prerelease --title edge --notes "Latest build of main."
           # The archive first, REVISION last: the server only follows REVISION.
           gh release upload edge "dist/openleet-$REV.tar.zst" "dist/openleet-$REV.tar.zst.sha256" --clobber
           gh release upload edge dist/REVISION --clobber
           # Keep the archives of the last three builds.
-          gh release view edge --json assets --jq '.assets | sort_by(.createdAt) | reverse | .[].name' \
-            | grep '^openleet-.*\.tar\.zst$' | tail -n +4 \
-            | while read -r name; do gh release delete-asset edge "$name" -y; gh release delete-asset edge "$name.sha256" -y || true; done
+          gh release view edge --json assets --jq '.assets | sort_by(.createdAt) | reverse | .[].name' |
+            grep '^openleet-.*\.tar\.zst$' | tail -n +4 |
+            while read -r name; do
+              gh release delete-asset edge "$name" -y
+              gh release delete-asset edge "$name.sha256" -y || true
+            done
       - name: Deploy and wait until live
         env:
           DEPLOY_SECRET: ${{ secrets.DEPLOY_SECRET }}
           SITE: https://openleet.sudhanva.me
         run: |
+          if [ -z "$DEPLOY_SECRET" ]; then echo "::error::the DEPLOY_SECRET secret is not set"; exit 1; fi
           body="{\"revision\":\"$REV\"}"
           signature=$(printf '%s' "$body" | openssl dgst -sha256 -hmac "$DEPLOY_SECRET" -r | cut -d' ' -f1)
-          curl -fsS -X POST "$SITE/api/deploy" -H "content-type: application/json" \
+          curl -fsS --max-time 30 -X POST "$SITE/api/deploy" -H "content-type: application/json" \
             -H "x-deploy-signature: sha256=$signature" --data "$body"
+          live=
           for _ in $(seq 60); do
-            live=$(curl -fsS "$SITE/api/version" | jq -r .revision || true)
+            live=$(curl -fsS --max-time 10 "$SITE/api/version" | jq -r .revision || true)
             if [ "$live" = "$REV" ]; then echo "live: $REV"; exit 0; fi
             sleep 5
           done
-          echo "revision $REV is not live after 5 minutes (still $live)"
+          echo "::error::revision $REV is not live after 5 minutes (still ${live:-unknown})"
           exit 1

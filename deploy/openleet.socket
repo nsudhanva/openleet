@@ -9,7 +9,6 @@ FileDescriptorName=http
 ListenStream=443
 FileDescriptorName=https
 NoDelay=true
-Service=openleet.service
 
 [Install]
 WantedBy=sockets.target

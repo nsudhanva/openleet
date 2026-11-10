@@ -1,9 +1,11 @@
 # Installs the newest release CI published, if it is not the running one (deploy/update.sh).
 [Unit]
-Description=Update openleet to the latest release
+Description=Update OpenLeet to the latest release
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 ExecStart=/opt/openleet/update.sh
+# A oneshot has no start timeout by default; a hung download would block every later deploy.
+TimeoutStartSec=15min

@@ -1,10 +1,7 @@
-.git
-.venv
-.ruff_cache
-.zed
-.claude
-**/node_modules
-web/dist
-data/.cache
-data/*.db*
-target
+# The judge image is built from these only (see Dockerfile).
+*
+!Cargo.toml
+!Cargo.lock
+!proto
+!judge
+**/__pycache__

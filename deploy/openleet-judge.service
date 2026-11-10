@@ -40,9 +40,10 @@ ProtectClock=yes
 ProtectHostname=yes
 RestrictNamespaces=yes
 RestrictRealtime=yes
+RestrictSUIDSGID=yes
 LockPersonality=yes
 SystemCallArchitectures=native
-InaccessiblePaths=/var/lib/openleet /etc/openleet.env -/var/lib/docker -/home -/root
+InaccessiblePaths=/var/lib/openleet /etc/openleet.env -/var/lib/docker
 
 [Install]
 WantedBy=multi-user.target

@@ -1,17 +1,22 @@
 #!/bin/sh
-# Sets up a fresh Ubuntu server for openleet (run once as root), or, with --units-only,
-# refreshes the systemd units and the update script from an unpacked release.
-#   sudo ./install.sh            then edit /etc/openleet.env and run update.sh
+# Sets up a fresh Ubuntu server for openleet (run once as root):
+#   sudo deploy/install.sh    then fill in /etc/openleet.env and run /opt/openleet/update.sh
+# With --units-only (update.sh runs it from each release), it only refreshes the systemd units
+# and the update script.
 set -eu
 ROOT=/opt/openleet
+ENV_FILE=/etc/openleet.env
+UNIT_DIR=/etc/systemd/system
 HERE=$(cd "$(dirname "$0")" && pwd)
 PYTHON=3.15
 
-units() {
+# Every openleet* file next to this script is a unit; the ones with an [Install] section get enabled.
+install_units() {
 	changed=0
-	for unit in openleet.socket openleet.service openleet-judge.service openleet-update.service openleet-update.timer openleet-update.path; do
-		if ! cmp -s "$HERE/$unit" "/etc/systemd/system/$unit"; then
-			install -m 0644 "$HERE/$unit" "/etc/systemd/system/$unit"
+	for path in "$HERE"/openleet*; do
+		unit=${path##*/}
+		if ! cmp -s "$path" "$UNIT_DIR/$unit"; then
+			install -m 0644 "$path" "$UNIT_DIR/$unit"
 			changed=1
 		fi
 	done
@@ -20,10 +25,11 @@ units() {
 }
 
 if [ "${1:-}" = "--units-only" ]; then
-	units
+	install_units
 	exit 0
 fi
 
+apt-get update -qq
 apt-get install -y --no-install-recommends curl zstd ca-certificates >/dev/null
 id openleet >/dev/null 2>&1 || useradd --system --home-dir /var/lib/openleet --shell /usr/sbin/nologin openleet
 mkdir -p "$ROOT/releases"
@@ -38,8 +44,8 @@ uv venv --allow-existing --python "$PYTHON" "$ROOT/venv"
 uv pip install --python "$ROOT/venv/bin/python" sortedcontainers==2.4.0
 chmod -R a+rX "$ROOT/python" "$ROOT/venv"
 
-if [ ! -f /etc/openleet.env ]; then
-	cat >/etc/openleet.env <<'ENV'
+if [ ! -f "$ENV_FILE" ]; then
+	cat >"$ENV_FILE" <<'ENV'
 # The site's domain (HTTPS certificate is automatic), or http://host for plain HTTP.
 SITE_ADDRESS=openleet.example.com
 # Day boundaries for streaks, such as America/Los_Angeles.
@@ -49,11 +55,13 @@ JUDGE_CPU_SCALE=2.5
 # Shared with the GitHub secret DEPLOY_SECRET; CI signs its deploy requests with it.
 DEPLOY_SECRET=
 ENV
-	chmod 0640 /etc/openleet.env
-	chgrp openleet /etc/openleet.env
+	chmod 0640 "$ENV_FILE"
+	chgrp openleet "$ENV_FILE"
 fi
 
-units
-systemctl enable openleet.socket openleet.service openleet-judge.service openleet-update.timer openleet-update.path
+install_units
+for path in "$HERE"/openleet*; do
+	if grep -q '^\[Install\]' "$path"; then systemctl enable "${path##*/}"; fi
+done
 systemctl start openleet-update.timer openleet-update.path
-echo "Edit /etc/openleet.env, then run $ROOT/update.sh"
+echo "Fill in $ENV_FILE, then run $ROOT/update.sh"
