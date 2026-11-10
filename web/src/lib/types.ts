@@ -270,6 +270,14 @@ export type TestKind = "example" | "hidden" | "stress";
 
 export interface FailingCase extends Omit<RunCase, "ok"> {
 	kind: TestKind;
+	/** How big the input is, as "nums: 100,000 items". */
+	size: string | null;
+}
+
+/** The intended solution's complexity, such as "O(n)". */
+export interface Complexity {
+	time: string;
+	space: string;
 }
 
 export interface SubmitResult {
@@ -281,6 +289,8 @@ export interface SubmitResult {
 	limitMs: number;
 	error: string | null;
 	failing: FailingCase | null;
+	/** Sent only with a result, since it gives part of the answer away. */
+	intended: Complexity | null;
 }
 
 export interface SubmissionSummary {

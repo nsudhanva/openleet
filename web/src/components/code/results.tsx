@@ -143,6 +143,29 @@ function FailingTest({ test }: { test: FailingCase }) {
 	);
 }
 
+/**
+ * What the time says about the approach: the intended complexity beside an accepted result;
+ * for a time limit, that complexity and the input size it was too slow for.
+ */
+function ComplexityNote({ result }: { result: SubmitResult }) {
+	const { intended, failing } = result;
+	if (result.verdict === "time_limit_exceeded") {
+		const size = failing?.size;
+		return (
+			<p className="text-sm text-muted-foreground">
+				Too slow{size ? <> for {size}</> : null}.
+				{intended && <> The intended solution runs in {intended.time} time.</>}
+			</p>
+		);
+	}
+	if (result.verdict !== "accepted" || !intended) return null;
+	return (
+		<p className="text-sm text-muted-foreground">
+			Intended complexity: {intended.time} time, {intended.space} space.
+		</p>
+	);
+}
+
 /** Submit: verdict, tests passed, CPU time against the limit, and the first failing test. */
 export function SubmitResultView({ result }: { result: SubmitResult }) {
 	return (
@@ -151,6 +174,7 @@ export function SubmitResultView({ result }: { result: SubmitResult }) {
 				{result.passed} / {result.total} tests passed · CPU {result.cpuMs} ms of{" "}
 				{cpuTime(result.limitMs)} limit
 			</Summary>
+			<ComplexityNote result={result} />
 			{result.error && <CodeBlock label="Error" text={result.error} danger />}
 			{result.failing && <FailingTest test={result.failing} />}
 		</div>
