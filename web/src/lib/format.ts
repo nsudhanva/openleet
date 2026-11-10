@@ -1,4 +1,5 @@
-const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+/** Made on first use: building an Intl formatter costs milliseconds the page load can skip. */
+let relative: Intl.RelativeTimeFormat | undefined;
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 	["day", 86_400_000],
 	["hour", 3_600_000],
@@ -9,8 +10,10 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 export function timeFrom(at: number, now = Date.now()): string {
 	const diff = at - now;
 	for (const [unit, ms] of UNITS) {
-		if (Math.abs(diff) >= ms)
+		if (Math.abs(diff) >= ms) {
+			relative ??= new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 			return relative.format(Math.round(diff / ms), unit);
+		}
 	}
 	return "now";
 }

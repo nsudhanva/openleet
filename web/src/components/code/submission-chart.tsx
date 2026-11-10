@@ -33,15 +33,22 @@ const HEIGHT = CPU_TOP + PANEL + 18;
 /** A limit this far above the slowest run would flatten every point, so it stays a note. */
 const LIMIT_ON_SCALE = 1.5;
 
-const DAY = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" });
-const TIME = new Intl.DateTimeFormat("en", {
-	hour: "numeric",
-	minute: "2-digit",
-});
-const FULL = new Intl.DateTimeFormat("en", {
-	dateStyle: "medium",
-	timeStyle: "short",
-});
+/** Date formats, made on first use: each Intl formatter costs milliseconds to build. */
+const FORMATS = {
+	day: { month: "short", day: "numeric" },
+	time: { hour: "numeric", minute: "2-digit" },
+	full: { dateStyle: "medium", timeStyle: "short" },
+} satisfies Record<string, Intl.DateTimeFormatOptions>;
+const formatters = new Map<keyof typeof FORMATS, Intl.DateTimeFormat>();
+
+function formatDate(format: keyof typeof FORMATS, at: number): string {
+	let formatter = formatters.get(format);
+	if (!formatter) {
+		formatter = new Intl.DateTimeFormat("en", FORMATS[format]);
+		formatters.set(format, formatter);
+	}
+	return formatter.format(at);
+}
 
 /** "850 ms", "2.5 s": a CPU time short enough for an axis label. */
 function compactTime(value: number): string {
@@ -98,7 +105,7 @@ function Marker({
 
 /** One submission in words, for screen readers. */
 function describe(s: SubmissionSummary): string {
-	return `${VERDICT[s.verdict].label}, ${s.passed} of ${s.total} tests, ${cpuTime(s.cpuMs)} CPU, ${FULL.format(s.at)}`;
+	return `${VERDICT[s.verdict].label}, ${s.passed} of ${s.total} tests, ${cpuTime(s.cpuMs)} CPU, ${formatDate("full", s.at)}`;
 }
 
 function summaryOf(
@@ -160,8 +167,9 @@ function Chart({ submissions, timeLimitMs, onOpen }: ChartProps) {
 		{ key: "cpu", y: (s: SubmissionSummary) => yCpu(s.cpuMs) },
 	];
 
-	const sameDay = DAY.format(points[0].at) === DAY.format(points[n - 1].at);
-	const dateLabel = (at: number) => (sameDay ? TIME : DAY).format(at);
+	const sameDay =
+		formatDate("day", points[0].at) === formatDate("day", points[n - 1].at);
+	const dateLabel = (at: number) => formatDate(sameDay ? "time" : "day", at);
 	const tones = TONES.filter((tone) =>
 		points.some((s) => VERDICT[s.verdict].tone === tone),
 	);
@@ -350,7 +358,9 @@ function Chart({ submissions, timeLimitMs, onOpen }: ChartProps) {
 							<strong className="tabular-nums">{cpuTime(shown.cpuMs)}</strong>{" "}
 							<span className="text-muted-foreground">CPU</span>
 						</p>
-						<p className="text-muted-foreground">{FULL.format(shown.at)}</p>
+						<p className="text-muted-foreground">
+							{formatDate("full", shown.at)}
+						</p>
 						<p className="text-muted-foreground">
 							Click or Enter loads this code
 						</p>
