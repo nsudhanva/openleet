@@ -17,7 +17,9 @@ function themeBeforePaint(): Plugin {
 
 /**
  * Preloads the Latin subsets of the two fonts (both are on every page), so they arrive with
- * the scripts and the first render already uses them: no reflow when they swap in.
+ * the scripts and the app's first render already uses them: no reflow when they swap in.
+ * They go at the end of the body: Chrome holds the first paint for font preloads in the head
+ * (about 100 ms), and the static shell paints fine with a fallback font.
  */
 function preloadFonts(): Plugin {
 	return {
@@ -36,7 +38,7 @@ function preloadFonts(): Plugin {
 							type: "font/woff2",
 							crossorigin: "",
 						},
-						injectTo: "head" as const,
+						injectTo: "body" as const,
 					})),
 		},
 	};
