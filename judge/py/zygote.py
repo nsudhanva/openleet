@@ -241,6 +241,10 @@ def handle(job: dict) -> None:
     total = 0
     with os.fdopen(read_fd, "rb") as events:
         for line in events:
+            # An event longer than the pipe's atomic write size is cut short when the child is
+            # killed while writing it (a time limit, or the stop after a wrong answer).
+            if not line.endswith(b"\n"):
+                break
             total += len(line)
             if total > limit:
                 os.kill(pid, signal.SIGKILL)
