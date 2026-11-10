@@ -64,7 +64,10 @@ pub async fn execute(zygote: &mut Zygote, job: &Job) -> Result<Outcome> {
 
     let mut run = Run::new(job, expected);
     loop {
-        let event = zygote.next().await?;
+        let Some(event) = zygote.next_event().await? else {
+            run.garbled();
+            continue;
+        };
         if let Some(pid) = event.pid {
             run.pid = Some(pid);
             tokio::spawn(watch(
@@ -147,6 +150,16 @@ impl<'a> Run<'a> {
             Some(Want::Sha256(hex)) => digest_matches(out, hex),
             None => false,
         })
+    }
+
+    /// The child wrote a line that is no event: the solution wrote to the judge's pipe.
+    fn garbled(&mut self) {
+        self.settle(
+            Verdict::RuntimeError,
+            Some(self.cases.len()),
+            Some("The program wrote to the judge's pipe".into()),
+        );
+        self.stop_child();
     }
 
     fn child_event(&mut self, ev: ChildEvent, cpu_ms: i64) {
@@ -473,6 +486,18 @@ mod tests {
         let job = job(2, Some("[1,2]"));
         let mut run = start(&job);
         run.child_event(event(r#"{"i":0,"out":1}"#), 0);
+        let outcome = run.finish(&done(CLEAN));
+        assert_eq!(outcome.verdict, Verdict::RuntimeError);
+        assert_eq!(outcome.failed, Some(1));
+    }
+
+    #[test]
+    fn writing_to_the_judge_pipe_is_a_runtime_error() {
+        let job = job(2, Some("[1,2]"));
+        let mut run = start(&job);
+        run.child_event(event(r#"{"i":0,"out":1}"#), 0);
+        run.garbled();
+        run.child_event(event(r#"{"i":1,"out":2}"#), 0);
         let outcome = run.finish(&done(CLEAN));
         assert_eq!(outcome.verdict, Verdict::RuntimeError);
         assert_eq!(outcome.failed, Some(1));

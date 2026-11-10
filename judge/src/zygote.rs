@@ -8,6 +8,9 @@ use serde_json::value::RawValue;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 
+/// How the zygote starts a line that carries a line of the child's (zygote.py, `handle`).
+const CHILD_EVENT: &str = r#"{"cpu_ms":"#;
+
 /// One line the zygote writes: `pid`, `ev` (with `cpu_ms`), `done`, `ole`, `fatal` or `ready`.
 #[derive(Debug, Deserialize)]
 pub struct Event {
@@ -85,6 +88,18 @@ impl Zygote {
     pub async fn next(&mut self) -> Result<Event> {
         let line = self.lines.next_line().await?.context("zygote exited")?;
         serde_json::from_str(&line).with_context(|| format!("bad zygote event: {line:.200}"))
+    }
+
+    /// Waits for the zygote's next event; `None` for a child event that is not one. The zygote
+    /// forwards the child's lines as they are, and the solution runs in the child, so it can
+    /// write anything to that pipe.
+    pub async fn next_event(&mut self) -> Result<Option<Event>> {
+        let line = self.lines.next_line().await?.context("zygote exited")?;
+        match serde_json::from_str(&line) {
+            Ok(event) => Ok(Some(event)),
+            Err(_) if line.starts_with(CHILD_EVENT) => Ok(None),
+            Err(error) => Err(error).with_context(|| format!("bad zygote event: {line:.200}")),
+        }
     }
 
     /// Whether the zygote process is still running.
