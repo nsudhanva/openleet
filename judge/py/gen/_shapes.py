@@ -187,3 +187,37 @@ def random_bst(rng, n, lean=None):
         stack.append((lo, mid - 1, mid, 0))
         stack.append((mid + 1, hi, mid, 1))
     return root, left, right
+
+
+def nary_tree(rng, n, max_depth):
+    """LeetCode's level-order list (None ends each child group) for an n-node N-ary tree of
+    height at most max_depth: a chain of max_depth, 300 or no nodes from the root, the rest
+    attached at random, half of them to the root when the tree has a hub."""
+    children = [[] for _ in range(n)]
+    depth = [1] * n
+    chain = rng.choice((max_depth, 0, 300))
+    for v in range(1, chain):
+        children[v - 1].append(v)
+        depth[v] = depth[v - 1] + 1
+    hub = rng.random() < 0.5
+    for v in range(max(chain, 1), n):
+        if hub and rng.random() < 0.5:
+            parent = 0
+        else:
+            parent = rng.randrange(v)
+            while depth[parent] >= max_depth:
+                parent = rng.randrange(v)
+        children[parent].append(v)
+        depth[v] = depth[parent] + 1
+    for kids in children:
+        rng.shuffle(kids)
+    vals = [rng.randint(0, 10**4) for _ in range(n)]
+    out, queue = [vals[0], None], [0]
+    for node in queue:
+        for child in children[node]:
+            out.append(vals[child])
+            queue.append(child)
+        out.append(None)
+    while out and out[-1] is None:
+        out.pop()
+    return out

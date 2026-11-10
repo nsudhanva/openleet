@@ -1,6 +1,8 @@
 """Symmetric Tree at 999 nodes: a random half mirrored (true), or the same with one value or
 one child moved deep in the tree (false at the last comparison)."""
 
+from _shapes import level_order
+
 SEEDS = 3
 HALF = 499
 
@@ -50,16 +52,4 @@ def generate(rng):
         tl[parent], tr[parent] = tr[parent], tl[parent]
         if tl[parent] is not None and tr[parent] is not None:
             tv[node] = tv[node] + 1 if tv[node] < 100 else tv[node] - 1
-    out, queue, i = [], [0], 0
-    while i < len(queue):
-        node = queue[i]
-        i += 1
-        if node is None:
-            out.append(None)
-            continue
-        out.append(tv[node])
-        queue.append(tl[node])
-        queue.append(tr[node])
-    while out and out[-1] is None:
-        out.pop()
-    return {"root": out}
+    return {"root": level_order(tv, tl, tr)}
