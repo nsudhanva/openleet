@@ -145,6 +145,25 @@ def shaped_tree(rng, n, kind):
     return left, right
 
 
+def insert_bst(vals, order, empty=None):
+    """The BST made by inserting the nodes of `order` (the first is the root) keyed by vals,
+    equal keys going right. It is built as a Cartesian tree (in-order by key, heap-ordered by
+    insertion time), so a sorted order, which makes a chain, costs O(n log n) rather than O(n^2).
+    """
+    time = {node: t for t, node in enumerate(order)}
+    left, right = [empty] * len(vals), [empty] * len(vals)
+    stack = []
+    for node in sorted(order, key=lambda i: (vals[i], time[i])):
+        last = empty
+        while stack and time[stack[-1]] > time[node]:
+            last = stack.pop()
+        left[node] = last
+        if stack:
+            right[stack[-1]] = node
+        stack.append(node)
+    return left, right
+
+
 def random_bst(rng, n, lean=None):
     """(root, left, right) of a BST whose node ids are their in-order ranks 0..n-1. Each subtree's
     root is a random rank, or with lean 'right' / 'left' its smallest / largest, giving a chain."""
