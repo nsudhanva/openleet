@@ -29,6 +29,7 @@ def generate(rng):
                 stack.append((left[node], lo, values[node], depth + 1, node))
             if right[node] is not None:
                 stack.append((right[node], values[node], hi, depth + 1, node))
+        assert best is not None, "the tree has a leaf with a bounded ancestor"
         _, leaf, parent, far = best
         # Equal to the ancestor (invalid under strict ordering), or just past its bound.
         past = far - 1 if far < values[parent] else far + 1

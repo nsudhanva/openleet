@@ -11,7 +11,8 @@ CALLS = 10**4
 def generate(rng):
     alpha = rng.choice(["ab", "abc"])
     words = [random_string(rng, alpha, rng.randint(1, 7)) for _ in range(WORDS)]
-    ops, args = ["WordFilter"], [[words]]
+    ops: list[str] = ["WordFilter"]
+    args: list[list] = [[words]]
     for _ in range(CALLS):
         if rng.random() < 0.7:
             w = rng.choice(words)

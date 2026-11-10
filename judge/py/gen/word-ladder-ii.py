@@ -48,5 +48,6 @@ def generate(rng):
         size = shortest_paths_size(begin, end, words)
         if size <= CAP and (best is None or size > best[0]):
             best = (size, begin, end)
+    assert best is not None, "one of the 12 pairs fits the cap"
     _, begin, end = best
     return {"beginWord": begin, "endWord": end, "wordList": words}

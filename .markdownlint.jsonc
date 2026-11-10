@@ -1,0 +1,6 @@
+// markdownlint (markdownlint-cli2): wrap prose at 100 like the code; tables, code and
+// headings may run longer.
+{
+  "default": true,
+  "MD013": { "line_length": 100, "tables": false, "code_blocks": false, "headings": false }
+}

@@ -1,7 +1,7 @@
 # OpenLeet
 
 Flashcards and a Python judge for the LeetCode problems top tech companies ask, plus every free
-problem from 1 to 1000. Live: https://openleet.sudhanva.me
+problem from 1 to 1000. Live: <https://openleet.sudhanva.me>
 
 ## How it fits together
 
@@ -35,7 +35,7 @@ sequenceDiagram
     Z->>C: fork
     loop each test
         C-->>J: output
-        J->>J: compare; stop at first failure
+        J->>J: compare, stop at first failure
     end
     J->>J: watchdog kills at the CPU limit
     J-->>S: verdict, passed/total, CPU ms
@@ -103,7 +103,7 @@ cargo fmt --check && cargo clippy --all-targets && cargo test
 uv run ruff check && uv run ty check
 ```
 
-```
+```text
 server/  Rust API + web app     judge/   judge daemon + judge/py sandbox
 proto/   shared wire types      web/     React SPA
 src/     Python data tools      data/    problems, approaches, judge specs and tests

@@ -31,16 +31,19 @@ def generate(rng):
     vals = [rng.randint(-100, 100) for _ in range(HALF)]
     # Nodes: 0 = root, 1..HALF = left copy, HALF+1..2*HALF = mirrored copy.
     total = 2 * HALF + 1
-    tv, tl, tr = [0] * total, [None] * total, [None] * total
+    tv = [0] * total
+    tl: list[int | None] = [None] * total
+    tr: list[int | None] = [None] * total
     tv[0] = rng.randint(-100, 100)
     tl[0], tr[0] = 1, HALF + 1
     for v in range(HALF):
         a, b = 1 + v, HALF + 1 + v
         tv[a] = tv[b] = vals[v]
-        tl[a] = None if left[v] is None else 1 + left[v]
-        tr[a] = None if right[v] is None else 1 + right[v]
-        tl[b] = None if right[v] is None else HALF + 1 + right[v]
-        tr[b] = None if left[v] is None else HALF + 1 + left[v]
+        lv, rv = left[v], right[v]
+        tl[a] = None if lv is None else 1 + lv
+        tr[a] = None if rv is None else 1 + rv
+        tl[b] = None if rv is None else HALF + 1 + rv
+        tr[b] = None if lv is None else HALF + 1 + lv
     if shape == 1:
         node = HALF + 1 + rng.randrange(HALF)
         tv[node] = tv[node] + 1 if tv[node] < 100 else tv[node] - 1
