@@ -184,21 +184,17 @@ def _smoke_spoil(arg):
         _SMOKE["start"] += 1
 
 
-def _smoke_size(args):
-    """Elements in the list and string arguments, one level of nesting counted (grids)."""
-    sized = [a for a in args if isinstance(a, (str, list, tuple))]
-    lists = [a for a in sized if isinstance(a, list)]
-    inner = sum(len(x) for a in lists for x in a if isinstance(x, (list, str)))
-    return sum(len(a) for a in sized) + inner
-
-
 def _smoke_before(args):
     mode = _SMOKE["mode"]
     if mode == "crash":
         raise ZeroDivisionError("smoke: deliberate crash")
     if mode == "slow":
-        for _ in range(_smoke_size(args) ** 3):
-            pass
+        # Passes the first two tests, then runs forever: a time limit with tests passed,
+        # whatever the problem's limit is.
+        _SMOKE["calls"] = _SMOKE.get("calls", 0) + 1
+        if _SMOKE["calls"] > 2:
+            while True:
+                pass
     elif mode == "spin":
         while True:
             pass
@@ -207,7 +203,8 @@ def _smoke_before(args):
     elif mode == "grow":
         chunks = []
         while True:
-            chunks.append(b"x" * (16 << 20))
+            # Big steps: the memory limit comes long before the time limit, even on a slow VM.
+            chunks.append(b"x" * (64 << 20))
     elif mode == "fork":
         while True:
             _smoke_os.fork()
@@ -417,8 +414,8 @@ def abuse_problem(specs: dict[str, dict]) -> str:
 
 
 def slow_problems(specs: dict[str, dict], rng: random.Random, count: int) -> list[str]:
-    """Stress problems with big list or string inputs (the reference needs 100 ms or more)
-    and a limit of 8 s or less, so a cubic busy loop runs out of time on them only."""
+    """Stress problems with big list or string inputs and a limit of 8 s or less, so the slow
+    variant's time limit comes quickly."""
     sized = [
         slug
         for slug, e in sorted(specs.items())
@@ -625,7 +622,7 @@ class Smoke:
             return None if body["passed"] > 0 else "no test passed before the limit"
 
         self.check(
-            "slow (n^3 busy loop)",
+            "slow (spins after 2 tests)",
             slug,
             "time_limit_exceeded, passed>0",
             lambda: self.verdict(
