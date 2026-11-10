@@ -200,10 +200,12 @@ impl<'a> Run<'a> {
                 next_test,
                 Some(format!("The process ended unexpectedly ({done:?})")),
             ),
+            // Judge faults in the child report themselves (`sandbox`); a quiet, clean exit
+            // before the last test is the solution's doing (os._exit(0), closing the pipe).
             None if self.cases.len() < self.job.tests.len() => (
-                Verdict::InternalError,
+                Verdict::RuntimeError,
                 next_test,
-                Some("The run ended before every test ran".into()),
+                Some("The program exited before every test ran".into()),
             ),
             None => (Verdict::Accepted, None, None),
         };
@@ -447,12 +449,12 @@ mod tests {
     }
 
     #[test]
-    fn clean_exit_with_missing_tests_is_internal() {
+    fn clean_exit_with_missing_tests_is_a_runtime_error() {
         let job = job(2, Some("[1,2]"));
         let mut run = start(&job);
         run.child_event(event(r#"{"i":0,"out":1}"#), 0);
         let outcome = run.finish(&done(CLEAN));
-        assert_eq!(outcome.verdict, Verdict::InternalError);
+        assert_eq!(outcome.verdict, Verdict::RuntimeError);
         assert_eq!(outcome.failed, Some(1));
     }
 
