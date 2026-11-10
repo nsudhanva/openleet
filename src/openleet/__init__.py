@@ -36,9 +36,12 @@ def main() -> None:
             "brief",
             "publish",
             "fetch",
+            "migrate-corpus",
         ],
     )
-    judge.add_argument("slugs", nargs="*", help="brief: problems to describe")
+    judge.add_argument(
+        "args", nargs="*", help="brief: problems to describe; migrate-corpus: IN OUT"
+    )
     args = parser.parse_args()
 
     if args.command == "ingest":
@@ -48,7 +51,7 @@ def main() -> None:
     elif args.command == "judge":
         from openleet.judging.cli import run
 
-        run(args.stage, args.slugs, args.problems)
+        run(args.stage, args.args, args.problems)
     else:
         from openleet.approaches import check
 

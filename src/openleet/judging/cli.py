@@ -9,6 +9,7 @@ from openleet.judging.assemble import assemble
 from openleet.judging.brief import brief
 from openleet.judging.corpus import fetch, publish
 from openleet.judging.prepare import prepare
+from openleet.judging.testdb import migrate
 
 # The stages `judge all` runs, in order.
 PIPELINE = ("prepare", "vote", "assemble", "stress", "final")
@@ -63,16 +64,24 @@ def stress() -> None:
     )
 
 
-def run(stage: str, slugs: list[str], problems_path: Path) -> None:
+def migrate_corpus(paths: list[str]) -> None:
+    """Converts a corpus file to the current schema (see testdb.migrate)."""
+    if len(paths) != 2:
+        raise SystemExit("usage: openleet judge migrate-corpus IN OUT")
+    migrate(Path(paths[0]), Path(paths[1]))
+
+
+def run(stage: str, args: list[str], problems_path: Path) -> None:
     stages = {
         "prepare": lambda: prepare(problems_path),
         "vote": vote,
         "assemble": assemble,
         "stress": stress,
         "final": assemble,
-        "brief": lambda: brief(slugs, problems_path),
+        "brief": lambda: brief(args, problems_path),
         "publish": publish,
         "fetch": fetch,
+        "migrate-corpus": lambda: migrate_corpus(args),
     }
     for name in PIPELINE if stage == "all" else [stage]:
         stages[name]()

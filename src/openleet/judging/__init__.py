@@ -10,6 +10,8 @@ Pipeline (`uv run openleet judge all`):
 
 `judge publish` uploads tests.duckdb as a GitHub release asset (it is too big for git) and
 records it in data/judge/corpus.json; `judge fetch` downloads and verifies that asset.
+`judge migrate-corpus IN OUT` rewrites a corpus file of an older schema in the current one
+(testdb.py) and checks every test survived unchanged.
 
 Inputs come from LeetCodeDataset (Apache-2.0) and the statements' own examples; expected
 outputs are never copied from a dataset, only computed by running independent reference

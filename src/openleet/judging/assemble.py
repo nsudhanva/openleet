@@ -13,8 +13,6 @@ import math
 from collections.abc import Callable
 from typing import Any
 
-import duckdb
-
 from openleet.judging import (
     JUDGE_DIR,
     RESULTS_DIR,
@@ -26,13 +24,13 @@ from openleet.judging import (
     trusted,
     unsupported,
 )
+from openleet.judging.testdb import TEST_KINDS, write_jsonl
 
 FLOAT_TOLERANCE = 1e-5
 # Larger exact stress answers are stored as a SHA-256 of their printed form.
 DIGEST_MIN_BYTES = 16384
 # Strictest first; any-order problems start at "unordered".
 CHECKERS = ("exact", "unordered", "unordered_nested")
-TEST_KINDS = ("example", "hidden", "stress")
 
 type Matcher = Callable[[Any, Any], bool]
 
@@ -72,10 +70,10 @@ def matcher(checker: str, floats: bool) -> Matcher:
 
 
 def expected_columns(test: dict, entry: dict) -> tuple[str | None, str | None]:
-    """A test's `expected` and `expected_sha256` columns: the answer as canonical JSON, or,
-    for a big stress answer compared exactly, only the SHA-256 of the line the sandboxed child
-    prints for it (judge/py/zygote.py `send`). Equal values print as equal bytes there, so
-    the judge compares a submission's raw output bytes against the digest."""
+    """A test's `expected` and `expected_sha256` columns (see testdb.SCHEMA): the answer as
+    canonical JSON, or, for a big stress answer compared exactly, only the SHA-256 of the line
+    the sandboxed child prints for it (judge/py/zygote.py `send`). Equal values print as equal
+    bytes there, so the judge compares a submission's raw output bytes against the digest."""
     if test["kind"] == "stress" and entry["checker"] == "exact" and not entry["floats"]:
         printed = json.dumps(test["expected"], separators=(",", ":"), ensure_ascii=False)
         data = printed.encode()
@@ -218,7 +216,7 @@ def assemble() -> None:
                     "slug": slug,
                     "idx": i,
                     "kind": test["kind"],
-                    "test": key(test["test"]),
+                    "test_case": key(test["test"]),
                     "expected": expected,
                     "expected_sha256": digest,
                 }
@@ -231,18 +229,7 @@ def assemble() -> None:
     staging = WORK_DIR / "tests.jsonl"
     with staging.open("w") as out:
         out.writelines(key(row) + "\n" for row in rows)
-    TESTS_PATH.unlink(missing_ok=True)
-    # Sorted by slug so the server's lookups skip all row groups but one; DuckDB's own
-    # compression (dictionary, FSST) keeps the corpus small.
-    with duckdb.connect(str(TESTS_PATH)) as con:
-        con.execute(
-            f"""CREATE TABLE tests AS
-            FROM read_json('{staging}', columns = {{slug: 'VARCHAR', idx: 'USMALLINT',
-                kind: 'VARCHAR', test: 'VARCHAR', expected: 'VARCHAR',
-                expected_sha256: 'VARCHAR'}})
-            ORDER BY slug, idx"""
-        )
-        con.execute("CHECKPOINT")
+    write_jsonl(TESTS_PATH, staging, "openleet judge assemble")
     staging.unlink()
     supported = sum(s["supported"] for s in specs.values())
     print(f"{supported}/{len(specs)} problems judged, {len(rows)} tests -> {TESTS_PATH}")
