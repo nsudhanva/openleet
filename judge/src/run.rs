@@ -159,6 +159,11 @@ impl<'a> Run<'a> {
             return;
         }
         let Some(i) = ev.i else { return };
+        // The child keeps running until the kill lands; tests it finishes after the deciding
+        // one must not count as passed.
+        if self.settled.is_some() && self.job.stop_on_failure {
+            return;
+        }
         let (output, ok, failure) = if ev.mle == Some(true) {
             (None, None, Some((Verdict::MemoryLimitExceeded, None)))
         } else if let Some(error) = ev.error {
@@ -296,6 +301,21 @@ mod tests {
         assert_eq!(outcome.failed, Some(1));
         assert_eq!(outcome.error, None);
         assert_eq!(outcome.cases[1].ok, Some(false));
+    }
+
+    #[test]
+    fn tests_after_the_failure_do_not_count() {
+        let job = job(4, Some("[1,2,3,4]"));
+        let mut run = start(&job);
+        run.child_event(event(r#"{"i":0,"out":1}"#), 0);
+        run.child_event(event(r#"{"i":1,"out":5}"#), 0);
+        // The child got further before the kill landed.
+        run.child_event(event(r#"{"i":2,"out":3}"#), 0);
+        run.child_event(event(r#"{"i":3,"out":4}"#), 0);
+        let outcome = run.finish(&done(CLEAN));
+        assert_eq!(outcome.verdict, Verdict::WrongAnswer);
+        assert_eq!(outcome.failed, Some(1));
+        assert_eq!(outcome.cases.len(), 2);
     }
 
     #[test]
