@@ -13,16 +13,25 @@ dependencies = [
 openleet = "openleet:main"
 
 [build-system]
-requires = ["uv_build>=0.13.0,<0.14.0"]
+requires = ["uv_build>=0.13.7,<0.14.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "actionlint-py>=1.7.12.25",
     "debugpy>=1.8.22",
     "prek>=0.5.10",
-    "ruff>=0.17.2",
+    "ruff>=0.17.4",
+    "shellcheck-py>=0.11.0.1",
+    "ty>=0.0.100",
+    { include-group = "judge" },
+]
+# The packages the judge's Python offers submissions beyond the standard library (see
+# judge/py/prelude.py). The judge (deploy/install.sh, the Dockerfile, `openleet judge`) installs
+# them from judge/py/requirements.txt, which the judge-requirements git hook exports from this
+# group and uv.lock: change them here only.
+judge = [
     "sortedcontainers==2.4.0",
-    "ty>=0.0.92",
 ]
 
 [tool.ruff]

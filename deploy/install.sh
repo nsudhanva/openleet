@@ -1,14 +1,16 @@
 #!/bin/sh
 # Sets up a fresh Ubuntu server for openleet (run once as root):
 #   sudo deploy/install.sh    then fill in /etc/openleet.env and run /opt/openleet/update.sh
-# With --units-only (update.sh runs it from each release), it only refreshes the systemd units
-# and the update script.
+# With --units-only (update.sh runs it from each release), it only refreshes the systemd units,
+# the update script and the judge's Python packages.
 set -eu
 ROOT=/opt/openleet
 ENV_FILE=/etc/openleet.env
 UNIT_DIR=/etc/systemd/system
 HERE=$(cd "$(dirname "$0")" && pwd)
 PYTHON=3.15
+# The installer at a fixed version's URL, not the moving latest one.
+UV_VERSION=0.13.7
 
 # Every openleet* file next to this script is a unit; the ones with an [Install] section get enabled.
 install_units() {
@@ -24,8 +26,20 @@ install_units() {
 	if [ "$changed" = 1 ]; then systemctl daemon-reload; fi
 }
 
+# The judge's Python packages, pinned with hashes in judge/py/requirements.txt (exported from
+# pyproject.toml). Releases carry that file, so a version change deploys itself like the units;
+# a bare copy of deploy/ does not, and the first update.sh installs them instead.
+install_judge_packages() {
+	requirements="$HERE/../judge/py/requirements.txt"
+	if [ -f "$requirements" ]; then
+		uv pip sync --quiet --python "$ROOT/venv/bin/python" --require-hashes "$requirements"
+		chmod -R a+rX "$ROOT/venv"
+	fi
+}
+
 if [ "${1:-}" = "--units-only" ]; then
 	install_units
+	install_judge_packages
 	exit 0
 fi
 
@@ -36,13 +50,13 @@ mkdir -p "$ROOT/releases"
 
 # Python for submissions: a uv-managed CPython, world-readable so the sandbox user can run it.
 if ! command -v uv >/dev/null; then
-	curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
+	curl -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
 fi
 export UV_PYTHON_INSTALL_DIR="$ROOT/python"
 uv python install "$PYTHON"
 uv venv --allow-existing --python "$PYTHON" "$ROOT/venv"
-uv pip install --python "$ROOT/venv/bin/python" sortedcontainers==2.4.0
 chmod -R a+rX "$ROOT/python" "$ROOT/venv"
+install_judge_packages
 
 if [ ! -f "$ENV_FILE" ]; then
 	cat >"$ENV_FILE" <<'ENV'
