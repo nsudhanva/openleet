@@ -28,8 +28,6 @@ from typing import *  # noqa: F403
 import sortedcontainers
 from sortedcontainers import SortedDict, SortedList, SortedSet
 
-inf = float("inf")
-
 __all__ = [
     "ListNode",
     "Node",
@@ -41,7 +39,6 @@ __all__ = [
     "collections",
     "functools",
     "heapq",
-    "inf",
     "itertools",
     "math",
     "operator",
