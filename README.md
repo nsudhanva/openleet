@@ -1,7 +1,7 @@
 # OpenLeet
 
 Practice the LeetCode problems that top tech companies ask, with flashcards that schedule your
-reviews and a judge that runs your solutions in the browser.
+reviews and a judge for the Python solutions you write in the browser.
 
 [Live site](https://openleet.sudhanva.me) · [Quick start](#quick-start) · [Docs](docs/)
 
@@ -11,10 +11,13 @@ reviews and a judge that runs your solutions in the browser.
   6 months or all time), plus every free problem from 1 to 1000.
 - Flashcards: name a problem's topics, then check the approach and its complexity. Spaced
   repetition decides when each card comes back.
-- Write Python solutions and run them against the examples, hidden tests and large stress tests,
-  with the same verdicts LeetCode gives.
+- Run your solutions against the examples, hidden tests and large stress tests, with the same
+  verdicts LeetCode gives.
+- After an accepted submission, a button offers the next problem in your practice plan: a list,
+  topic, difficulty and order you can change at any time. Recent plans are remembered, and you
+  can pin the ones you want to keep.
 - A readiness score for each company, plus your streak and weakest topics.
-- Keyboard shortcuts for every action, listed on the site's About page.
+- Keyboard shortcuts, listed on the site's About page.
 - No account. Progress is stored on the server you run it on.
 
 ## Quick start

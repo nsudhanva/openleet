@@ -25,7 +25,7 @@ Every part is a systemd unit enabled at boot, so a reboot needs no manual step.
 - systemd restarts the server if it exits or stops answering its watchdog.
   `openleet-health.timer` restarts the server after three failed health checks and the judge
   when it is down.
-- The TLS certificate renews itself 30 days before it expires.
+- The server renews its TLS certificate 30 days before it expires.
 - The database is copied to `/var/lib/openleet/backups/` every day, and the last 14 copies are
   kept.
 

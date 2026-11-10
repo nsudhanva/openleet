@@ -1,7 +1,7 @@
 # Architecture
 
-OpenLeet is one Rust server that serves the web app and a JSON API, a judge daemon that runs
-submissions, and a DuckDB database file.
+OpenLeet has three parts: a Rust server for the web app and the JSON API, a judge daemon that
+runs submissions, and a DuckDB database file.
 
 ```mermaid
 flowchart LR

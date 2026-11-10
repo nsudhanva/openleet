@@ -19,7 +19,7 @@ All endpoints are under `/api` and return JSON.
 | `POST /run` `{slug, code, input?}` | Run the examples or your own input |
 | `POST /submit` `{slug, code}` | Run every test |
 | `GET /submissions?slug=` | Your submissions for a problem |
-| `GET /next?slug=&company=&period=&topic=&difficulty=&status=&order=` | A plan's next problem after `slug`, its progress and, from `slug`, up to four related plans |
+| `GET /next?slug=&company=&period=&topic=&difficulty=&status=&order=` | The plan's next problem after `slug`, the plan's progress, and up to four related plans |
 | `GET /plans` | Your pinned plans, then your recent ones, each with its progress and next problem |
 | `PUT /plans` `{company, period, topic, difficulty, status, order}` | Remember a plan you used; returns it |
 | `PATCH /plans/:id` `{name?, pinned?}` | Rename (`null` drops the name) or pin a plan |
@@ -28,14 +28,14 @@ All endpoints are under `/api` and return JSON.
 | `GET /version` | The running revision |
 
 `period` is `30d`, `3m`, `6m`, `all` or `lc1000`. `difficulty` is `Easy`, `Medium` or `Hard`.
-`status` is `unsolved` (no accepted submission), `untried` (no submission) or `all`; a plan
-without one is `unsolved`, a problem list shows every problem. `order` is `rank` (list order, the
-default), `number`, `easy-first` or `random` (a shuffle that is the same on every request).
-Unknown filter values are ignored.
+`status` is `unsolved` (no accepted submission), `untried` (no submission) or `all`. A plan
+without a status uses `unsolved`, and a problem list without one shows every problem. `order` is
+`rank` (list order, the default), `number`, `easy-first` or `random` (a shuffle that is the same
+on every request). Unknown filter values are ignored.
 
-A practice plan is a list, its filters, a status and an order, built from data the app already
-has. Its next problem carries no topics. Up to 8 unpinned plans are kept (the least recently used
-go first) and 50 pinned ones; a plan name is 1 to 60 characters.
+A practice plan is a list, its filters, a status and an order. `/next` never returns the next
+problem's topics, so it cannot give away a flashcard's answer. The server keeps the 8 most
+recently used unpinned plans and up to 50 pinned ones. A plan name is 1 to 60 characters.
 
 Errors are `{"error": "..."}` with status 400 for invalid input, 404 for an unknown problem, plan
 or endpoint, and 415 when the body is not `application/json`.
