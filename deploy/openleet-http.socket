@@ -1,0 +1,13 @@
+# Port 80 (plain HTTP: redirects to HTTPS), held by systemd so restarts drop no connection.
+# One socket unit per port: a socket unit has a single FileDescriptorName.
+[Unit]
+Description=OpenLeet HTTP socket
+
+[Socket]
+ListenStream=80
+FileDescriptorName=http
+NoDelay=true
+Service=openleet.service
+
+[Install]
+WantedBy=sockets.target

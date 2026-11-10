@@ -58,12 +58,17 @@ impl Sockets {
             var("LISTEN_FDNAMES").as_deref(),
             std::process::id(),
         );
-        let by_name = fds
-            .into_iter()
+        let mut by_name = HashMap::new();
+        for (name, fd) in fds {
             // SAFETY: systemd passed these descriptors to this process (LISTEN_PID matches),
             // they stay open, and this is the only place that takes ownership of them.
-            .map(|(name, fd)| (name, unsafe { OwnedFd::from_raw_fd(fd) }))
-            .collect();
+            let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+            // A socket unit has one FileDescriptorName for all its sockets: two ports in one
+            // unit arrive under the same name, and only one of them would be served.
+            if by_name.insert(name.clone(), fd).is_some() {
+                tracing::warn!("systemd passed two sockets named {name}; one is unused");
+            }
+        }
         Self { by_name }
     }
 

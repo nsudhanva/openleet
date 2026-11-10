@@ -13,9 +13,18 @@ PYTHON=3.15
 UV_VERSION=0.13.7
 
 # Every openleet* file next to this script is a unit; the ones with an [Install] section get
-# enabled, and timers and path units started.
+# enabled, and sockets, timers and path units started.
 install_units() {
 	changed=0
+	# Units an earlier release installed but this one no longer ships.
+	for path in "$UNIT_DIR"/openleet*; do
+		[ -e "$path" ] || continue
+		unit=${path##*/}
+		[ -e "$HERE/$unit" ] && continue
+		systemctl disable --now --quiet "$unit" || true
+		rm -f "$path"
+		changed=1
+	done
 	for path in "$HERE"/openleet*; do
 		unit=${path##*/}
 		if ! cmp -s "$path" "$UNIT_DIR/$unit"; then
@@ -25,12 +34,13 @@ install_units() {
 	done
 	install -m 0755 "$HERE/update.sh" "$ROOT/update.sh"
 	if [ "$changed" = 1 ]; then systemctl daemon-reload; fi
-	# Idempotent, so a release that adds a unit enables it too; timers and path units start now.
+	# Idempotent, so a release that adds a unit enables it too; sockets, timers and path units
+	# start now.
 	for path in "$HERE"/openleet*; do
 		unit=${path##*/}
 		grep -q '^\[Install\]' "$path" || continue
 		systemctl enable --quiet "$unit"
-		case "$unit" in *.timer | *.path) systemctl start "$unit" ;; esac
+		case "$unit" in *.timer | *.path | *.socket) systemctl start "$unit" ;; esac
 	done
 }
 
