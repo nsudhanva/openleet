@@ -2,6 +2,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import {
 	ChevronLeftIcon,
 	ChevronRightIcon,
+	CodeXmlIcon,
 	LockIcon,
 	RotateCcwIcon,
 	SearchIcon,
@@ -12,7 +13,7 @@ import { DifficultyBadge } from "@/components/difficulty-badge";
 import { ListBadge } from "@/components/list-badge";
 import { PageHeader } from "@/components/page-header";
 import { Segmented } from "@/components/segmented";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
 	Table,
@@ -25,25 +26,37 @@ import {
 import { useFitCount } from "@/hooks/use-fit-count";
 import { useHotkeys } from "@/hooks/use-hotkeys";
 import { useSearch } from "@/hooks/use-search";
-import { percent, timeFrom } from "@/lib/format";
-import { PERIOD_LABEL, PERIODS, type Period } from "@/lib/types";
-import { listProblems, resetProgress } from "@/server/functions";
-import type { ProblemRow } from "@/server/service";
+import { api } from "@/lib/api";
+import { pageTitle, percent, timeFrom } from "@/lib/format";
+import { askedIn, inList } from "@/lib/problem-list";
+import {
+	type Asked,
+	isAskedPeriod,
+	PERIOD_LABEL,
+	PERIODS,
+	type Period,
+	type ProblemRow,
+} from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/problems")({
-	head: () => ({ meta: [{ title: "Problems | Google LeetCode cards" }] }),
-	loader: () => listProblems(),
+	head: () => ({ meta: [{ title: pageTitle("Problems") }] }),
+	loader: () => api.problems(),
 	component: Problems,
 });
 
 const ROW_HEIGHT = 37;
-/** Enough for every problem, so the pager counts all matches. */
+/** The API's largest page; a query rarely matches more, so the pager counts all matches. */
 const SEARCH_LIMIT = 1000;
 
 const PERIOD_OPTIONS = PERIODS.map((value) => ({
 	value,
 	label: PERIOD_LABEL[value],
 }));
+
+function formatFrequency(asked: Asked | undefined): string {
+	return asked ? String(Math.round(asked.frequency)) : "";
+}
 
 function statusText(row: ProblemRow): string {
 	if (row.status === "new") return "";
@@ -62,12 +75,8 @@ function Problems() {
 	const pageSize = useFitCount(tableArea, ROW_HEIGHT) - 1;
 
 	const hits = useSearch(query, SEARCH_LIMIT);
-	// Only problems asked in the chosen period, in that period's frequency order.
-	const inPeriod = rows
-		.filter((r) => r.asked[period])
-		.sort(
-			(a, b) => (a.asked[period]?.rank ?? 0) - (b.asked[period]?.rank ?? 0),
-		);
+	// Only problems in the chosen list, in its order.
+	const inPeriod = inList(rows, period);
 	const bySlug = new Map(inPeriod.map((r) => [r.slug, r]));
 	const results = query.trim()
 		? hits.flatMap((hit) => {
@@ -84,7 +93,7 @@ function Problems() {
 	useHotkeys({ ArrowLeft: () => turn(-1), ArrowRight: () => turn(1) });
 
 	async function reset(slug: string) {
-		await resetProgress({ data: { slug } });
+		await api.clearProgress({ slug });
 		await router.invalidate();
 	}
 
@@ -95,7 +104,7 @@ function Problems() {
 				actions={
 					<div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
 						<Segmented
-							label="Asked in"
+							label="Problem list"
 							value={period}
 							options={PERIOD_OPTIONS}
 							onChange={(next) => {
@@ -122,9 +131,10 @@ function Problems() {
 					</div>
 				}
 			>
-				{inPeriod.length} problems Google asked in the last{" "}
-				{PERIOD_LABEL[period]}, most frequent first. Topics stay hidden unless
-				you search for one.
+				{isAskedPeriod(period)
+					? `${inPeriod.length} problems Google asked in the last ${PERIOD_LABEL[period]}, most frequent first.`
+					: `${inPeriod.length} free LeetCode problems numbered 1 to 1000, in order; ranks are Google's for 6 months.`}{" "}
+				Topics stay hidden unless you search for one.
 			</PageHeader>
 
 			<div
@@ -146,6 +156,9 @@ function Problems() {
 								Last topics
 							</TableHead>
 							<TableHead className="w-10">
+								<span className="sr-only">Code</span>
+							</TableHead>
+							<TableHead className="w-10">
 								<span className="sr-only">Clear progress</span>
 							</TableHead>
 						</TableRow>
@@ -154,10 +167,10 @@ function Problems() {
 						{visible.map(({ row, snippet }) => (
 							<TableRow key={row.slug} className="h-[37px]">
 								<TableCell className="text-right text-muted-foreground tabular-nums">
-									{row.asked[period]?.rank}
+									{askedIn(row, period)?.rank}
 								</TableCell>
 								<TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">
-									{Math.round(row.asked[period]?.frequency ?? 0)}
+									{formatFrequency(askedIn(row, period))}
 								</TableCell>
 								<TableCell className="text-muted-foreground tabular-nums">
 									{row.id}
@@ -165,7 +178,7 @@ function Problems() {
 								<TableCell className="w-full max-w-0">
 									<Link
 										to="/"
-										search={{ set: "all", slug: row.slug }}
+										search={{ set: "all", period, slug: row.slug }}
 										className="flex items-baseline gap-2 font-medium hover:text-primary hover:underline"
 									>
 										<span className="max-w-full shrink-0 truncate">
@@ -195,6 +208,22 @@ function Problems() {
 								</TableCell>
 								<TableCell className="hidden text-right tabular-nums md:table-cell">
 									{row.lastScore === null ? "—" : percent(row.lastScore)}
+								</TableCell>
+								<TableCell>
+									{!row.premium && (
+										<Link
+											to="/code/$slug"
+											params={{ slug: row.slug }}
+											className={cn(
+												buttonVariants({ variant: "ghost", size: "icon-xs" }),
+												"text-muted-foreground",
+											)}
+											aria-label={`Code ${row.title}`}
+											title="Solve it in Python"
+										>
+											<CodeXmlIcon />
+										</Link>
+									)}
 								</TableCell>
 								<TableCell>
 									{row.lastAt && (

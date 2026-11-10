@@ -5,6 +5,8 @@ The CSVs (liquidslr/leetcode-company-wise-problems) give, for the last 30 days, 
 is the full set; the shorter periods are subsets of it.
 doocs/leetcode (CC BY-SA 4.0) gives the problem statement. Premium problems keep no statement:
 the app links to LeetCode for those.
+The classic list adds every free problem numbered 1 to 1000 that Google did not ask; those have an
+empty `asked`, and their difficulty and topics come from the doocs front matter.
 """
 
 import csv
@@ -36,11 +38,16 @@ PROBLEMS_PATH = DATA_DIR / "problems.json"
 
 DESCRIPTION = re.compile(r"<!-- description:start -->(.*?)<!-- description:end -->", re.S)
 INDEX_LINK = re.compile(r"\[(.+)\]\((/solution/.+)\)")
+LEETCODE_LINK = re.compile(r"^# \[\d+\. .+\]\((https://leetcode\.com/problems/[^)]+)\)", re.M)
+FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---", re.S)
+# The classic list: every free problem numbered 1 to CLASSIC_MAX.
+CLASSIC_MAX = 1000
 
 
 @dataclass(frozen=True)
 class DoocsEntry:
     id: int
+    title: str
     path: str
     premium: bool
 
@@ -89,7 +96,7 @@ def parse_doocs_index(markdown: str) -> dict[str, DoocsEntry]:
             continue
         if link := INDEX_LINK.match(cells[1]):
             title, path = link.groups()
-            entries[title_key(title)] = DoocsEntry(int(cells[0]), path, "🔒" in cells[-1])
+            entries[title_key(title)] = DoocsEntry(int(cells[0]), title, path, "🔒" in cells[-1])
     return entries
 
 
@@ -102,6 +109,42 @@ def description(entry: DoocsEntry) -> str | None:
         return None
     match = DESCRIPTION.search(readme(entry))
     return sanitize_html(match.group(1)) if match else None
+
+
+def front_matter(markdown: str) -> tuple[str, list[str]]:
+    """Difficulty and topic tags from a doocs README's YAML front matter."""
+    match = FRONT_MATTER.match(markdown)
+    if not match:
+        raise SystemExit("doocs README without front matter")
+    difficulty, tags, in_tags = "", [], False
+    for line in match.group(1).splitlines():
+        if line.startswith("difficulty:"):
+            difficulty = line.split(":", 1)[1].strip()
+        in_tags = line.startswith("tags:") or (in_tags and line.startswith(" "))
+        if in_tags and line.strip().startswith("- "):
+            tags.append(line.strip()[2:].strip())
+    return difficulty, tags
+
+
+def classic_problem(entry: DoocsEntry) -> Problem:
+    """A free problem numbered 1 to 1000 that Google did not ask."""
+    markdown = readme(entry)
+    link = LEETCODE_LINK.search(markdown)
+    if not link:
+        raise SystemExit(f"No LeetCode link in doocs README {entry.id}")
+    url = link.group(1).rstrip("/")
+    difficulty, tags = front_matter(markdown)
+    return Problem(
+        id=entry.id,
+        slug=slug_from_url(url),
+        title=entry.title,
+        difficulty=difficulty,
+        asked={},
+        url=url,
+        topics=tags,
+        premium=False,
+        description=description(entry),
+    )
 
 
 def slug_from_url(url: str) -> str:
@@ -135,7 +178,7 @@ def build_problems() -> list[Problem]:
     with ThreadPoolExecutor(max_workers=8) as pool:
         descriptions = list(pool.map(description, entries))
 
-    return [
+    google = [
         Problem(
             id=entry.id,
             slug=slug_from_url(row["Link"]),
@@ -149,6 +192,17 @@ def build_problems() -> list[Problem]:
         )
         for row, entry, text in zip(rows, entries, descriptions, strict=True)
     ]
+    asked_ids = {problem.id for problem in google}
+    classic = sorted(
+        (
+            e
+            for e in index.values()
+            if e.id <= CLASSIC_MAX and not e.premium and e.id not in asked_ids
+        ),
+        key=lambda e: e.id,
+    )
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return google + list(pool.map(classic_problem, classic))
 
 
 def ingest() -> None:
@@ -157,10 +211,15 @@ def ingest() -> None:
         "sources": {
             "lists": {period: f"{LIST_URL}/{name}" for period, name in PERIODS.items()},
             "statements": "https://github.com/doocs/leetcode (CC BY-SA 4.0)",
+            "classic": f"free problems 1 to {CLASSIC_MAX} from the doocs index",
             "fetchedAt": datetime.now(UTC).date().isoformat(),
         },
         "problems": [asdict(problem) for problem in problems],
     }
     PROBLEMS_PATH.write_text(json.dumps(document, indent=1, ensure_ascii=False) + "\n")
     premium = sum(problem.premium for problem in problems)
-    print(f"Wrote {len(problems)} problems ({premium} premium) to {PROBLEMS_PATH}")
+    classic = sum(not problem.asked for problem in problems)
+    print(
+        f"Wrote {len(problems)} problems ({premium} premium, {classic} classic-only) "
+        f"to {PROBLEMS_PATH}"
+    )

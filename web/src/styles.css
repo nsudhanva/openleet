@@ -40,6 +40,16 @@
 	--card-rule: #cddbf0;
 	--card-margin: #dc4f64;
 	--ruled: 1.7em;
+
+	/* Code editor (CodeMirror reads these, see components/code/editor-theme.ts). */
+	--code-selection: #cddbf0;
+	--code-active-line: #f1f4f8;
+	--syntax-keyword: #2b3f9e;
+	--syntax-string: #17784d;
+	--syntax-number: #a35f00;
+	--syntax-comment: #6b7686;
+	--syntax-function: #a8325a;
+	--syntax-type: #0f6b80;
 }
 
 .dark {
@@ -69,6 +79,15 @@
 
 	--card-rule: #223149;
 	--card-margin: #e0607a;
+
+	--code-selection: #2a3d5c;
+	--code-active-line: #1c2531;
+	--syntax-keyword: #a4b4ff;
+	--syntax-string: #4cc38a;
+	--syntax-number: #f0a84a;
+	--syntax-comment: #8590a0;
+	--syntax-function: #f08fb0;
+	--syntax-type: #6fd0e0;
 }
 
 @theme inline {

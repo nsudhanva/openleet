@@ -4,16 +4,15 @@ import { ConfirmClear } from "@/components/confirm-clear";
 import { FitPages } from "@/components/fit-pages";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { percent } from "@/lib/format";
+import { api } from "@/lib/api";
+import { pageTitle, percent } from "@/lib/format";
 import type { StudySet } from "@/lib/scheduler";
-import type { Difficulty } from "@/lib/types";
+import type { DailyScore, Difficulty } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import type { DailyScore } from "@/server/db";
-import { getReport, resetProgress } from "@/server/functions";
 
 export const Route = createFileRoute("/progress")({
-	head: () => ({ meta: [{ title: "Progress | Google LeetCode cards" }] }),
-	loader: () => getReport(),
+	head: () => ({ meta: [{ title: pageTitle("Progress") }] }),
+	loader: () => api.report(),
 	component: Progress,
 });
 
@@ -265,7 +264,7 @@ function ResetAll() {
 			title="Clear all progress?"
 			description="This deletes every graded card, both lists and the score history. Your own answers stay."
 			onClear={async () => {
-				await resetProgress({ data: { all: true } });
+				await api.clearProgress({ all: true });
 				await router.invalidate();
 			}}
 		>

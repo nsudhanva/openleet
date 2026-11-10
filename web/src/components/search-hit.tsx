@@ -1,5 +1,5 @@
 import { DifficultyBadge } from "@/components/difficulty-badge";
-import type { SearchField, SearchHit } from "@/lib/search";
+import type { SearchField, SearchHit } from "@/lib/types";
 
 const MATCHED_IN: Partial<Record<SearchField, string>> = {
 	topic: "matched a topic",

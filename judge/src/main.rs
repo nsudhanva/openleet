@@ -1,0 +1,114 @@
+//! The judge daemon: runs Python submissions in a sandboxed zygote, one job at a time, for the
+//! web server, over a Unix socket (protocol in the `judge-proto` crate).
+
+mod checker;
+mod run;
+mod watchdog;
+mod zygote;
+
+use std::os::unix::fs::PermissionsExt;
+
+use anyhow::{Context, Result};
+use judge_proto::{DEFAULT_SOCKET, Endpoint, Job, Outcome};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::net::{TcpListener, UnixListener};
+
+use crate::zygote::Zygote;
+
+/// Largest job accepted (code plus every test and expected output).
+const MAX_JOB_BYTES: usize = 64 << 20;
+
+struct Config {
+    socket: String,
+    python: String,
+    script: String,
+}
+
+impl Config {
+    fn from_env() -> Self {
+        let var =
+            |name: &str, default: &str| std::env::var(name).unwrap_or_else(|_| default.into());
+        Self {
+            socket: var("JUDGE_SOCKET", DEFAULT_SOCKET),
+            python: var("JUDGE_PYTHON", "python3"),
+            script: var("JUDGE_ZYGOTE", "/opt/judge/zygote.py"),
+        }
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<()> {
+    let config = Config::from_env();
+    let endpoint: Endpoint = config.socket.parse()?;
+    let listener = Listener::bind(&endpoint)?;
+    let mut zygote = Zygote::spawn(&config.python, &config.script).await?;
+    eprintln!("judge: listening on {endpoint}");
+    // One job at a time: the VM has one core's worth of CPU to give, and timing must be fair.
+    loop {
+        let (read, write) = listener.accept().await?;
+        if !zygote.alive() {
+            zygote = Zygote::spawn(&config.python, &config.script).await?;
+        }
+        if let Err(error) = serve(read, write, &mut zygote).await {
+            eprintln!("judge: {error:#}");
+            zygote = Zygote::spawn(&config.python, &config.script).await?;
+        }
+    }
+}
+
+type Reader = Box<dyn AsyncRead + Unpin + Send>;
+type Writer = Box<dyn AsyncWrite + Unpin + Send>;
+
+enum Listener {
+    Unix(UnixListener),
+    Tcp(TcpListener),
+}
+
+impl Listener {
+    fn bind(endpoint: &Endpoint) -> Result<Self> {
+        Ok(match endpoint {
+            Endpoint::Unix(path) => {
+                if path.exists() {
+                    std::fs::remove_file(path)?;
+                }
+                let listener = UnixListener::bind(path)
+                    .with_context(|| format!("binding {}", path.display()))?;
+                // The web server runs as another user.
+                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o666))?;
+                Self::Unix(listener)
+            }
+            Endpoint::Tcp(address) => {
+                let listener = std::net::TcpListener::bind(address)?;
+                listener.set_nonblocking(true)?;
+                Self::Tcp(TcpListener::from_std(listener)?)
+            }
+        })
+    }
+
+    async fn accept(&self) -> Result<(Reader, Writer)> {
+        Ok(match self {
+            Self::Unix(listener) => {
+                let (read, write) = listener.accept().await?.0.into_split();
+                (Box::new(read), Box::new(write))
+            }
+            Self::Tcp(listener) => {
+                let (read, write) = listener.accept().await?.0.into_split();
+                (Box::new(read), Box::new(write))
+            }
+        })
+    }
+}
+
+async fn serve(read: Reader, mut write: Writer, zygote: &mut Zygote) -> Result<()> {
+    let mut line = Vec::new();
+    let mut reader = BufReader::new(read).take(MAX_JOB_BYTES as u64);
+    reader.read_until(b'\n', &mut line).await?;
+    let outcome = match serde_json::from_slice::<Job>(&line) {
+        Ok(job) => run::execute(zygote, &job).await?,
+        Err(error) => Outcome::internal(format!("bad job: {error}")),
+    };
+    let mut reply = serde_json::to_vec(&outcome)?;
+    reply.push(b'\n');
+    write.write_all(&reply).await?;
+    Ok(())
+}

@@ -2,9 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Kbd } from "@/components/ui/kbd";
+import { pageTitle } from "@/lib/format";
 
 export const Route = createFileRoute("/about")({
-	head: () => ({ meta: [{ title: "About | Google LeetCode cards" }] }),
+	head: () => ({ meta: [{ title: pageTitle("About") }] }),
 	component: About,
 });
 
@@ -19,6 +20,8 @@ const SHORTCUTS: [string, string][] = [
 	["M", "Write your own answer; it shows on the card from then on"],
 	["← →", "Turn the pages of a long statement"],
 	["/ or ⌘K", "Search by number, title, topic or text"],
+	["⌘↵", "Code page: run the examples or your test case"],
+	["⌘⇧↵", "Code page: submit against every test"],
 ];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -88,8 +91,11 @@ function About() {
 							The app serves JSON under <code>/api</code>:{" "}
 							<code>GET /api/search?q=</code>, <code>GET /api/problems</code>,{" "}
 							<code>GET /api/problems/:slug</code>, <code>GET /api/deck</code>,{" "}
-							<code>POST /api/attempts</code>, <code>DELETE /api/progress</code>{" "}
-							and <code>GET /api/report</code>.
+							<code>POST /api/attempts</code>, <code>DELETE /api/progress</code>
+							, <code>GET /api/report</code>, and for code{" "}
+							<code>GET /api/code/:slug</code>, <code>POST /api/run</code>,{" "}
+							<code>POST /api/submit</code> and{" "}
+							<code>GET /api/submissions</code>.
 						</p>
 					</Section>
 					<Section title="Sources">

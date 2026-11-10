@@ -18,3 +18,10 @@ export function timeFrom(at: number, now = Date.now()): string {
 export function percent(value: number, digits = 0): string {
 	return `${(value * 100).toFixed(digits)}%`;
 }
+
+const SITE = "Google LeetCode cards";
+
+/** "Problems | Google LeetCode cards"; the site name alone without parts. */
+export function pageTitle(...parts: string[]): string {
+	return [...parts, SITE].join(" | ");
+}

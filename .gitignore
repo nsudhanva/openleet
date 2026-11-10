@@ -46,3 +46,11 @@ client_secret*.json
 data/.cache/
 data/*.db
 data/*.db-*
+
+# Local server state (DuckDB); the judge corpus in data/judge is committed
+data/*.duckdb
+data/*.duckdb.wal
+data/acme/
+
+# Rust build output
+target/

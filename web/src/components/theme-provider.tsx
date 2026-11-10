@@ -1,18 +1,7 @@
-import { ScriptOnce } from "@tanstack/react-router";
 import { createContext, type ReactNode, use, useEffect, useState } from "react";
+import { THEME_STORAGE_KEY, type Theme } from "@/lib/theme";
 
-export type Theme = "light" | "dark" | "system";
-
-const STORAGE_KEY = "leetcode-cards:theme";
-
-// Runs before first paint so a stored dark theme never flashes light.
-const themeScript = `(() => {
-	try {
-		const t = localStorage.getItem(${JSON.stringify(STORAGE_KEY)});
-		const dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
-		document.documentElement.classList.toggle("dark", dark);
-	} catch {}
-})()`;
+export type { Theme };
 
 interface ThemeContextValue {
 	theme: Theme;
@@ -23,20 +12,16 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function readStoredTheme(): Theme {
 	try {
-		const stored = window.localStorage.getItem(STORAGE_KEY);
+		const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
 		return stored === "light" || stored === "dark" ? stored : "system";
 	} catch {
 		return "system";
 	}
 }
 
+/** Light, dark or the system's choice; index.html applies the stored one before first paint. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-	// Starts as "system" on both server and client; the stored choice loads after hydration.
-	const [theme, setThemeState] = useState<Theme>("system");
-
-	useEffect(() => {
-		setThemeState(readStoredTheme());
-	}, []);
+	const [theme, setThemeState] = useState<Theme>(readStoredTheme);
 
 	useEffect(() => {
 		const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -53,19 +38,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 	function setTheme(next: Theme) {
 		setThemeState(next);
 		try {
-			if (next === "system") window.localStorage.removeItem(STORAGE_KEY);
-			else window.localStorage.setItem(STORAGE_KEY, next);
+			if (next === "system") window.localStorage.removeItem(THEME_STORAGE_KEY);
+			else window.localStorage.setItem(THEME_STORAGE_KEY, next);
 		} catch {
 			// Storage unavailable: the choice lasts for this page view only.
 		}
 	}
 
-	return (
-		<ThemeContext value={{ theme, setTheme }}>
-			<ScriptOnce>{themeScript}</ScriptOnce>
-			{children}
-		</ThemeContext>
-	);
+	return <ThemeContext value={{ theme, setTheme }}>{children}</ThemeContext>;
 }
 
 export function useTheme(): ThemeContextValue {

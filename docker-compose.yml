@@ -1,36 +1,16 @@
-# Runs the published images: `docker compose up -d` (pull first with `docker compose pull`).
-# Locally, docker-compose.override.yml builds the images instead, then open http://google.localhost.
-# On a server, put SITE_ADDRESS=your.domain and BIND=0.0.0.0 in .env next to this file.
-# Set HTTP_PORT if something else already owns port 80 (then use http://google.localhost:$HTTP_PORT).
+# Local development on macOS or Windows: the judge in a Linux container (see Dockerfile).
+# Production does not use Docker; see deploy/ and the README.
 services:
-  web:
-    image: ghcr.io/nsudhanva/google-web:latest
-    restart: unless-stopped
-    environment:
-      # Day boundaries for streaks and the daily trend, such as America/Los_Angeles.
-      TZ: ${TZ:-UTC}
-    volumes:
-      - progress:/state
-    # Node's heap is capped at 64 MB in the image; this bounds the whole process.
-    mem_limit: 192m
-
-  caddy:
-    image: ghcr.io/nsudhanva/google-caddy:latest
-    restart: unless-stopped
-    environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:-http://google.localhost}
-      # Make Go's garbage collector keep Caddy small.
-      GOMEMLIMIT: 48MiB
+  judge:
+    build: .
     ports:
-      - "${BIND:-127.0.0.1}:${HTTP_PORT:-80}:80"
-      - "${BIND:-127.0.0.1}:${HTTPS_PORT:-443}:443"
-      - "${BIND:-127.0.0.1}:${HTTPS_PORT:-443}:443/udp"
-    volumes:
-      - caddy-data:/data
-    mem_limit: 96m
-    depends_on:
-      - web
-
-volumes:
-  progress:
-  caddy-data:
+      - "127.0.0.1:7777:7777"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, KILL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 512m

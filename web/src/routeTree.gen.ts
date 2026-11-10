@@ -13,14 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as ProblemsRouteImport } from './routes/problems'
 import { Route as ProgressRouteImport } from './routes/progress'
-import { Route as ApiAttemptsRouteImport } from './routes/api/attempts'
-import { Route as ApiDeckRouteImport } from './routes/api/deck'
-import { Route as ApiNotesRouteImport } from './routes/api/notes'
-import { Route as ApiProgressRouteImport } from './routes/api/progress'
-import { Route as ApiReportRouteImport } from './routes/api/report'
-import { Route as ApiSearchRouteImport } from './routes/api/search'
-import { Route as ApiProblemsIndexRouteImport } from './routes/api/problems/index'
-import { Route as ApiProblemsSlugRouteImport } from './routes/api/problems/$slug'
+import { Route as CodeSlugRouteImport } from './routes/code.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -42,44 +35,9 @@ const ProgressRoute = ProgressRouteImport.update({
   path: '/progress',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAttemptsRoute = ApiAttemptsRouteImport.update({
-  id: '/api/attempts',
-  path: '/api/attempts',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiDeckRoute = ApiDeckRouteImport.update({
-  id: '/api/deck',
-  path: '/api/deck',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiNotesRoute = ApiNotesRouteImport.update({
-  id: '/api/notes',
-  path: '/api/notes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiProgressRoute = ApiProgressRouteImport.update({
-  id: '/api/progress',
-  path: '/api/progress',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiReportRoute = ApiReportRouteImport.update({
-  id: '/api/report',
-  path: '/api/report',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiSearchRoute = ApiSearchRouteImport.update({
-  id: '/api/search',
-  path: '/api/search',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiProblemsIndexRoute = ApiProblemsIndexRouteImport.update({
-  id: '/api/problems/',
-  path: '/api/problems/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiProblemsSlugRoute = ApiProblemsSlugRouteImport.update({
-  id: '/api/problems/$slug',
-  path: '/api/problems/$slug',
+const CodeSlugRoute = CodeSlugRouteImport.update({
+  id: '/code/$slug',
+  path: '/code/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -88,28 +46,14 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/problems': typeof ProblemsRoute
   '/progress': typeof ProgressRoute
-  '/api/attempts': typeof ApiAttemptsRoute
-  '/api/deck': typeof ApiDeckRoute
-  '/api/notes': typeof ApiNotesRoute
-  '/api/progress': typeof ApiProgressRoute
-  '/api/report': typeof ApiReportRoute
-  '/api/search': typeof ApiSearchRoute
-  '/api/problems/$slug': typeof ApiProblemsSlugRoute
-  '/api/problems/': typeof ApiProblemsIndexRoute
+  '/code/$slug': typeof CodeSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/problems': typeof ProblemsRoute
   '/progress': typeof ProgressRoute
-  '/api/attempts': typeof ApiAttemptsRoute
-  '/api/deck': typeof ApiDeckRoute
-  '/api/notes': typeof ApiNotesRoute
-  '/api/progress': typeof ApiProgressRoute
-  '/api/report': typeof ApiReportRoute
-  '/api/search': typeof ApiSearchRoute
-  '/api/problems/$slug': typeof ApiProblemsSlugRoute
-  '/api/problems': typeof ApiProblemsIndexRoute
+  '/code/$slug': typeof CodeSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -117,58 +61,14 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/problems': typeof ProblemsRoute
   '/progress': typeof ProgressRoute
-  '/api/attempts': typeof ApiAttemptsRoute
-  '/api/deck': typeof ApiDeckRoute
-  '/api/notes': typeof ApiNotesRoute
-  '/api/progress': typeof ApiProgressRoute
-  '/api/report': typeof ApiReportRoute
-  '/api/search': typeof ApiSearchRoute
-  '/api/problems/$slug': typeof ApiProblemsSlugRoute
-  '/api/problems/': typeof ApiProblemsIndexRoute
+  '/code/$slug': typeof CodeSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/about'
-    | '/problems'
-    | '/progress'
-    | '/api/attempts'
-    | '/api/deck'
-    | '/api/notes'
-    | '/api/progress'
-    | '/api/report'
-    | '/api/search'
-    | '/api/problems/$slug'
-    | '/api/problems/'
+  fullPaths: '/' | '/about' | '/problems' | '/progress' | '/code/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/about'
-    | '/problems'
-    | '/progress'
-    | '/api/attempts'
-    | '/api/deck'
-    | '/api/notes'
-    | '/api/progress'
-    | '/api/report'
-    | '/api/search'
-    | '/api/problems/$slug'
-    | '/api/problems'
-  id:
-    | '__root__'
-    | '/'
-    | '/about'
-    | '/problems'
-    | '/progress'
-    | '/api/attempts'
-    | '/api/deck'
-    | '/api/notes'
-    | '/api/progress'
-    | '/api/report'
-    | '/api/search'
-    | '/api/problems/$slug'
-    | '/api/problems/'
+  to: '/' | '/about' | '/problems' | '/progress' | '/code/$slug'
+  id: '__root__' | '/' | '/about' | '/problems' | '/progress' | '/code/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -176,14 +76,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   ProblemsRoute: typeof ProblemsRoute
   ProgressRoute: typeof ProgressRoute
-  ApiAttemptsRoute: typeof ApiAttemptsRoute
-  ApiDeckRoute: typeof ApiDeckRoute
-  ApiNotesRoute: typeof ApiNotesRoute
-  ApiProgressRoute: typeof ApiProgressRoute
-  ApiReportRoute: typeof ApiReportRoute
-  ApiSearchRoute: typeof ApiSearchRoute
-  ApiProblemsSlugRoute: typeof ApiProblemsSlugRoute
-  ApiProblemsIndexRoute: typeof ApiProblemsIndexRoute
+  CodeSlugRoute: typeof CodeSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -216,60 +109,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProgressRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/attempts': {
-      id: '/api/attempts'
-      path: '/api/attempts'
-      fullPath: '/api/attempts'
-      preLoaderRoute: typeof ApiAttemptsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/deck': {
-      id: '/api/deck'
-      path: '/api/deck'
-      fullPath: '/api/deck'
-      preLoaderRoute: typeof ApiDeckRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/notes': {
-      id: '/api/notes'
-      path: '/api/notes'
-      fullPath: '/api/notes'
-      preLoaderRoute: typeof ApiNotesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/progress': {
-      id: '/api/progress'
-      path: '/api/progress'
-      fullPath: '/api/progress'
-      preLoaderRoute: typeof ApiProgressRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/report': {
-      id: '/api/report'
-      path: '/api/report'
-      fullPath: '/api/report'
-      preLoaderRoute: typeof ApiReportRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/search': {
-      id: '/api/search'
-      path: '/api/search'
-      fullPath: '/api/search'
-      preLoaderRoute: typeof ApiSearchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/problems/': {
-      id: '/api/problems/'
-      path: '/api/problems'
-      fullPath: '/api/problems/'
-      preLoaderRoute: typeof ApiProblemsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/problems/$slug': {
-      id: '/api/problems/$slug'
-      path: '/api/problems/$slug'
-      fullPath: '/api/problems/$slug'
-      preLoaderRoute: typeof ApiProblemsSlugRouteImport
+    '/code/$slug': {
+      id: '/code/$slug'
+      path: '/code/$slug'
+      fullPath: '/code/$slug'
+      preLoaderRoute: typeof CodeSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -280,24 +124,8 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   ProblemsRoute: ProblemsRoute,
   ProgressRoute: ProgressRoute,
-  ApiAttemptsRoute: ApiAttemptsRoute,
-  ApiDeckRoute: ApiDeckRoute,
-  ApiNotesRoute: ApiNotesRoute,
-  ApiProgressRoute: ApiProgressRoute,
-  ApiReportRoute: ApiReportRoute,
-  ApiSearchRoute: ApiSearchRoute,
-  ApiProblemsSlugRoute: ApiProblemsSlugRoute,
-  ApiProblemsIndexRoute: ApiProblemsIndexRoute,
+  CodeSlugRoute: CodeSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

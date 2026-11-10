@@ -1,12 +1,9 @@
-# Pulls the images CI publishes to GHCR and recreates only the containers whose image changed.
-# Install deploy/update.sh as /opt/google-cards/update.sh.
+# Installs the newest release CI published, if it is not the running one (deploy/update.sh).
 [Unit]
-Description=Update google-cards from GHCR
-After=docker.service network-online.target
+Description=Update google-cards to the latest release
+After=network-online.target
 Wants=network-online.target
-Requires=docker.service
 
 [Service]
 Type=oneshot
-WorkingDirectory=/opt/google-cards
 ExecStart=/opt/google-cards/update.sh

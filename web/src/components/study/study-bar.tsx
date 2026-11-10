@@ -11,6 +11,7 @@ import type { StudySearch } from "@/lib/schemas";
 import {
 	DIFFICULTIES,
 	type Difficulty,
+	isAskedPeriod,
 	PERIOD_LABEL,
 	PERIODS,
 	type Period,
@@ -22,7 +23,9 @@ const SET_ITEMS = Object.entries(STUDY_SETS).map(([value, label]) => ({
 }));
 const PERIOD_ITEMS = PERIODS.map((value) => ({
 	value,
-	label: `Asked in ${PERIOD_LABEL[value]}`,
+	label: isAskedPeriod(value)
+		? `Asked in ${PERIOD_LABEL[value]}`
+		: PERIOD_LABEL[value],
 }));
 
 function Picker<T extends string | null>({
@@ -75,7 +78,7 @@ export function StudyBar({
 	return (
 		<div className="flex flex-wrap items-center gap-2">
 			<Picker<Period>
-				label="Asked in"
+				label="Problem list"
 				value={search.period}
 				items={PERIOD_ITEMS}
 				onChange={(period) => onChange({ period, slug: undefined })}

@@ -1,9 +1,12 @@
 import { Badge } from "@/components/ui/badge";
-import { PERIOD_LABEL, PERIODS, type Problem } from "@/lib/types";
+import { ASKED_PERIODS, PERIOD_LABEL, type Problem } from "@/lib/types";
 
-/** Google's rank for the problem in each period it was asked; frequency on hover. */
+/**
+ * Google's rank for the problem in each period it was asked; frequency on hover. A classic
+ * problem Google did not ask has none.
+ */
 export function AskedBadges({ asked }: { asked: Problem["asked"] }) {
-	return PERIODS.map((period) => {
+	return ASKED_PERIODS.map((period) => {
 		const stat = asked[period];
 		if (!stat) return null;
 		return (

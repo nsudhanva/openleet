@@ -1,22 +1,22 @@
-import { ExternalLinkIcon, LightbulbIcon, RotateCcwIcon } from "lucide-react";
-import { type ComponentProps, type ReactNode, useState } from "react";
-import { AskedBadges } from "@/components/asked-badges";
+import { Link } from "@tanstack/react-router";
+import { CodeXmlIcon, LightbulbIcon, RotateCcwIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
+import { ActionButton } from "@/components/action-button";
 import { ConfirmClear } from "@/components/confirm-clear";
-import { DifficultyBadge } from "@/components/difficulty-badge";
 import { FitPages } from "@/components/fit-pages";
 import { InlineCode } from "@/components/inline-code";
+import { CARD_SURFACE, ProblemHeader } from "@/components/problem-header";
+import { ProblemStatement } from "@/components/problem-statement";
 import { Segmented } from "@/components/segmented";
 import { Answer } from "@/components/study/answer";
 import { CardHistory } from "@/components/study/card-history";
 import { MyAnswer } from "@/components/study/my-answer";
 import { TopicPicker } from "@/components/study/topic-picker";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
 import { useHotkeys } from "@/hooks/use-hotkeys";
 import { scoreTopics } from "@/lib/scorer";
-import type { Grade } from "@/lib/types";
+import type { Grade, StudyCard } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import type { StudyCard } from "@/server/service";
 
 export interface Answered {
 	grade: Grade;
@@ -34,19 +34,6 @@ const GRADE_ACTIONS: {
 	{ grade: "good", label: "Got it", key: "2", variant: "default" },
 	{ grade: "less", label: "Visit less often", key: "3", variant: "outline" },
 ];
-
-function Action({
-	label,
-	shortcut,
-	...props
-}: ComponentProps<typeof Button> & { label: string; shortcut: string }) {
-	return (
-		<Button {...props}>
-			{label}
-			<Kbd className="hidden sm:inline-flex">{shortcut}</Kbd>
-		</Button>
-	);
-}
 
 /**
  * One problem, sized to the screen: the statement on the left, the guess, hint and answer
@@ -122,50 +109,45 @@ export function Flashcard({
 	return (
 		<article
 			aria-labelledby="problem-title"
-			className="flex h-full min-h-0 flex-col overflow-hidden rounded-sm bg-card text-card-foreground shadow-[0_1px_0_var(--border),0_18px_40px_-24px_rgb(24_33_47/0.45)]"
+			className={cn(
+				"flex h-full min-h-0 flex-col overflow-hidden",
+				CARD_SURFACE,
+			)}
 		>
-			<header className="card-margin flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-3 pb-2 sm:px-6">
-				<h1
-					id="problem-title"
-					className="mr-auto text-xl leading-tight font-bold tracking-tight sm:text-2xl"
-				>
-					{problem.title}
-				</h1>
-				<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-					<DifficultyBadge difficulty={problem.difficulty} />
-					<AskedBadges asked={problem.asked} />
-					<CardHistory state={state} />
-					{state && (
-						<ConfirmClear
-							trigger={
-								<Button
-									variant="ghost"
-									size="icon-xs"
-									aria-label="Clear progress for this problem"
-									title="Clear progress"
-								/>
-							}
-							title={`Clear progress for ${problem.title}?`}
-							description="This deletes its grades and takes it off your lists. Your own answer stays."
-							onClear={onClear}
-						>
-							<RotateCcwIcon />
-						</ConfirmClear>
-					)}
-					<a
-						href={problem.url}
-						target="_blank"
-						rel="noreferrer"
+			<ProblemHeader problem={problem}>
+				<CardHistory state={state} />
+				{state && (
+					<ConfirmClear
+						trigger={
+							<Button
+								variant="ghost"
+								size="icon-xs"
+								aria-label="Clear progress for this problem"
+								title="Clear progress"
+							/>
+						}
+						title={`Clear progress for ${problem.title}?`}
+						description="This deletes its grades and takes it off your lists. Your own answer stays."
+						onClear={onClear}
+					>
+						<RotateCcwIcon />
+					</ConfirmClear>
+				)}
+				{problem.description && (
+					<Link
+						to="/code/$slug"
+						params={{ slug: problem.slug }}
 						className={cn(
 							buttonVariants({ variant: "ghost", size: "xs" }),
 							"text-muted-foreground",
 						)}
+						title="Solve it in Python"
 					>
-						LeetCode {problem.id}
-						<ExternalLinkIcon data-icon="inline-end" />
-					</a>
-				</div>
-			</header>
+						<CodeXmlIcon data-icon="inline-start" />
+						Code
+					</Link>
+				)}
+			</ProblemHeader>
 
 			<Segmented
 				label="Show"
@@ -180,19 +162,7 @@ export function Flashcard({
 
 			<div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
 				<Pane visible={pane === "problem"} className="px-4 py-3 sm:px-6">
-					{problem.description ? (
-						<FitPages arrowKeys className="statement h-full">
-							<div
-								// biome-ignore lint/security/noDangerouslySetInnerHtml: statements are allowlist-sanitized at ingest (src/google/sanitize.py)
-								dangerouslySetInnerHTML={{ __html: problem.description }}
-							/>
-						</FitPages>
-					) : (
-						<p className="text-muted-foreground">
-							This is a LeetCode Premium problem, so its statement is not stored
-							here. Open it on LeetCode to read it.
-						</p>
-					)}
+					<ProblemStatement problem={problem} arrowKeys />
 				</Pane>
 
 				<Pane
@@ -239,14 +209,14 @@ export function Flashcard({
 			</div>
 
 			<footer className="flex flex-wrap items-center gap-2 border-t px-4 py-2 sm:px-6">
-				<Action
+				<ActionButton
 					variant="ghost"
 					label="Back"
 					shortcut="B"
 					onClick={back}
 					disabled={(!revealed && !canGoBack) || busy}
 				/>
-				<Action
+				<ActionButton
 					variant="ghost"
 					label="My answer"
 					shortcut="M"
@@ -256,7 +226,7 @@ export function Flashcard({
 				{revealed ? (
 					<div className="ml-auto flex flex-wrap justify-end gap-2">
 						{GRADE_ACTIONS.map((a) => (
-							<Action
+							<ActionButton
 								key={a.grade}
 								variant={a.variant}
 								label={a.label}
@@ -268,14 +238,14 @@ export function Flashcard({
 					</div>
 				) : (
 					<>
-						<Action
+						<ActionButton
 							variant="ghost"
 							label="Skip"
 							shortcut="S"
 							onClick={() => answer("skip")}
 							disabled={busy}
 						/>
-						<Action
+						<ActionButton
 							variant="outline"
 							label={
 								hints.length > 1
@@ -286,7 +256,7 @@ export function Flashcard({
 							onClick={showHint}
 							disabled={hintsShown >= hints.length}
 						/>
-						<Action
+						<ActionButton
 							className="ml-auto"
 							label="Show answer"
 							shortcut="Enter"

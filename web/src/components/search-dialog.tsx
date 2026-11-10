@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { SearchIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { SearchHitLabel } from "@/components/search-hit";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +12,7 @@ import {
 	CommandList,
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
-import { useHotkeys } from "@/hooks/use-hotkeys";
+import { useHotkeys, useModKeys } from "@/hooks/use-hotkeys";
 import { useSearch } from "@/hooks/use-search";
 
 /** Jump to any problem by LeetCode number, title, topic or statement text (⌘K or /). */
@@ -23,16 +23,7 @@ export function SearchDialog() {
 	const navigate = useNavigate();
 
 	useHotkeys({ "/": () => setOpen(true) });
-	useEffect(() => {
-		function onKeyDown(event: KeyboardEvent) {
-			if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
-				event.preventDefault();
-				setOpen((o) => !o);
-			}
-		}
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, []);
+	useModKeys({ k: () => setOpen((o) => !o) });
 
 	function openProblem(slug: string) {
 		setOpen(false);

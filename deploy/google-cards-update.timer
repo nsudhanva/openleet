@@ -1,6 +1,6 @@
-# Checks for new images every 5 minutes, so a push to main is live within about 10 minutes.
+# Checks for a new release every 5 minutes, so a push to main is live within about 10 minutes.
 [Unit]
-Description=Check GHCR for new google-cards images
+Description=Check for a new google-cards release
 
 [Timer]
 OnBootSec=2min

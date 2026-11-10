@@ -5,7 +5,9 @@ description = "Python package for the google project"
 readme = "README.md"
 authors = [{ name = "Sudhanva Narayana", email = "nsudhanva@gmail.com" }]
 requires-python = ">=3.15"
-dependencies = []
+dependencies = [
+    "duckdb>=2.0.0",
+]
 
 [project.scripts]
 google = "google:main"

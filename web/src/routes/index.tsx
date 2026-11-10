@@ -8,14 +8,9 @@ import { useState } from "react";
 import { type Answered, Flashcard } from "@/components/study/flashcard";
 import { StudyBar } from "@/components/study/study-bar";
 import { buttonVariants } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import { STUDY_SETS } from "@/lib/scheduler";
 import { type StudySearch, studySearchSchema } from "@/lib/schemas";
-import {
-	getDeck,
-	recordAttempt,
-	resetProgress,
-	saveNote,
-} from "@/server/functions";
 
 export const Route = createFileRoute("/")({
 	validateSearch: studySearchSchema,
@@ -23,7 +18,7 @@ export const Route = createFileRoute("/")({
 		middlewares: [stripSearchParams({ set: "smart", period: "6m" })],
 	},
 	loaderDeps: ({ search }) => search,
-	loader: ({ deps }) => getDeck({ data: deps }),
+	loader: ({ deps }) => api.deck(deps),
 	component: Study,
 });
 
@@ -42,7 +37,7 @@ function Study() {
 		if (!card) return;
 		setBusy(true);
 		try {
-			await recordAttempt({ data: { slug: card.problem.slug, ...answered } });
+			await api.recordAttempt({ slug: card.problem.slug, ...answered });
 			setHistory((h) => [...h, card.problem.slug]);
 			// A pinned card (opened from the list, or reached with Back) returns to the queue.
 			if (search.slug) await go({ slug: undefined });
@@ -55,7 +50,7 @@ function Study() {
 	// Clearing keeps you on the same card, now unseen, instead of moving to the next one.
 	async function clear() {
 		if (!card) return;
-		await resetProgress({ data: { slug: card.problem.slug } });
+		await api.clearProgress({ slug: card.problem.slug });
 		if (search.slug) await router.invalidate();
 		else await go({ slug: card.problem.slug });
 	}
@@ -85,7 +80,7 @@ function Study() {
 					onBack={back}
 					onAnswer={answer}
 					onSaveNote={async (text) =>
-						(await saveNote({ data: { slug: card.problem.slug, text } })).note
+						(await api.saveNote(card.problem.slug, text)).note
 					}
 					onClear={clear}
 				/>

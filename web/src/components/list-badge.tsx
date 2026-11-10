@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import type { CardList } from "@/lib/scheduler";
+import type { CardList } from "@/lib/types";
 
 export const LIST_LABEL: Record<CardList, string> = {
 	again: "Visit again",

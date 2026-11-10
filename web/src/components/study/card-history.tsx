@@ -1,6 +1,6 @@
 import { ListBadge } from "@/components/list-badge";
 import { percent, timeFrom } from "@/lib/format";
-import type { CardState } from "@/lib/scheduler";
+import type { CardState } from "@/lib/types";
 
 export function CardHistory({ state }: { state: CardState | null }) {
 	if (!state) return null;

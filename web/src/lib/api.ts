@@ -1,0 +1,151 @@
+import { notFound } from "@tanstack/react-router";
+import type { StudySearch } from "@/lib/schemas";
+import type {
+	AttemptInput,
+	CodeInfo,
+	ProblemRow,
+	Report,
+	RunResult,
+	SearchHit,
+	StudyCard,
+	StudyDeck,
+	Submission,
+	SubmissionSummary,
+	SubmitResult,
+} from "@/lib/types";
+
+/** A non-2xx answer from the API, carrying the server's `error` message. */
+export class ApiError extends Error {
+	constructor(
+		readonly status: number,
+		message: string,
+	) {
+		super(message);
+		this.name = "ApiError";
+	}
+}
+
+type Query = Record<string, string | number | boolean | undefined>;
+
+interface Options {
+	query?: Query;
+	body?: unknown;
+	signal?: AbortSignal;
+	/** Lets the request finish after the page closes (draft saves). */
+	keepalive?: boolean;
+}
+
+function urlOf(path: string, query: Query = {}): string {
+	const params = new URLSearchParams();
+	for (const [key, value] of Object.entries(query)) {
+		if (value !== undefined) params.set(key, String(value));
+	}
+	const search = params.toString();
+	return search ? `${path}?${search}` : path;
+}
+
+async function errorMessage(response: Response): Promise<string> {
+	try {
+		const body: unknown = await response.json();
+		if (
+			typeof body === "object" &&
+			body !== null &&
+			"error" in body &&
+			typeof body.error === "string"
+		)
+			return body.error;
+	} catch {
+		// Not JSON (a proxy error page, for example): fall back to the status line.
+	}
+	return `${response.status} ${response.statusText}`.trim();
+}
+
+async function send(
+	method: string,
+	path: string,
+	{ query, body, signal, keepalive }: Options = {},
+): Promise<Response> {
+	const response = await fetch(urlOf(path, query), {
+		method,
+		signal,
+		keepalive,
+		headers:
+			body === undefined ? undefined : { "content-type": "application/json" },
+		body: body === undefined ? undefined : JSON.stringify(body),
+	});
+	if (!response.ok)
+		throw new ApiError(response.status, await errorMessage(response));
+	return response;
+}
+
+/** A request whose answer is JSON of type T. */
+async function json<T>(
+	method: string,
+	path: string,
+	options?: Options,
+): Promise<T> {
+	return (await send(method, path, options)).json() as Promise<T>;
+}
+
+/** A request answered with 204 No Content. */
+async function empty(
+	method: string,
+	path: string,
+	options?: Options,
+): Promise<void> {
+	await send(method, path, options);
+}
+
+const problemPath = (base: string, slug: string) =>
+	`${base}/${encodeURIComponent(slug)}`;
+
+/** Typed client for the JSON API under /api (see the README's API table). */
+export const api = {
+	deck: (filter: StudySearch) =>
+		json<StudyDeck>("GET", "/api/deck", { query: filter }),
+	recordAttempt: (attempt: AttemptInput) =>
+		json<{ score: number | null }>("POST", "/api/attempts", { body: attempt }),
+	/** Empty text deletes the note. */
+	saveNote: (slug: string, text: string) =>
+		json<{ note: string | null }>("PUT", "/api/notes", {
+			body: { slug, text },
+		}),
+	clearProgress: (target: { slug: string } | { all: true }) =>
+		empty("DELETE", "/api/progress", { query: target }),
+	problems: () => json<ProblemRow[]>("GET", "/api/problems"),
+	problem: (slug: string) =>
+		json<StudyCard>("GET", problemPath("/api/problems", slug)),
+	search: (q: string, limit: number, signal?: AbortSignal) =>
+		json<SearchHit[]>("GET", "/api/search", { query: { q, limit }, signal }),
+	report: () => json<Report>("GET", "/api/report"),
+	readiness: async () =>
+		(await json<{ readiness: number }>("GET", "/api/readiness")).readiness,
+
+	code: (slug: string) => json<CodeInfo>("GET", problemPath("/api/code", slug)),
+	/** Empty code deletes the draft. */
+	saveDraft: (slug: string, code: string, keepalive = false) =>
+		empty("PUT", "/api/drafts", { body: { slug, code }, keepalive }),
+	/** Runs the examples, or `input` (one JSON value per line, per parameter) when given. */
+	run: (slug: string, code: string, input?: string) =>
+		json<RunResult>("POST", "/api/run", { body: { slug, code, input } }),
+	submit: (slug: string, code: string) =>
+		json<SubmitResult>("POST", "/api/submit", { body: { slug, code } }),
+	submissions: (slug: string) =>
+		json<SubmissionSummary[]>("GET", "/api/submissions", { query: { slug } }),
+	submission: (id: number) => json<Submission>("GET", `/api/submissions/${id}`),
+};
+
+/** For route loaders: an unknown problem (404) shows the not-found page. */
+export async function orNotFound<T>(request: Promise<T>): Promise<T> {
+	try {
+		return await request;
+	} catch (error) {
+		if (error instanceof ApiError && error.status === 404) throw notFound();
+		throw error;
+	}
+}
+
+/** A message for the user from anything a request can throw. */
+export function messageOf(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}

@@ -32,7 +32,9 @@ describe("HTTP API, end to end", () => {
 
 	it("lists every problem without topics, and serves one full card", async () => {
 		const list = await api("/api/problems");
-		expect(list.body).toHaveLength(793);
+		// 793 Google problems, then the free LeetCode 1–1000 problems Google did not ask.
+		expect(list.body).toHaveLength(1175);
+		expect(list.body.at(-1).asked).toEqual({});
 		expect(list.body[0]).not.toHaveProperty("topics");
 
 		const card = await api("/api/problems/two-sum");
@@ -50,6 +52,8 @@ describe("HTTP API, end to end", () => {
 		const recent = await api("/api/deck?period=30d");
 		expect(recent.body.remaining).toBe(154);
 		expect(recent.body.card.problem.asked["30d"].rank).toBe(1);
+		const classic = await api("/api/deck?period=lc1000");
+		expect(classic.body.card.problem.id).toBe(1);
 		const stale = await api("/api/deck?slug=no-longer-listed");
 		expect(stale.body.card.problem.slug).toBe("two-sum");
 	});
@@ -125,9 +129,10 @@ describe("HTTP API, end to end", () => {
 		expect((await api("/api/problems/two-sum")).body.note).toBeNull();
 	});
 
-	it("renders the study page on the server", async () => {
-		const html = await (await fetch(`${base}/`)).text();
-		expect(html).toContain("Two Sum");
-		expect(html).toContain("Which topics does it use?");
+	it("serves the single-page app for any page", async () => {
+		for (const path of ["/", "/problems", "/code/two-sum"]) {
+			const html = await (await fetch(`${base}${path}`)).text();
+			expect(html).toContain('<div id="app">');
+		}
 	});
 });
