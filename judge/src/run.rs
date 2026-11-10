@@ -5,8 +5,9 @@
 //! than on the reference machine is the machine's slowdown. The watchdog allows the job's limit
 //! times the slowdown measured before, and CPU times are reported divided by the slowdown over
 //! the run, so a busy or throttled machine neither fails a solution nor makes it look slow. A
-//! run that hits the limit while the machine slows down (the e2-micro drops to a seventh of its
-//! speed when its burst allowance runs out) runs once more, with a limit for the slower machine.
+//! run that hits the limit runs once more when the machine slowed down during it (the e2-micro
+//! drops to a seventh of its speed when its burst allowance runs out) or when another run is
+//! cheap; a time limit stands only when both runs hit it.
 
 use std::time::Duration;
 
@@ -52,8 +53,11 @@ const REFERENCE_CALIBRATION_NS: f64 = 25_000_000.0;
 /// Slowdowns outside this range are measuring faults, not machines.
 const SLOWDOWNS: (f64, f64) = (0.2, 100.0);
 /// A run that hits the time limit runs again when the machine is this much slower after it
-/// than before.
+/// than before...
 const SLOWER: f64 = 1.25;
+/// ...or when running it again costs at most this much of the machine's CPU: a calibration
+/// is a moment's sample of a shared core, so one unlucky stretch must not decide a verdict.
+const RERUN_MACHINE_MS: u32 = 30_000;
 
 /// How many times longer than on the reference machine the calibration took.
 fn slowdown(calib_ns: u64) -> f64 {
@@ -71,11 +75,12 @@ fn reference_ms(machine_ms: f64, slowdown: f64) -> u32 {
     ms
 }
 
-/// Judges `job`, running it a second time when its first run hit the time limit while the
-/// machine slowed down: that run's limit was set for a faster machine.
+/// Judges `job`, running it a second time when its first run hit the time limit and that run
+/// may have been unlucky (see [`Run::worth_rerunning`]); a time limit stands only when both
+/// runs hit it.
 pub async fn judge(zygote: &mut Zygote, job: &Job) -> Result<Outcome> {
-    let (first, slowed) = execute(zygote, job).await?;
-    if first.verdict != Verdict::TimeLimitExceeded || !slowed {
+    let (first, worth_rerunning) = execute(zygote, job).await?;
+    if first.verdict != Verdict::TimeLimitExceeded || !worth_rerunning {
         return Ok(first);
     }
     let (mut second, _) = execute(zygote, job).await?;
@@ -98,7 +103,7 @@ fn shown(output: Box<RawValue>) -> Box<RawValue> {
     RawValue::from_string(note).unwrap_or(output)
 }
 
-/// Executes `job` once, and tells whether the machine slowed down by [`SLOWER`] meanwhile;
+/// Executes `job` once, and tells whether a time limit would be worth running again;
 /// judge faults come back as [`Verdict::InternalError`], never as `Err` unless the zygote
 /// itself broke (the caller then restarts it).
 async fn execute(zygote: &mut Zygote, job: &Job) -> Result<(Outcome, bool)> {
@@ -143,8 +148,8 @@ async fn execute(zygote: &mut Zygote, job: &Job) -> Result<(Outcome, bool)> {
         } else if event.ole == Some(true) {
             run.settle(Verdict::OutputLimitExceeded, None, None);
         } else if let Some(done) = event.done {
-            let slowed = run.slowed(&done);
-            return Ok((run.finish(&done), slowed));
+            let again = run.worth_rerunning(&done);
+            return Ok((run.finish(&done), again));
         } else if let Some(fatal) = event.fatal {
             return Ok((Outcome::internal(fatal), false));
         }
@@ -312,6 +317,12 @@ impl<'a> Run<'a> {
     /// Whether the machine was [`SLOWER`] after the run than before it.
     fn slowed(&self, done: &Done) -> bool {
         self.after(done) >= self.slowdown * SLOWER
+    }
+
+    /// Whether a time limit on this run would be worth running again: the machine slowed
+    /// down during it, or another run is cheap ([`RERUN_MACHINE_MS`]).
+    fn worth_rerunning(&self, done: &Done) -> bool {
+        self.slowed(done) || self.machine_limit_ms <= RERUN_MACHINE_MS
     }
 
     fn finish(mut self, done: &Done) -> Outcome {
@@ -648,6 +659,26 @@ mod tests {
         assert!(!run.slowed(&done(faster)));
         let outcome = run.finish(&done(faster));
         assert_eq!((outcome.verdict, outcome.cpu_ms), (Verdict::Accepted, 750));
+    }
+
+    #[test]
+    fn cheap_or_slowed_runs_are_worth_running_again() {
+        let steady =
+            done(r#"{"code":0,"signal":null,"cpu_ms":5,"maxrss_kb":1,"calib_ns":25000000}"#);
+        let mut job = job(1, Some("[1]"));
+        let mut run = start(&job);
+        run.start(7, 1.0, None);
+        assert!(
+            run.worth_rerunning(&steady),
+            "a 1 s limit is cheap to run again"
+        );
+        job.cpu_limit_ms = 60_000;
+        let mut run = start(&job);
+        run.start(7, 1.0, None);
+        assert!(!run.worth_rerunning(&steady));
+        let slowed =
+            done(r#"{"code":0,"signal":null,"cpu_ms":5,"maxrss_kb":1,"calib_ns":50000000}"#);
+        assert!(run.worth_rerunning(&slowed));
     }
 
     #[test]

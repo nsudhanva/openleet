@@ -65,9 +65,10 @@ machine is the machine's slowdown. The watchdog allows the limit times the slowd
 times are reported divided by it. On the e2-micro the slowdown is about 2.5 at rest and about 19
 once its burst allowance runs out, when CPU time per unit of work grows sevenfold without any
 steal time to show for it; the calibration slows by the same factor, to within 15 %. A run that
-hits the limit while the machine slowed down by 25 % or more runs once more. No run may use more
-than 120 s of the machine's CPU; when a slow machine cannot give a problem its full limit within
-that, the submission is not judged and the page asks for it again later.
+hits the limit runs once more when the machine slowed down by 25 % or more during it, or when
+another run costs at most 30 s of CPU, so a Time Limit Exceeded stands only when two runs agree.
+No run may use more than 120 s of the machine's CPU; when a slow machine cannot give a problem
+its full limit within that, the submission is not judged and the page asks for it again later.
 
 Each problem's limit comes from its trusted reference solutions (LeetCodeDataset's and
 doocs'), timed through the judge on exactly the tests a submission gets: 50× the fastest (but
