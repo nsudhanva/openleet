@@ -88,11 +88,25 @@ as the GitHub secret), run `sudo /opt/openleet/update.sh`.
 
 ## Run locally
 
-The judge needs Linux, so on macOS it runs in Docker:
+```mermaid
+flowchart LR
+    B[Browser] -- "http://openleet.localhost" --> C["caddy<br/>127.0.0.1:80"]
+    C --> A["app<br/>static binary, read-only"]
+    A -- "Unix socket<br/>(shared volume)" --> J["judge<br/>no network"]
+    A --> V[("state volume<br/>DuckDB")]
+```
+
+```bash
+docker compose up -d           # http://openleet.localhost (images from ghcr.io)
+docker compose up -d --build   # or build both images from this checkout
+HTTP_PORT=8088 docker compose up -d   # port 80 taken: http://openleet.localhost:8088
+```
+
+Working on the server: the judge needs Linux, so on macOS only the judge runs in Docker:
 
 ```bash
 uv sync && uv run openleet judge fetch && bun install && bun run build
-docker compose up -d judge
+docker compose --profile dev up -d judge-dev   # the judge on 127.0.0.1:7777
 JUDGE_SOCKET=tcp://127.0.0.1:7777 JUDGE_CPU_SCALE=1 cargo run --release -p openleet
 # http://localhost:8080   (bun run dev: web on :3000 with hot reload)
 ```
