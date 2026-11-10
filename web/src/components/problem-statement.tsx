@@ -17,7 +17,7 @@ export function ProblemStatement({
 	return (
 		<FitPages
 			arrowKeys={arrowKeys}
-			className={cn("statement h-full", className)}
+			className={cn("statement fit:h-full", className)}
 		>
 			<div
 				// biome-ignore lint/security/noDangerouslySetInnerHtml: statements are allowlist-sanitized at ingest (src/openleet/sanitize.py)

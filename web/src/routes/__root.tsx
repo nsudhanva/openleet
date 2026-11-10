@@ -45,8 +45,8 @@ function Root() {
 		<ThemeProvider>
 			<HeadContent />
 			<SiteHeader readiness={readiness} />
-			{/* Every page fits the screen below the 3rem header; overflow scrolls only on very small screens. */}
-			<main className="mx-auto flex h-[calc(100dvh-3rem)] w-full max-w-7xl flex-col overflow-y-auto px-3 py-3 sm:px-5">
+			{/* On a fit: screen every page fits it below the 3rem header; elsewhere the document scrolls. */}
+			<main className="mx-auto flex w-full max-w-7xl flex-col px-3 py-3 sm:px-5 fit:h-[calc(100dvh-3rem)] fit:overflow-y-auto">
 				<Outlet />
 			</main>
 			<TanStackDevtools

@@ -5,6 +5,14 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
+ * `fit:` styles a screen big enough, and driven by a mouse or trackpad, for a page to fit it
+ * whole: the study and code cards fill it and a long statement pages (← →) instead of
+ * scrolling. Phones, tablets and short windows scroll like a document. lib/screen.ts asks
+ * the same media query of JavaScript (FIT_SCREEN; a test keeps the two the same).
+ */
+@custom-variant fit (@media (min-width: 64rem) and (min-height: 40rem) and (pointer: fine));
+
+/*
  * Atkinson Hyperlegible Next and Mono (SIL OFL 1.1, fonts/OFL.txt), from Fontsource's variable
  * files (@fontsource-variable/atkinson-hyperlegible-next and -mono 5.3.0), made smaller for
  * the first load: cut to the weights the app uses, 400 to 700, and Fontsource's Latin file
@@ -148,6 +156,9 @@
 }
 
 @theme inline {
+	/* Below xs (a 320 to 375 px phone) the site header tightens to fit its one row. */
+	--breakpoint-xs: 24rem;
+
 	--font-sans: "Atkinson Hyperlegible Next Variable", ui-sans-serif, system-ui, sans-serif;
 	--font-mono: "Atkinson Hyperlegible Mono Variable", ui-monospace, monospace;
 
@@ -206,7 +217,7 @@
 @layer components {
 	/* index.html's shell: a nav link as components/site-header.tsx draws it (a small ghost button). */
 	.shell-nav {
-		@apply inline-flex h-7 shrink-0 items-center justify-center rounded-[min(var(--radius-md),12px)] border border-transparent px-2 text-[0.8rem] font-medium whitespace-nowrap text-muted-foreground sm:px-2.5;
+		@apply inline-flex h-7 shrink-0 items-center justify-center rounded-[min(var(--radius-md),12px)] border border-transparent px-1 text-[0.8rem] font-medium whitespace-nowrap text-muted-foreground pointer-coarse:h-9 xs:px-2 sm:px-2.5;
 	}
 
 	/* The card's red header rule. */

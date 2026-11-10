@@ -6,6 +6,7 @@ import {
 	useState,
 } from "react";
 import { PagerControls } from "@/components/pager";
+import { useFitScreen } from "@/hooks/use-media";
 import { usePager } from "@/hooks/use-pager";
 import { cn } from "@/lib/utils";
 
@@ -25,21 +26,30 @@ interface Layout {
 	height: number;
 }
 
-/**
- * Fits its content in the box it is given, with no scrolling: it first shrinks the text,
- * then splits the content into side-by-side pages with a pager. With `arrowKeys`, ← and →
- * turn the pages. The box may be a fixed height or a shrinkable flex item that is only as
- * tall as its content.
- */
-export function FitPages({
-	children,
-	className,
-	arrowKeys = false,
-}: {
+interface FitPagesProps {
 	children: ReactNode;
 	className?: string;
 	arrowKeys?: boolean;
-}) {
+}
+
+/**
+ * On a screen that pages fit (the `fit:` variant), fits its content in the box it is given,
+ * with no scrolling: it first shrinks the text, then splits the content into side-by-side
+ * pages with a pager. With `arrowKeys`, ← and → turn the pages. The box may be a fixed
+ * height or a shrinkable flex item that is only as tall as its content. Elsewhere the page
+ * scrolls, so the content shows whole at the largest size.
+ */
+export function FitPages(props: FitPagesProps) {
+	const fit = useFitScreen();
+	if (fit) return <Fitted {...props} />;
+	return (
+		<div style={{ fontSize: FONT_SIZES[0] }} className={props.className}>
+			{props.children}
+		</div>
+	);
+}
+
+function Fitted({ children, className, arrowKeys = false }: FitPagesProps) {
 	const viewport = useRef<HTMLDivElement>(null);
 	const content = useRef<HTMLDivElement>(null);
 	const [layout, setLayout] = useState<Layout>({
