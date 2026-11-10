@@ -1,6 +1,8 @@
 """Trie with 3 * 10^4 calls over a tiny alphabet: words sharing long prefixes, a few words of the
 maximum 2000 letters, and searches/prefix checks that miss by one letter."""
 
+from string import ascii_lowercase
+
 from _shapes import random_string
 
 SEEDS = 2
@@ -8,7 +10,7 @@ CALLS = 3 * 10**4
 
 
 def generate(rng):
-    alpha = "abcdefghijklmnopqrstuvwxyz"[: rng.choice([2, 26])]
+    alpha = ascii_lowercase[: rng.choice([2, 26])]
     stems = [random_string(rng, alpha, rng.choice([20, 60])) for _ in range(30)]
     longs = [random_string(rng, alpha, 2000) for _ in range(3)]
     inserted = []

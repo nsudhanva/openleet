@@ -1,18 +1,22 @@
 """Number of Atoms on valid formulas of close to 1000 characters with nested, multiplied
 groups; the generator tracks every count so the totals stay within 32 bits."""
 
+from string import ascii_lowercase
+
 from _shapes import random_string
 
 SEEDS = 3
 MAX_LEN = 1000
 CAP = 2**31 - 1
 UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-LOWER = "abcdefghijklmnopqrstuvwxyz"
 
 
 def generate(rng):
     names = sorted(
-        {rng.choice(UPPER) + random_string(rng, LOWER, rng.randint(0, 2)) for _ in range(40)}
+        {
+            rng.choice(UPPER) + random_string(rng, ascii_lowercase, rng.randint(0, 2))
+            for _ in range(40)
+        }
     )
     big = rng.random() < 0.5
 

@@ -1,13 +1,15 @@
 """Find Words That Can Be Formed by Characters with 1000 words of up to 100 letters drawn from
 the same pool as chars, so many words fit or just miss."""
 
+from string import ascii_lowercase
+
 from _shapes import random_string
 
 SEEDS = 2
 
 
 def generate(rng):
-    alpha = "abcdefghijklmnopqrstuvwxyz"[: rng.choice([4, 26])]
+    alpha = ascii_lowercase[: rng.choice([4, 26])]
     chars = random_string(rng, alpha, 100)
     words = []
     for _ in range(1000):

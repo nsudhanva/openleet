@@ -2,6 +2,8 @@
 most of them real subsequences ending near the end of s, so scanning s once per word is
 2.5 * 10^8 steps."""
 
+from string import ascii_lowercase
+
 from _shapes import random_string
 
 SEEDS = 3
@@ -10,7 +12,7 @@ WORDS = 5000
 
 
 def generate(rng):
-    alphabet = rng.choice(("ab", "abcde", "abcdefghijklmnopqrstuvwxyz"))
+    alphabet = rng.choice(("ab", "abcde", ascii_lowercase))
     s = random_string(rng, alphabet, N)
     words = []
     for _ in range(WORDS):

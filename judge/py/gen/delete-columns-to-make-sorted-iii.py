@@ -1,16 +1,17 @@
 """Delete Columns to Make Sorted III with 100 strings of length 100, random or nearly
 sorted rows, for the quadratic-in-columns DP at full size."""
 
+from string import ascii_lowercase
+
 SEEDS = 2
 N, L = 100, 100
-LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def generate(rng):
     strs = []
     sorted_rows = rng.random() < 0.5
     for _ in range(N):
-        row = [rng.choice(LETTERS) for _ in range(L)]
+        row = [rng.choice(ascii_lowercase) for _ in range(L)]
         if sorted_rows:
             row.sort()
             for _ in range(3):

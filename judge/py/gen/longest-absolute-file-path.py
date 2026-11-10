@@ -1,11 +1,13 @@
 """Longest Absolute File Path on a valid file-system listing close to 10^4 characters with
 deep nesting (files are always leaves)."""
 
+from string import ascii_letters, digits
+
 from _shapes import random_string
 
 SEEDS = 2
 LIMIT = 9500
-CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+CHARS = ascii_letters + digits
 
 
 def name(rng, low, high):

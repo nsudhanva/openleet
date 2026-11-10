@@ -1,6 +1,8 @@
 """Remove Adjacent Duplicates II at length 10^5: nested runs that collapse in a cascade once
 the innermost run of k goes, the worst case for repeated rescanning."""
 
+from string import ascii_lowercase
+
 from _shapes import random_string
 
 SEEDS = 2
@@ -12,7 +14,7 @@ def generate(rng):
     if rng.random() < 0.5:
         # Build "a^(k-1) b^(k-1) ... X^k ... b a" style nesting by recursion on a stack.
         s = []
-        letters = "abcdefghijklmnopqrstuvwxyz"
+        letters = ascii_lowercase
         while len(s) < N - 2 * k:
             depth = rng.randint(1, 50)
             chain = [rng.choice(letters)]

@@ -1,9 +1,11 @@
 """License Key Formatting on 10^5-character keys of letters, digits, and dashes, including
 leading dashes and a key that is almost all dashes."""
 
+from string import ascii_letters, digits
+
 SEEDS = 2
 N = 10**5
-CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+CHARS = ascii_letters + digits
 
 
 def generate(rng):

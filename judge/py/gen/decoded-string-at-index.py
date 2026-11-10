@@ -1,13 +1,14 @@
 """Decoded String at Index with |s| = 100 whose decoded length is astronomically large (kept
 below 2^63), so expanding the string is impossible; k up to 10^9."""
 
+from string import ascii_lowercase
+
 SEEDS = 2
 L = 100
-LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def generate(rng):
-    s = [rng.choice(LETTERS)]
+    s = [rng.choice(ascii_lowercase)]
     size = 1
     digit_p = rng.choice([0.3, 0.6])
     while len(s) < L:
@@ -17,7 +18,7 @@ def generate(rng):
                 s.append(str(d))
                 size *= d
                 continue
-        s.append(rng.choice(LETTERS))
+        s.append(rng.choice(ascii_lowercase))
         size += 1
     if size >= 2**63:
         raise ValueError("decoded length too large")

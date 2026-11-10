@@ -1,6 +1,8 @@
 """Unique Morse Code Words at 100 words of up to 12 letters, including different words with
 the same Morse transformation."""
 
+from string import ascii_lowercase
+
 from _shapes import random_string
 
 SEEDS = 2
@@ -18,5 +20,5 @@ def generate(rng):
                 w += rng.choice(pieces)
             words.append(w[:12])
         else:
-            words.append(random_string(rng, "abcdefghijklmnopqrstuvwxyz", rng.randint(1, 12)))
+            words.append(random_string(rng, ascii_lowercase, rng.randint(1, 12)))
     return {"words": words}

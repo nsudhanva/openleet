@@ -1,15 +1,16 @@
 """Word Pattern near the limits (300 pattern letters, 3000-char sentence): a true bijection,
 two letters mapped to the same word, or a word-count mismatch."""
 
+from string import ascii_lowercase
+
 from _shapes import pick_shape, random_string
 
 SEEDS = 3
-LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def generate(rng):
     shape = pick_shape(rng)
-    pattern = [rng.choice(LETTERS) for _ in range(300)]
+    pattern = [rng.choice(ascii_lowercase) for _ in range(300)]
     used = sorted(set(pattern))
     names = set()
     while len(names) < len(used):

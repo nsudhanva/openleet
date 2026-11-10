@@ -1,18 +1,19 @@
 """Partition Labels at length 500: many small partitions, or letters whose last occurrences
 chain into one giant partition."""
 
+from string import ascii_lowercase
+
 SEEDS = 2
 N = 500
-LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def generate(rng):
     if rng.random() < 0.5:
         s = []
         while len(s) < N:
-            block = rng.sample(LETTERS, rng.randint(1, 3))
+            block = rng.sample(ascii_lowercase, rng.randint(1, 3))
             s.extend(rng.choice(block) for _ in range(rng.randint(1, 10)))
         s = s[:N]
     else:
-        s = [rng.choice(LETTERS) for _ in range(N)]
+        s = [rng.choice(ascii_lowercase) for _ in range(N)]
     return {"s": "".join(s)}

@@ -2,11 +2,13 @@
 directories or a few hundred directories packed with files, contents drawn from a small pool
 so duplicate groups are large."""
 
+from string import ascii_letters, digits
+
 from _shapes import random_string
 
 SEEDS = 2
 BUDGET = 490_000
-ALPHA = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+ALPHA = ascii_letters + digits
 
 
 def generate(rng):

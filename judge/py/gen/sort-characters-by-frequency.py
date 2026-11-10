@@ -1,7 +1,9 @@
 """Sort Characters By Frequency on 5 * 10^5 letters and digits with skewed frequencies."""
 
+from string import ascii_letters, digits
+
 SEEDS = 2
-CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+CHARS = ascii_letters + digits
 
 
 def generate(rng):

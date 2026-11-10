@@ -1,12 +1,14 @@
 """Buddy Strings at length 2 * 10^4: equal strings, strings differing at exactly two far-apart
 positions (swappable or not), or at three positions."""
 
+from string import ascii_lowercase
+
 SEEDS = 3
 N = 2 * 10**4
 
 
 def generate(rng):
-    alphabet = "abcdefghijklmnopqrstuvwxyz"
+    alphabet = ascii_lowercase
     s = [rng.choice(alphabet) for _ in range(N)]
     goal = list(s)
     shape = rng.choice(["equal", "swap", "two", "three"])

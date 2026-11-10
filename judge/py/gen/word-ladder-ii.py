@@ -1,6 +1,8 @@
 """Word Ladder II with 500 words of length 3-5 over small alphabets: dense graphs with many
 equal-length shortest paths, the total output kept under 10^5 words."""
 
+from string import ascii_lowercase
+
 from _shapes import pick_shape, random_string
 
 SEEDS = 3
@@ -18,7 +20,7 @@ def shortest_paths_size(begin, end, words):
         nxt = {}
         for w in frontier:
             for i in range(len(w)):
-                for c in "abcdefghijklmnopqrstuvwxyz":
+                for c in ascii_lowercase:
                     v = w[:i] + c + w[i + 1 :]
                     if v in wordset and v not in count:
                         nxt[v] = nxt.get(v, 0) + count[w]

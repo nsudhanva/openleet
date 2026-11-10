@@ -1,10 +1,11 @@
 """Longest String Chain with 1000 words: a planted chain of length 16 plus many words that
 share its letters, or random words of every length."""
 
+from string import ascii_lowercase
+
 from _shapes import random_string
 
 SEEDS = 2
-LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def generate(rng):
@@ -18,7 +19,7 @@ def generate(rng):
                 words.add(word)
     while len(words) < 1000:
         n = rng.randint(1, 16)
-        words.add(random_string(rng, "abc" if n < 8 else LETTERS, n))
+        words.add(random_string(rng, "abc" if n < 8 else ascii_lowercase, n))
     words = sorted(words)
     rng.shuffle(words)
     return {"words": words}

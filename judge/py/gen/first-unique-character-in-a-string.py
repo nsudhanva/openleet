@@ -1,12 +1,14 @@
 """First Unique Character at 10^5 letters: every letter repeated except one near the end, or no
 unique letter at all."""
 
+from string import ascii_lowercase
+
 SEEDS = 3
 N = 10**5
 
 
 def generate(rng):
-    alpha = list("abcdefghijklmnopqrstuvwxyz")
+    alpha = list(ascii_lowercase)
     rng.shuffle(alpha)
     lone, rest = alpha[0], alpha[1 : rng.randint(2, 26)]
     s = [rng.choice(rest) for _ in range(N - 1)]

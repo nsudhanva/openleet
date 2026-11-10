@@ -2,12 +2,14 @@
 arrangement over a small alphabet, and target sits near (just below, at, or randomly around)
 one of those palindromes."""
 
+from string import ascii_lowercase
+
 SEEDS = 3
 
 
 def generate(rng):
     n = rng.choice([300, 299])
-    alphabet = "abcdefghijklmnopqrstuvwxyz"[: rng.randint(2, 6)]
+    alphabet = ascii_lowercase[: rng.randint(2, 6)]
     half = [rng.choice(alphabet) for _ in range(n // 2)]
     middle = [rng.choice(alphabet)] if n % 2 else []
     pal = half + middle + half[::-1]

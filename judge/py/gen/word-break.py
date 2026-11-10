@@ -4,7 +4,6 @@ against every 'a'-word (exponential without memo), or s stitched from dictionary
 from _shapes import pick_shape, random_string
 
 SEEDS = 3
-LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def generate(rng):

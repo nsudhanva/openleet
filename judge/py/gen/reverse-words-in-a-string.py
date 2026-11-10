@@ -1,10 +1,12 @@
 """Reverse Words on 10^4 characters of letters, digits and runs of spaces (leading, trailing and
 multiple spaces between words)."""
 
+from string import ascii_letters, digits
+
 from _shapes import random_string
 
 SEEDS = 2
-WORD = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+WORD = ascii_letters + digits
 
 
 def generate(rng):

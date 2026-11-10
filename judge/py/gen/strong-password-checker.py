@@ -1,9 +1,11 @@
 """Strong Password Checker at the maximum length of 50 with many repeating runs of varied
 lengths, the hard case for the deletion/replacement interplay."""
 
+from string import ascii_lowercase
+
 SEEDS = 3
 N = 50
-POOLS = ["abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "0123456789", ".!"]
+POOLS = [ascii_lowercase, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "0123456789", ".!"]
 
 
 def generate(rng):
