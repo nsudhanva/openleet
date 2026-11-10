@@ -29,7 +29,7 @@ pub enum Checker {
 }
 
 /// One test's expected answer: `{"value": <json>}` or `{"sha256": "<hex>"}`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Expected {
     /// The answer itself, compared with the job's [`Checker`].
