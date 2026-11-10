@@ -39,7 +39,7 @@ function TopicVerdict({ result }: { result: TopicResult }) {
 					<li
 						key={topic}
 						className={cn(
-							"mr-1.5 mb-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-px text-[0.9em]",
+							"mr-1.5 mb-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-px fit-text-90",
 							CHIP_TONE[tone],
 						)}
 					>

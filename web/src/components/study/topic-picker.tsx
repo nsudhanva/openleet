@@ -77,7 +77,7 @@ export function TopicPicker({
 									aria-pressed={on}
 									onClick={() => onToggle(topic)}
 									className={cn(
-										"rounded-full border px-2.5 py-0.5 text-[0.9em] transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+										"rounded-full border px-2.5 py-0.5 fit-text-90 transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
 										on
 											? "border-primary bg-primary text-primary-foreground"
 											: "bg-card text-foreground hover:border-primary/60 hover:bg-muted",

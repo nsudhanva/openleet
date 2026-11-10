@@ -9,7 +9,10 @@ import { PagerControls } from "@/components/pager";
 import { usePager } from "@/hooks/use-pager";
 import { cn } from "@/lib/utils";
 
-/** Font sizes to try, largest first; below the last one the content pages instead. */
+/**
+ * Font sizes to try, largest first; below the last one the content pages instead. 12px is the
+ * legibility floor: text sized in em inside keeps it too (`fit-text-*`, the .statement rules).
+ */
 const FONT_SIZES = [15, 14, 13, 12];
 const COLUMN_GAP = 32;
 const PAGER_HEIGHT = 28;

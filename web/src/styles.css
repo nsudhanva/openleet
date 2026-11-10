@@ -126,6 +126,11 @@
 	--radius-xl: calc(var(--radius) + 4px);
 }
 
+/* A size relative to text that FitPages scales (fit-text-88: 0.88em), never below 12px. */
+@utility fit-text-* {
+	font-size: max(12px, calc(--value(integer) * 0.01em));
+}
+
 @layer base {
 	* {
 		@apply border-border outline-ring/50;
@@ -159,7 +164,10 @@
 		background-position: 0 -1px;
 	}
 
-	/* Problem statements arrive as sanitized LeetCode HTML. Sizes are relative so FitPages can scale them. */
+	/*
+	 * Problem statements arrive as sanitized LeetCode HTML. Sizes are relative so FitPages can
+	 * scale them, but never below 12px, the legibility floor (FitPages pages instead).
+	 */
 	.statement {
 		line-height: 1.55;
 	}
@@ -171,16 +179,21 @@
 		overflow-wrap: anywhere;
 		margin-block: 0.6em;
 		padding: 0.5em 0.85em;
-		font-size: 0.85em;
+		font-size: max(12px, 0.85em);
 		line-height: 1.5;
 	}
 	.statement code {
 		@apply rounded bg-muted font-mono;
 		padding: 0.05em 0.25em;
-		font-size: 0.88em;
+		font-size: max(12px, 0.88em);
+	}
+	.statement sub,
+	.statement sup {
+		font-size: max(12px, 0.75em);
 	}
 	.statement pre code {
 		@apply bg-transparent p-0;
+		font-size: inherit;
 	}
 	.statement ul,
 	.statement ol {
