@@ -1,11 +1,13 @@
 """String Compression at the maximum 2000 chars: long runs (multi-digit counts) or rapid
 alternation, so a quadratic in-place shift is punished."""
 
+from string import ascii_letters, digits
+
 from _shapes import pick_shape
 
 SEEDS = 3
 N = 2000
-ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+ALPHABET = ascii_letters + digits + "!@#$%^&*"
 
 
 def generate(rng):

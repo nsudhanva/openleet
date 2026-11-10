@@ -1,10 +1,12 @@
 """Simplify Path at ~3000 characters: names, '.', '..', '...', and runs of slashes, with deep
 nesting and many pops."""
 
+from string import ascii_letters, digits
+
 from _shapes import random_string
 
 SEEDS = 3
-NAME = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_."
+NAME = ascii_letters + digits + "_."
 
 
 def generate(rng):

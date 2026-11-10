@@ -1,11 +1,13 @@
 """Time Based Key-Value Store with 1.8 * 10^5 calls: few keys with long histories so lookups
 must binary search, gets before, between and after the stored timestamps."""
 
+from string import ascii_lowercase, digits
+
 from _shapes import random_string
 
 SEEDS = 2
 CALLS = 18 * 10**4
-CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
+CHARS = ascii_lowercase + digits
 
 
 def generate(rng):

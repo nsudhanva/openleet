@@ -1,9 +1,11 @@
 """Zigzag Conversion at the maximum 1000 characters with numRows of 1, 2, near n, or above n."""
 
+from string import ascii_letters
+
 from _shapes import pick_shape, random_string
 
 SEEDS = 3
-CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ,."
+CHARS = ascii_letters + ",."
 
 
 def generate(rng):

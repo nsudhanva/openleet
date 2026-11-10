@@ -1,6 +1,8 @@
 """atoi at the maximum length of 200: leading spaces, a sign, leading zeros and a long digit
 run that overflows (or just fits), followed by junk."""
 
+from string import ascii_letters
+
 from _shapes import pick_shape, random_string
 
 SEEDS = 3
@@ -17,7 +19,7 @@ def generate(rng):
     else:
         digits = str(rng.randint(0, 2**31 - 1))
     s += digits
-    junk = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 +-."
+    junk = ascii_letters + "0123456789 +-."
     while len(s) < N:
         s += rng.choice(junk)
     return {"s": s[:N]}

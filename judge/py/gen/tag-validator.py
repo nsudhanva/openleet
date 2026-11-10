@@ -1,17 +1,18 @@
 """Tag Validator near the 500-char limit: deeply nested valid tags mixing CDATA and loose
 '>' / ']' text, sometimes with one character corrupted."""
 
+from string import ascii_letters, ascii_uppercase, digits
+
 from _shapes import random_string
 
 SEEDS = 3
 LIMIT = 500
-UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 TEXT = "abcdefghijXYZ0123456789 ]>!./["
-ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<>/![]. "
+ALPHABET = ascii_letters + digits + "<>/![]. "
 
 
 def build(rng, budget, depth):
-    name = random_string(rng, UPPER, rng.randint(1, 9))
+    name = random_string(rng, ascii_uppercase, rng.randint(1, 9))
     inner = budget - 2 * len(name) - 5
     parts = []
     used = 0
