@@ -142,6 +142,26 @@ fn main() {
     .expect("write pages.rs");
 }
 
+/// `head` without the tags marked `data-routes="..."` (vite.config.ts) that do not list `route`.
+fn only_for(head: &[u8], route: &str) -> Vec<u8> {
+    const MARK: &str = r#" data-routes=""#;
+    let mut html = String::from_utf8(head.to_vec()).expect("index.html is UTF-8");
+    let mut from = 0;
+    while let Some(at) = html[from..].find(MARK).map(|i| from + i) {
+        let start = html[..at].rfind('<').expect("a tag");
+        let end = at + html[at..].find('>').expect("a tag") + 1;
+        let list = &html[at + MARK.len()..];
+        let routes = &list[..list.find('"').expect("an attribute")];
+        if routes.split(' ').any(|r| r == route) {
+            from = end;
+        } else {
+            html.replace_range(start..end, "");
+            from = start;
+        }
+    }
+    html.into_bytes()
+}
+
 /// One chunk of Vite's manifest.
 #[derive(serde::Deserialize)]
 struct Chunk {
@@ -209,7 +229,7 @@ fn pages(out_dir: &Path, html: &[u8], chunks: &BTreeMap<String, Vec<String>>) ->
     for (route, files) in
         std::iter::once(("", &no_code)).chain(chunks.iter().map(|(r, f)| (r.as_str(), f)))
     {
-        let mut page = head.to_vec();
+        let mut page = only_for(head, route);
         for file in files {
             write!(
                 page,

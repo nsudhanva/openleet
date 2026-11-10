@@ -279,6 +279,25 @@ mod tests {
         assert_eq!(zstd::decode_all(&body(response).await[..]).unwrap(), plain);
     }
 
+    #[test]
+    fn the_mono_font_is_preloaded_where_code_shows() {
+        let head = |path| {
+            PAGES
+                .get(path)
+                .map(|(_, page)| String::from_utf8_lossy(page.head).into_owned())
+        };
+        let (Some(study), Some(problems)) = (head("/"), head("/problems")) else {
+            return;
+        };
+        // The stylesheet names both fonts everywhere; the preload links only where needed.
+        let preload = |font| {
+            format!(r#"<link rel="preload" href="/assets/atkinson-hyperlegible-{font}-latin"#)
+        };
+        assert!(study.contains(&preload("mono")));
+        assert!(!problems.contains(&preload("mono")));
+        assert!(problems.contains(&preload("next")));
+    }
+
     #[tokio::test]
     async fn each_page_has_its_own_etag() {
         if PAGES.routes.is_empty() {

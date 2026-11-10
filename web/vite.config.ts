@@ -16,8 +16,15 @@ function themeBeforePaint(): Plugin {
 }
 
 /**
- * Preloads the Latin subsets of the two fonts (both are on every page), so they arrive with
- * the scripts and the app's first render already uses them: no reflow when they swap in.
+ * Routes (files in src/routes) that show code text, in the mono font: problem statements and
+ * the About page's API table. Elsewhere it is not needed for the first screen.
+ */
+const MONO_ROUTES = ["index", "code.$slug", "about"];
+
+/**
+ * Preloads the Latin subsets of the fonts, so they arrive with the scripts and the app's
+ * first render already uses them: no reflow when they swap in. The mono font only on
+ * MONO_ROUTES: `data-routes` tells the server which pages keep the link (server/build.rs).
  * They go at the end of the body: Chrome holds the first paint for font preloads in the head
  * (about 100 ms), and the static shell paints fine with a fallback font.
  */
@@ -37,6 +44,9 @@ function preloadFonts(): Plugin {
 							as: "font",
 							type: "font/woff2",
 							crossorigin: "",
+							...(file.includes("-mono-") && {
+								"data-routes": MONO_ROUTES.join(" "),
+							}),
 						},
 						injectTo: "body" as const,
 					})),
