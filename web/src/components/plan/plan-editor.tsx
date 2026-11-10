@@ -70,12 +70,12 @@ function PlanControls({
 			<StatusFilter
 				value={plan.status}
 				onChange={(status) => change({ status })}
-				className="col-span-2 grid w-full grid-cols-3"
+				className="w-full"
 			/>
 			<OrderPicker
 				value={plan.order}
 				onChange={(order) => change({ order })}
-				className="col-span-2 w-full"
+				className="w-full"
 			/>
 		</div>
 	);

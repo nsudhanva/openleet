@@ -2,11 +2,10 @@ import {
 	createFileRoute,
 	Link,
 	stripSearchParams,
-	useNavigate,
 	useRouter,
 	useRouterState,
 } from "@tanstack/react-router";
-import { CodeXmlIcon, PlayIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
+import { CodeXmlIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { CompanyPicker } from "@/components/company-picker";
 import { CompanyChip } from "@/components/company-tags";
@@ -18,6 +17,7 @@ import { PageHeader } from "@/components/page-header";
 import { PagerControls } from "@/components/pager";
 import { OrderPicker, StatusFilter } from "@/components/plan/plan-filters";
 import { remember } from "@/components/plan/plan-link";
+import { PracticeButton } from "@/components/plan/practice-button";
 import { SavedPlans } from "@/components/plan/saved-plans";
 import { PremiumBadge } from "@/components/premium-badge";
 import { Segmented } from "@/components/segmented";
@@ -40,7 +40,7 @@ import { usePager } from "@/hooks/use-pager";
 import { api } from "@/lib/api";
 import { ANY_COMPANY, type CompanySearch, companyName } from "@/lib/companies";
 import { pageTitle, percent, timeFrom } from "@/lib/format";
-import { type Plan, planOf, tablePlan } from "@/lib/plan";
+import { tablePlan } from "@/lib/plan";
 import {
 	MAX_QUERY,
 	PROBLEMS_DEFAULTS,
@@ -218,7 +218,13 @@ function Problems() {
 						choose({ order: next === "rank" ? undefined : next })
 					}
 				/>
-				<PracticeButton plan={plan} />
+				<div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+					<PracticeButton
+						plan={plan}
+						className="max-sm:w-full"
+						title="Solve this list's problems in order, with Next after each one"
+					/>
+				</div>
 				<SearchBox value={q} onChange={(next) => choose({ q: next }, true)} />
 			</div>
 
@@ -371,53 +377,6 @@ function Problems() {
 					`${first + 1}–${first + visible.length} of ${rows.length}`}
 				<PagerControls pager={pager} className="gap-2" />
 			</nav>
-		</div>
-	);
-}
-
-/**
- * Opens the first problem of the table's plan (its unsolved problems unless a status is
- * chosen) on the code page, and remembers the plan.
- */
-function PracticeButton({ plan }: { plan: Plan }) {
-	const navigate = useNavigate();
-	const [state, setState] = useState<"idle" | "busy" | "empty" | "failed">(
-		"idle",
-	);
-	async function start() {
-		setState("busy");
-		try {
-			const page = await api.next(plan);
-			if (!page.next) return setState("empty");
-			remember(plan);
-			await navigate({
-				to: "/code/$slug",
-				params: { slug: page.next.slug },
-				search: planOf(page.plan),
-			});
-		} catch (error) {
-			console.error("Could not start the plan", error);
-			setState("failed");
-		}
-	}
-	return (
-		<div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-			<Button
-				onClick={start}
-				disabled={state === "busy"}
-				className="max-sm:w-full"
-				title="Solve this list's problems in order, with Next after each one"
-			>
-				<PlayIcon data-icon="inline-start" />
-				Practice
-			</Button>
-			{(state === "empty" || state === "failed") && (
-				<p role="status" className="text-xs text-muted-foreground">
-					{state === "empty"
-						? "Nothing left to solve here."
-						: "Could not start; try again."}
-				</p>
-			)}
 		</div>
 	);
 }

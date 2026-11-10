@@ -1,19 +1,22 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { CompanyPicker } from "@/components/company-picker";
 import { ConfirmClear } from "@/components/confirm-clear";
-import { FitPages } from "@/components/fit-pages";
 import { PageHeader } from "@/components/page-header";
+import { ActivityPanel } from "@/components/progress/activity-panel";
+import { CodingPanel } from "@/components/progress/coding-panel";
+import { EmptyNote, Panel, Stat } from "@/components/progress/panel";
+import { ShakyPanel } from "@/components/progress/shaky-panel";
+import { TopicMap } from "@/components/progress/topic-map";
 import { ProgressBar } from "@/components/progress-bar";
 import { Button } from "@/components/ui/button";
 import { useCompanies } from "@/hooks/use-companies";
-import { useFitScreen } from "@/hooks/use-media";
 import { api } from "@/lib/api";
 import { ANY_COMPANY, companyName } from "@/lib/companies";
 import { pageTitle, percent } from "@/lib/format";
+import type { Plan } from "@/lib/plan";
 import type { StudySet } from "@/lib/scheduler";
 import type { DailyScore, Difficulty, TopicRecall } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/progress")({
 	head: () => ({ meta: [{ title: pageTitle("Progress") }] }),
@@ -22,46 +25,27 @@ export const Route = createFileRoute("/progress")({
 	component: Progress,
 });
 
-/** A titled block of the dashboard. */
-function Panel({
-	id,
-	title,
-	note,
-	className,
-	children,
-}: {
-	id: string;
-	title: string;
-	note?: string;
-	className?: string;
-	children: ReactNode;
-}) {
-	return (
-		<section
-			aria-labelledby={id}
-			className={cn(
-				"flex flex-col rounded-sm bg-card p-4 shadow-[0_1px_0_var(--border)] fit:min-h-0",
-				className,
-			)}
-		>
-			<h2 id={id} className="font-semibold tracking-tight">
-				{title}
-			</h2>
-			{note && <p className="text-xs text-muted-foreground">{note}</p>}
-			<div className="mt-3 flex min-h-0 flex-1 flex-col">{children}</div>
-		</section>
-	);
-}
-
 function Progress() {
-	const { report, history } = Route.useLoaderData();
+	const { report, history, coding, shaky, shakyElsewhere, topicMap, activity } =
+		Route.useLoaderData();
 	const { company } = Route.useSearch();
 	const navigate = Route.useNavigate();
 	const name = companyName(useCompanies(), company);
 	const total = report.byDifficulty.reduce((sum, d) => sum + d.total, 0);
+	// The list readiness covers, as a plan: what Practice opens from here.
+	const list: Plan = {
+		company,
+		period: "6m",
+		status: "unsolved",
+		order: "rank",
+	};
+	const listName =
+		company === ANY_COMPANY
+			? "every company's 6-month list"
+			: `${name}'s 6-month list`;
 
 	return (
-		<div className="flex flex-col fit:h-full fit:min-h-0">
+		<div className="flex flex-col">
 			<PageHeader
 				title="Progress"
 				actions={
@@ -80,8 +64,8 @@ function Progress() {
 				minutes, so mastery fades when reviews get old.
 			</PageHeader>
 
-			{/* One screen on a fit: screen; elsewhere the panels stack, two to a row from md. */}
-			<div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 fit:min-h-0 fit:flex-1">
+			{/* Three to a row from lg, two from md; on a phone they stack. The page scrolls. */}
+			<div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
 				<Panel
 					id="readiness"
 					title="Readiness"
@@ -162,38 +146,44 @@ function Progress() {
 					{report.topics.length ? (
 						<TopicMeters topics={report.topics} />
 					) : (
-						<p className="text-sm text-muted-foreground">
+						<EmptyNote>
 							Grade a few cards to see which topics you miss.
-						</p>
+						</EmptyNote>
 					)}
 				</Panel>
+
+				<CodingPanel coding={coding} list={list} listName={listName} />
+				<ShakyPanel
+					shaky={shaky}
+					elsewhere={shakyElsewhere}
+					plan={{ ...list, status: "shaky" }}
+				/>
+				<ActivityPanel activity={activity} />
+				<TopicMap topics={topicMap} list={list} listName={listName} />
 			</div>
 		</div>
 	);
 }
 
-/** Topics a scrolling page lists before "Show all"; a fit: screen pages them all instead. */
+/** Topics listed before "Show all". */
 const TOPICS_SHOWN = 8;
 
 function TopicMeters({ topics }: { topics: TopicRecall[] }) {
-	const fit = useFitScreen();
 	const [all, setAll] = useState(false);
-	const shown = fit || all ? topics : topics.slice(0, TOPICS_SHOWN);
+	const shown = all ? topics : topics.slice(0, TOPICS_SHOWN);
 	return (
 		<>
-			<FitPages className="fit:flex-1">
-				<ul>
-					{shown.map((t) => (
-						<Meter
-							key={t.topic}
-							label={t.topic}
-							value={t.recall}
-							detail={`${t.seen} ${t.seen === 1 ? "card" : "cards"}`}
-							to={{ set: "all", topic: t.topic }}
-						/>
-					))}
-				</ul>
-			</FitPages>
+			<ul>
+				{shown.map((t) => (
+					<Meter
+						key={t.topic}
+						label={t.topic}
+						value={t.recall}
+						detail={`${t.seen} ${t.seen === 1 ? "card" : "cards"}`}
+						to={{ set: "all", topic: t.topic }}
+					/>
+				))}
+			</ul>
 			{shown.length < topics.length && (
 				<Button
 					variant="outline"
@@ -205,15 +195,6 @@ function TopicMeters({ topics }: { topics: TopicRecall[] }) {
 				</Button>
 			)}
 		</>
-	);
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-	return (
-		<div>
-			<dt className="text-sm text-muted-foreground">{label}</dt>
-			<dd className="text-xl font-semibold tabular-nums">{value}</dd>
-		</div>
 	);
 }
 

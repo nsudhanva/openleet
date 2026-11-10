@@ -17,6 +17,7 @@ import type {
 export const STATUS_LABEL: Record<PlanStatus, string> = {
 	unsolved: "Unsolved",
 	untried: "Untried",
+	shaky: "Shaky solves",
 	all: "All problems",
 };
 

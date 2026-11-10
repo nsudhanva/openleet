@@ -201,9 +201,75 @@ export interface DailyScore {
 	accuracy: number | null;
 }
 
+/** The failed verdicts of some submissions, by kind. */
+export interface Failures {
+	wrongAnswer: number;
+	timeLimitExceeded: number;
+	memoryLimitExceeded: number;
+	runtimeError: number;
+	compileError: number;
+	outputLimitExceeded: number;
+}
+
+/** Coding progress over the report's list. */
+export interface Coding {
+	byDifficulty: { difficulty: Difficulty; solved: number; total: number }[];
+	/** Problems with any submission. */
+	tried: number;
+	/** Solved problems whose first submission was Accepted. */
+	firstTry: number;
+	submissions: number;
+	failures: Failures;
+}
+
+/** A problem Accepted only after two or more failures, or a time limit. */
+export interface ShakySolve
+	extends Pick<Problem, "id" | "slug" | "title" | "difficulty"> {
+	/** The failures before the first Accepted. */
+	failures: Failures;
+	/** When the first Accepted came, epoch milliseconds. */
+	solvedAt: number;
+}
+
+/** One topic of the report's list and how much of it you covered. */
+export interface TopicRow {
+	topic: string;
+	/** How much the company asks it: its frequency summed over the topic's problems. */
+	weight: number;
+	problems: number;
+	/** Graded on a card or solved. */
+	covered: number;
+	solved: number;
+	/** Flashcard topic accuracy; null before any card with it was graded. */
+	recall: number | null;
+}
+
+/** A day with practice, in the server's time zone. */
+export interface ActiveDay {
+	/** "2026-11-10". */
+	day: string;
+	reviews: number;
+	submissions: number;
+}
+
+/** The activity calendar: 26 weeks from `start` (a Monday) to `today`. */
+export interface Activity {
+	start: string;
+	today: string;
+	/** Only the days with practice. */
+	days: ActiveDay[];
+}
+
 export interface Report {
 	report: ScoreReport;
 	history: DailyScore[];
+	coding: Coding;
+	/** The list's shaky solves, newest first. */
+	shaky: ShakySolve[];
+	shakyElsewhere: number;
+	/** The list's topics, most asked first. */
+	topicMap: TopicRow[];
+	activity: Activity;
 }
 
 const VERDICTS = [
@@ -308,7 +374,7 @@ export interface Submission extends SubmissionSummary {
 }
 
 /** Which problems of a practice plan still count (lib/plan.ts has the labels). */
-export const PLAN_STATUSES = ["unsolved", "untried", "all"] as const;
+export const PLAN_STATUSES = ["unsolved", "untried", "shaky", "all"] as const;
 export type PlanStatus = (typeof PLAN_STATUSES)[number];
 
 /** The order a practice plan walks its problems in. */
