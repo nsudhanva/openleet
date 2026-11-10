@@ -26,7 +26,10 @@ tar --zstd -xf "$work/$archive" -C "$release"
 "$release/deploy/install.sh" --units-only "$release"
 ln -sfn "$release" "$ROOT/current.next"
 mv -T "$ROOT/current.next" "$ROOT/current"
-systemctl restart openleet-judge.service openleet.service
+# The judge first (a submission in flight fails once), then the server: systemd holds its
+# sockets, so the restart refuses no connection.
+systemctl restart openleet-judge.service
+systemctl restart openleet.service
 
 # Keep the last three releases for a quick rollback (point `current` back and restart).
 ls -1dt "$ROOT"/releases/* | tail -n +4 | xargs -r rm -rf

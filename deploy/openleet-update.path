@@ -1,0 +1,11 @@
+# Deploys as soon as CI asks: the server's POST /api/deploy writes this file after checking the
+# request's signature, and the updater (running as root) installs the release CI published.
+[Unit]
+Description=Deploy OpenLeet when CI asks
+
+[Path]
+PathChanged=/var/lib/openleet/deploy-request
+Unit=openleet-update.service
+
+[Install]
+WantedBy=paths.target

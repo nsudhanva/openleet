@@ -72,12 +72,18 @@ statements), approaches and hints written by Claude agents and reviewed with Cod
 flowchart LR
     P[push to main] --> CI["GitHub Actions<br/>lint, test, build x86-64-v3"]
     CI --> R["edge release<br/>openleet-REV.tar.zst"]
-    R -- every 5 min --> U["openleet-update.timer<br/>on the VM"]
-    U --> L["unpack to /opt/openleet/releases/REV<br/>switch current, restart"]
+    CI -- "signed POST /api/deploy" --> S[openleet]
+    S -- writes deploy-request --> PU[openleet-update.path]
+    T[openleet-update.timer<br/>every 5 min, fallback] --> U
+    PU --> U["update.sh (root)<br/>verify sha256, unpack,<br/>switch current, restart"]
+    R --> U
+    U --> V["CI polls /api/version<br/>until REV is live"]
 ```
 
+Restarts drop no connection: `openleet.socket` holds ports 80 and 443 while the server restarts.
 Roll back by pointing `/opt/openleet/current` at an older release. New server: copy `deploy/`,
-run `sudo deploy/install.sh`, fill in `/etc/openleet.env`, run `sudo /opt/openleet/update.sh`.
+run `sudo deploy/install.sh`, fill in `/etc/openleet.env` (with `DEPLOY_SECRET`, the same value
+as the GitHub secret), run `sudo /opt/openleet/update.sh`.
 
 ## Run locally
 

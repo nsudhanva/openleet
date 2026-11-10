@@ -1,0 +1,15 @@
+# Ports 80 and 443, held by systemd: restarts of openleet.service never refuse or drop a
+# connection, the kernel queues them until the new process accepts.
+[Unit]
+Description=OpenLeet sockets
+
+[Socket]
+ListenStream=80
+FileDescriptorName=http
+ListenStream=443
+FileDescriptorName=https
+NoDelay=true
+Service=openleet.service
+
+[Install]
+WantedBy=sockets.target

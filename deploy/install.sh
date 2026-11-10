@@ -9,7 +9,7 @@ PYTHON=3.15
 
 units() {
 	changed=0
-	for unit in openleet.service openleet-judge.service openleet-update.service openleet-update.timer; do
+	for unit in openleet.socket openleet.service openleet-judge.service openleet-update.service openleet-update.timer openleet-update.path; do
 		if ! cmp -s "$HERE/$unit" "/etc/systemd/system/$unit"; then
 			install -m 0644 "$HERE/$unit" "/etc/systemd/system/$unit"
 			changed=1
@@ -46,12 +46,14 @@ SITE_ADDRESS=openleet.example.com
 TZ=UTC
 # How much slower this machine runs Python than the one that measured reference times.
 JUDGE_CPU_SCALE=2.5
+# Shared with the GitHub secret DEPLOY_SECRET; CI signs its deploy requests with it.
+DEPLOY_SECRET=
 ENV
 	chmod 0640 /etc/openleet.env
 	chgrp openleet /etc/openleet.env
 fi
 
 units
-systemctl enable openleet.service openleet-judge.service openleet-update.timer
-systemctl start openleet-update.timer
+systemctl enable openleet.socket openleet.service openleet-judge.service openleet-update.timer openleet-update.path
+systemctl start openleet-update.timer openleet-update.path
 echo "Edit /etc/openleet.env, then run $ROOT/update.sh"

@@ -1,5 +1,7 @@
-# Builds the native release on every push to main and publishes it as the "edge" GitHub
-# release; the server's timer (deploy/update.sh) installs it within about five minutes.
+# CI/CD: every push to main is checked, built natively, published as the "edge" GitHub release
+# and deployed. CI asks the server to update (a signed POST /api/deploy); systemd then runs
+# deploy/update.sh as root, which installs the release and restarts the services without
+# dropping connections. The job ends when /api/version reports the new revision.
 # The archive holds bin/openleet (web app embedded), bin/openleet-judge, the judge's Python, the data and
 # deploy/ (systemd units and scripts, which update themselves on the server).
 name: release
@@ -84,3 +86,19 @@ jobs:
           gh release view edge --json assets --jq '.assets | sort_by(.createdAt) | reverse | .[].name' \
             | grep '^openleet-.*\.tar\.zst$' | tail -n +4 \
             | while read -r name; do gh release delete-asset edge "$name" -y; gh release delete-asset edge "$name.sha256" -y || true; done
+      - name: Deploy and wait until live
+        env:
+          DEPLOY_SECRET: ${{ secrets.DEPLOY_SECRET }}
+          SITE: https://openleet.sudhanva.me
+        run: |
+          body="{\"revision\":\"$REV\"}"
+          signature=$(printf '%s' "$body" | openssl dgst -sha256 -hmac "$DEPLOY_SECRET" -r | cut -d' ' -f1)
+          curl -fsS -X POST "$SITE/api/deploy" -H "content-type: application/json" \
+            -H "x-deploy-signature: sha256=$signature" --data "$body"
+          for _ in $(seq 60); do
+            live=$(curl -fsS "$SITE/api/version" | jq -r .revision || true)
+            if [ "$live" = "$REV" ]; then echo "live: $REV"; exit 0; fi
+            sleep 5
+          done
+          echo "revision $REV is not live after 5 minutes (still $live)"
+          exit 1

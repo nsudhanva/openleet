@@ -3,23 +3,24 @@
 Description=OpenLeet
 After=network-online.target openleet-judge.service
 Wants=network-online.target openleet-judge.service
+Requires=openleet.socket
 
 [Service]
 User=openleet
 Group=openleet
 EnvironmentFile=/etc/openleet.env
 Environment=DATA_DIR=/opt/openleet/current/data STATE_DIR=/var/lib/openleet
-Environment=HTTP_PORT=80 HTTPS_PORT=443 JUDGE_SOCKET=/run/openleet-judge/judge.sock
+Environment=JUDGE_SOCKET=/run/openleet-judge/judge.sock
 ExecStart=/opt/openleet/current/bin/openleet
 Restart=always
-RestartSec=2
+RestartSec=1
+TimeoutStopSec=10
 StateDirectory=openleet
 StateDirectoryMode=0700
 MemoryMax=200M
 
-# Ports 80 and 443 without root, and nothing else.
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# The sockets come from openleet.socket, so the server needs no privileges at all.
+CapabilityBoundingSet=
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
