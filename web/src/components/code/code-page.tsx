@@ -33,6 +33,7 @@ import { useAfterPaint } from "@/hooks/use-after-paint";
 import { type SaveStatus, useAutosave } from "@/hooks/use-autosave";
 import { useCompanies, useCompany } from "@/hooks/use-companies";
 import { useModKeys } from "@/hooks/use-hotkeys";
+import { useShown } from "@/hooks/use-shown";
 import { api, messageOf } from "@/lib/api";
 import { companyName } from "@/lib/companies";
 import { cpuTime } from "@/lib/format";
@@ -58,13 +59,16 @@ const CodeEditor = lazy(async () => ({
 }));
 
 /**
- * CodeMirror is most of this page's code, so it loads once the statement is on screen; until
- * then an empty box of the same size holds its place.
+ * CodeMirror is most of this page's code, so it loads once the statement is on screen, and
+ * starts only once its pane shows (on a phone, when you open the Code tab); until then an
+ * empty box of the same size holds its place.
  */
 function DeferredCodeEditor(props: ComponentProps<typeof CodeEditor>) {
 	const painted = useAfterPaint();
-	const placeholder = <div className={props.className} />;
-	if (!painted) return placeholder;
+	const box = useRef<HTMLDivElement>(null);
+	const shown = useShown(box);
+	const placeholder = <div ref={box} className={props.className} />;
+	if (!painted || !shown) return placeholder;
 	return (
 		<Suspense fallback={placeholder}>
 			<CodeEditor {...props} />
