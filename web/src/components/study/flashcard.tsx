@@ -1,5 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { CodeXmlIcon, LightbulbIcon, RotateCcwIcon } from "lucide-react";
+import {
+	ArrowLeftIcon,
+	CodeXmlIcon,
+	LightbulbIcon,
+	NotebookPenIcon,
+	RotateCcwIcon,
+	SkipForwardIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { ActionButton } from "@/components/action-button";
 import { ConfirmClear } from "@/components/confirm-clear";
@@ -34,8 +41,9 @@ const GRADE_ACTIONS: {
 ];
 
 /**
- * One problem, sized to the screen: the statement on the left, the guess, hint and answer
- * on the right (one at a time on a phone). Remount it (key by slug) for a fresh guess.
+ * One problem: the statement on the left, the guess, hint and answer on the right (one at a
+ * time below `lg`), and a bar of actions under them. Remount it (key by slug) for a fresh
+ * guess.
  */
 export function Flashcard({
 	card,
@@ -190,11 +198,12 @@ export function Flashcard({
 				</>
 			}
 			footer={
-				<footer className="flex flex-wrap items-center gap-2 border-t px-4 py-2 sm:px-6">
+				<div className="flex items-center gap-1 sm:gap-2">
 					<ActionButton
 						variant="ghost"
 						label="Back"
 						shortcut="B"
+						icon={<ArrowLeftIcon />}
 						onClick={back}
 						disabled={(!revealed && !canGoBack) || busy}
 					/>
@@ -202,11 +211,13 @@ export function Flashcard({
 						variant="ghost"
 						label="My answer"
 						shortcut="M"
+						icon={<NotebookPenIcon />}
 						onClick={editNote}
 						disabled={editing}
 					/>
 					{revealed ? (
-						<div className="ml-auto flex flex-wrap justify-end gap-2">
+						// On a phone the grades share the rest of the bar, their labels wrapping.
+						<div className="ml-auto grid flex-1 grid-cols-3 gap-1 sm:flex sm:flex-none sm:gap-2">
 							{GRADE_ACTIONS.map((a) => (
 								<ActionButton
 									key={a.grade}
@@ -215,6 +226,7 @@ export function Flashcard({
 									shortcut={a.key}
 									disabled={busy}
 									onClick={() => answer(a.grade)}
+									className="max-sm:h-auto max-sm:min-h-10 max-sm:px-1 max-sm:leading-tight max-sm:whitespace-normal"
 								/>
 							))}
 						</div>
@@ -224,6 +236,7 @@ export function Flashcard({
 								variant="ghost"
 								label="Skip"
 								shortcut="S"
+								icon={<SkipForwardIcon />}
 								onClick={() => answer("skip")}
 								disabled={busy}
 							/>
@@ -235,18 +248,19 @@ export function Flashcard({
 										: "Hint"
 								}
 								shortcut="H"
+								icon={<LightbulbIcon />}
 								onClick={showHint}
 								disabled={hintsShown >= hints.length}
 							/>
 							<ActionButton
-								className="ml-auto"
+								className="ml-auto max-sm:flex-1"
 								label="Show answer"
 								shortcut="Enter"
 								onClick={reveal}
 							/>
 						</>
 					)}
-				</footer>
+				</div>
 			}
 		/>
 	);

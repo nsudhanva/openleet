@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/page-header";
 import { PagerControls } from "@/components/pager";
 import { PremiumBadge } from "@/components/premium-badge";
 import { Segmented } from "@/components/segmented";
+import { SelectPicker } from "@/components/select-picker";
 import { TopicFilter } from "@/components/topic-filter";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { useCompanies } from "@/hooks/use-companies";
 import { useFitRows } from "@/hooks/use-fit-rows";
+import { useFitScreen } from "@/hooks/use-media";
 import { usePager } from "@/hooks/use-pager";
 import { api } from "@/lib/api";
 import { ANY_COMPANY, type CompanySearch, companyName } from "@/lib/companies";
@@ -65,6 +67,9 @@ export const Route = createFileRoute("/problems")({
 /** Company tags a row shows before folding the rest into "+n". */
 const ROW_TAGS = 3;
 
+/** Rows a page shows where the page scrolls; on a `fit:` screen, as many as fit. */
+const SCROLL_PAGE_ROWS = 25;
+
 /** Typing waits this long for a pause before it searches. */
 const SEARCH_DEBOUNCE_MS = 150;
 
@@ -99,7 +104,9 @@ function Problems() {
 	const router = useRouter();
 	const loading = useRouterState({ select: (s) => s.isLoading });
 	const tableArea = useRef<HTMLDivElement>(null);
-	const pageSize = useFitRows(tableArea);
+	const fit = useFitScreen();
+	const fitRows = useFitRows(tableArea, fit);
+	const pageSize = fit ? fitRows : SCROLL_PAGE_ROWS;
 
 	// Every filter lives in the URL; typing replaces the entry instead of adding one per key.
 	const choose = (
@@ -121,54 +128,66 @@ function Problems() {
 	const first = pager.page * pageSize;
 	const visible = rows.slice(first, first + pageSize);
 
+	// A new page of a long scrolled table starts at its top.
+	const shownPage = useRef(pager.page);
+	useEffect(() => {
+		if (shownPage.current === pager.page) return;
+		shownPage.current = pager.page;
+		const table = tableArea.current;
+		if (table && table.getBoundingClientRect().top < 0)
+			table.scrollIntoView({ block: "start" });
+	}, [pager.page]);
+
 	async function reset(slug: string) {
 		await api.clearProgress({ slug });
 		await router.invalidate();
 	}
 
 	return (
-		<div className="flex h-full min-h-0 flex-col">
-			<PageHeader
-				title="Problems"
-				actions={
-					<div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
-						<CompanyPicker
-							value={company}
-							disabled={!isAskedPeriod(period)}
-							onChange={(next) => choose({ company: next })}
-						/>
-						<Segmented
-							label="Problem list"
-							value={period}
-							options={PERIOD_OPTIONS}
-							onChange={(next) => choose({ period: next })}
-							className="flex-wrap"
-						/>
-						<TopicFilter
-							value={topic}
-							list={{ company, period, difficulty }}
-							onChange={(next) => choose({ topic: next })}
-						/>
-						<DifficultyFilter
-							value={difficulty}
-							onChange={(next) => choose({ difficulty: next })}
-						/>
-						<SearchBox
-							value={q}
-							onChange={(next) => choose({ q: next }, true)}
-						/>
-					</div>
-				}
-			>
+		<div className="flex flex-col fit:h-full fit:min-h-0">
+			<PageHeader title="Problems">
 				{describeList(companyName(companies, company), period)} Topics stay
 				hidden unless you filter or search by one.
 			</PageHeader>
+			{/* Two to a row on a phone, the search first; one wrapping row from sm. */}
+			<div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+				<CompanyPicker
+					value={company}
+					disabled={!isAskedPeriod(period)}
+					onChange={(next) => choose({ company: next })}
+				/>
+				<SelectPicker<Period>
+					label="Problem list"
+					value={period}
+					items={PERIOD_OPTIONS}
+					onChange={(next) => choose({ period: next })}
+					className="sm:hidden"
+				/>
+				<Segmented
+					label="Problem list"
+					value={period}
+					options={PERIOD_OPTIONS}
+					onChange={(next) => choose({ period: next })}
+					className="flex-wrap max-sm:hidden"
+				/>
+				<TopicFilter
+					value={topic}
+					list={{ company, period, difficulty }}
+					onChange={(next) => choose({ topic: next })}
+					className="max-sm:col-span-2"
+				/>
+				<DifficultyFilter
+					value={difficulty}
+					onChange={(next) => choose({ difficulty: next })}
+				/>
+				<SearchBox value={q} onChange={(next) => choose({ q: next }, true)} />
+			</div>
 
 			<div
 				ref={tableArea}
 				aria-busy={loading}
 				className={cn(
-					"min-h-0 flex-1 overflow-hidden rounded-sm bg-card shadow-[0_1px_0_var(--border)] transition-opacity",
+					"scroll-mt-16 rounded-sm bg-card shadow-[0_1px_0_var(--border)] transition-opacity fit:min-h-0 fit:flex-1 fit:overflow-hidden",
 					loading && "opacity-60",
 				)}
 			>
@@ -222,9 +241,9 @@ function Problems() {
 											difficulty,
 											slug: row.slug,
 										}}
-										className="flex items-baseline gap-2 font-medium hover:text-primary hover:underline"
+										className="flex items-baseline gap-2 font-medium hover:text-primary hover:underline max-sm:flex-wrap"
 									>
-										<span className="max-w-full shrink-0 truncate">
+										<span className="max-w-full shrink-0 truncate max-sm:shrink max-sm:whitespace-normal">
 											{row.title}
 										</span>
 										{row.premium && <PremiumBadge />}
@@ -234,6 +253,12 @@ function Problems() {
 											</span>
 										)}
 									</Link>
+									{/* A phone has no room for these columns: they go under the title. */}
+									<div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
+										<DifficultyBadge difficulty={row.difficulty} />
+										<ListBadge list={row.list} />
+										{statusText(row)}
+									</div>
 								</TableCell>
 								<TableCell className="hidden sm:table-cell">
 									<DifficultyBadge difficulty={row.difficulty} />
@@ -337,7 +362,7 @@ function SearchBox({
 	}, [draft]);
 
 	return (
-		<div className="relative w-full sm:w-64">
+		<div className="relative col-span-2 w-full max-sm:order-first sm:w-64">
 			<SearchIcon
 				className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
 				aria-hidden

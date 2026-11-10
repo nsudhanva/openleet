@@ -64,9 +64,13 @@ export function StudyBar({
 				value={search.difficulty}
 				onChange={(difficulty) => change({ difficulty })}
 			/>
-			{/* Wide enough for "3092 cards in this set", so a new count never moves the row. */}
-			<p className="ml-auto min-w-[22ch] text-right text-sm text-muted-foreground tabular-nums">
-				{remaining} {remaining === 1 ? "card" : "cards"} in this set
+			{/*
+			 * Wide enough for "3092 cards in this set", so a new count never moves the row; on a
+			 * fit: screen too narrow for the row, just "3092 cards".
+			 */}
+			<p className="text-sm text-muted-foreground tabular-nums max-sm:col-span-2 sm:ml-auto sm:min-w-[22ch] sm:text-right fit:max-xl:min-w-[10ch]">
+				{remaining} {remaining === 1 ? "card" : "cards"}
+				<span className="fit:max-xl:hidden"> in this set</span>
 			</p>
 		</>
 	);

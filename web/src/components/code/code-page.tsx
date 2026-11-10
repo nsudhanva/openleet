@@ -15,7 +15,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { ActionButton } from "@/components/action-button";
+import { ActionButton, ICON_ON_PHONE } from "@/components/action-button";
 import type { CodeEditorHandle } from "@/components/code/code-editor";
 import { RunResultView, SubmitResultView } from "@/components/code/results";
 import { SubmissionChart } from "@/components/code/submission-chart";
@@ -33,6 +33,7 @@ import { useAfterPaint } from "@/hooks/use-after-paint";
 import { type SaveStatus, useAutosave } from "@/hooks/use-autosave";
 import { useCompanies, useCompany } from "@/hooks/use-companies";
 import { useModKeys } from "@/hooks/use-hotkeys";
+import { useFitScreen } from "@/hooks/use-media";
 import { useShown } from "@/hooks/use-shown";
 import { api, messageOf } from "@/lib/api";
 import { companyName } from "@/lib/companies";
@@ -132,7 +133,7 @@ function judgeSummary({
 
 /**
  * Solve one problem in Python: the statement on the left, the editor with its test case,
- * results and submissions on the right (stacked on a phone). The draft saves itself.
+ * results and submissions on the right (one at a time below `lg`). The draft saves itself.
  * Remount it (key by slug) for another problem.
  */
 export function CodePage({ card, code, submissions: initial }: CodePageData) {
@@ -169,6 +170,15 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 	const [submissions, setSubmissions] = useState(initial);
 	const [opening, setOpening] = useState<number | null>(null);
 
+	/** Where the page scrolls, brings the result panel into view once it renders. */
+	const panel = useRef<HTMLDivElement>(null);
+	const fit = useFitScreen();
+	const showPanel = () =>
+		!fit &&
+		requestAnimationFrame(() =>
+			panel.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+		);
+
 	function edit(text: string) {
 		source.current = text;
 		draft.schedule(text);
@@ -187,6 +197,7 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 		setBusy(job);
 		setTab("result");
 		setPane("aside");
+		showPanel();
 		try {
 			if (job === "run") {
 				const input = custom ? testcase : undefined;
@@ -256,14 +267,14 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 						to="/"
 						className={cn(
 							buttonVariants({ variant: "ghost", size: "sm" }),
-							"text-muted-foreground",
+							"justify-self-start text-muted-foreground max-sm:col-span-2",
 						)}
 						title="Back to the study queue"
 					>
 						<ArrowLeftIcon data-icon="inline-start" />
 						Study · {companyName(companies, company)}
 					</Link>
-					<span className="text-sm text-muted-foreground">
+					<span className="text-sm text-muted-foreground max-sm:col-span-2">
 						Python 3{supported && ` · ${judgeSummary(code.judge)}`}
 					</span>
 				</>
@@ -304,9 +315,12 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 							initial={source.current}
 							onChange={edit}
 							label="Python 3 solution"
-							className="min-h-0 flex-[3]"
+							className="h-[50svh] min-h-64 fit:h-auto fit:min-h-0 fit:flex-[3]"
 						/>
-						<div className="flex min-h-0 flex-[2] flex-col gap-2 border-t border-dashed px-4 py-2 sm:px-6">
+						<div
+							ref={panel}
+							className="flex scroll-mt-16 flex-col gap-2 border-t border-dashed px-4 py-2 sm:px-6 fit:min-h-0 fit:flex-[2]"
+						>
 							<Segmented
 								label="Panel"
 								value={tab}
@@ -322,7 +336,7 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 									{code.judge.reason ? `: ${code.judge.reason}` : "."}
 								</p>
 							)}
-							<div className="min-h-0 flex-1 overflow-y-auto">
+							<div className="fit:min-h-0 fit:flex-1 fit:overflow-y-auto">
 								{tab === "testcase" && (
 									<TestcasePanel
 										value={testcase}
@@ -353,19 +367,17 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 					</>
 				}
 				footer={
-					<footer className="flex flex-wrap items-center gap-2 border-t px-4 py-2 sm:px-6">
-						<span className="text-xs text-muted-foreground" aria-live="polite">
-							{SAVE_TEXT[draft.status]}
-						</span>
+					<div className="flex items-center gap-1 sm:gap-2">
 						<Button
 							variant="ghost"
 							size="sm"
 							disabled={!code.starter || swapping}
 							onClick={() => swapVersion("reset")}
 							title="Replace your code with the starter code; Restore previous brings it back"
+							className={ICON_ON_PHONE}
 						>
 							<RotateCcwIcon data-icon="inline-start" />
-							Reset
+							<span className="max-sm:sr-only">Reset</span>
 						</Button>
 						<Button
 							variant="ghost"
@@ -373,26 +385,31 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 							disabled={previous === null || swapping}
 							onClick={() => swapVersion("restore")}
 							title={restoreTitle(previous, starter)}
+							className={ICON_ON_PHONE}
 						>
 							<HistoryIcon data-icon="inline-start" />
-							Restore previous
+							<span className="max-sm:sr-only">Restore previous</span>
 						</Button>
-						<div className="ml-auto flex gap-2">
-							<ActionButton
-								variant="outline"
-								label={busy === "run" ? "Running…" : "Run"}
-								shortcut="⌘↵"
-								disabled={!supported || busy !== null}
-								onClick={() => judge("run")}
-							/>
-							<ActionButton
-								label={busy === "submit" ? "Submitting…" : "Submit"}
-								shortcut="⌘⇧↵"
-								disabled={!supported || busy !== null}
-								onClick={() => judge("submit")}
-							/>
-						</div>
-					</footer>
+						<span
+							className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+							aria-live="polite"
+						>
+							{SAVE_TEXT[draft.status]}
+						</span>
+						<ActionButton
+							variant="outline"
+							label={busy === "run" ? "Running…" : "Run"}
+							shortcut="⌘↵"
+							disabled={!supported || busy !== null}
+							onClick={() => judge("run")}
+						/>
+						<ActionButton
+							label={busy === "submit" ? "Submitting…" : "Submit"}
+							shortcut="⌘⇧↵"
+							disabled={!supported || busy !== null}
+							onClick={() => judge("submit")}
+						/>
+					</div>
 				}
 			/>
 		</ProblemPage>

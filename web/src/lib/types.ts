@@ -166,6 +166,13 @@ export interface SearchHit {
 	snippet: string | null;
 }
 
+/** How often you named a topic when it applied, over the cards that carry it. */
+export interface TopicRecall {
+	topic: string;
+	recall: number;
+	seen: number;
+}
+
 interface ScoreReport {
 	computedAt: number;
 	/** Mastery weighted by the company's 6-month frequency, 0..1. */
@@ -184,7 +191,7 @@ interface ScoreReport {
 		total: number;
 	}[];
 	/** Recall per topic: how often you named it when it applied. Weakest first. */
-	topics: { topic: string; recall: number; seen: number }[];
+	topics: TopicRecall[];
 }
 
 export interface DailyScore {

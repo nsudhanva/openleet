@@ -1,16 +1,17 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { CompanyPicker } from "@/components/company-picker";
 import { ConfirmClear } from "@/components/confirm-clear";
 import { FitPages } from "@/components/fit-pages";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { useCompanies } from "@/hooks/use-companies";
+import { useFitScreen } from "@/hooks/use-media";
 import { api } from "@/lib/api";
 import { ANY_COMPANY, companyName } from "@/lib/companies";
 import { pageTitle, percent } from "@/lib/format";
 import type { StudySet } from "@/lib/scheduler";
-import type { DailyScore, Difficulty } from "@/lib/types";
+import type { DailyScore, Difficulty, TopicRecall } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/progress")({
@@ -38,7 +39,7 @@ function Panel({
 		<section
 			aria-labelledby={id}
 			className={cn(
-				"flex flex-col rounded-sm bg-card p-4 shadow-[0_1px_0_var(--border)] lg:min-h-0",
+				"flex flex-col rounded-sm bg-card p-4 shadow-[0_1px_0_var(--border)] fit:min-h-0",
 				className,
 			)}
 		>
@@ -59,11 +60,11 @@ function Progress() {
 	const total = report.byDifficulty.reduce((sum, d) => sum + d.total, 0);
 
 	return (
-		<div className="flex min-h-0 flex-col lg:h-full">
+		<div className="flex flex-col fit:h-full fit:min-h-0">
 			<PageHeader
 				title="Progress"
 				actions={
-					<div className="flex flex-wrap items-center gap-2">
+					<div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
 						<CompanyPicker
 							value={company}
 							onChange={(next) =>
@@ -78,8 +79,8 @@ function Progress() {
 				minutes, so mastery fades when reviews get old.
 			</PageHeader>
 
-			{/* One screen on desktop; on a phone the panels stack at full height. */}
-			<div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-3">
+			{/* One screen on a fit: screen; elsewhere the panels stack, two to a row from md. */}
+			<div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 fit:min-h-0 fit:flex-1">
 				<Panel
 					id="readiness"
 					title="Readiness"
@@ -155,21 +156,10 @@ function Progress() {
 					id="topics"
 					title="Topics you miss most"
 					note="How often you named a topic when it applied. Select one to drill it."
+					className="md:max-lg:col-span-2"
 				>
 					{report.topics.length ? (
-						<FitPages className="h-72 lg:h-auto lg:flex-1">
-							<ul>
-								{report.topics.map((t) => (
-									<Meter
-										key={t.topic}
-										label={t.topic}
-										value={t.recall}
-										detail={`${t.seen} ${t.seen === 1 ? "card" : "cards"}`}
-										to={{ set: "all", topic: t.topic }}
-									/>
-								))}
-							</ul>
-						</FitPages>
+						<TopicMeters topics={report.topics} />
 					) : (
 						<p className="text-sm text-muted-foreground">
 							Grade a few cards to see which topics you miss.
@@ -178,6 +168,42 @@ function Progress() {
 				</Panel>
 			</div>
 		</div>
+	);
+}
+
+/** Topics a scrolling page lists before "Show all"; a fit: screen pages them all instead. */
+const TOPICS_SHOWN = 8;
+
+function TopicMeters({ topics }: { topics: TopicRecall[] }) {
+	const fit = useFitScreen();
+	const [all, setAll] = useState(false);
+	const shown = fit || all ? topics : topics.slice(0, TOPICS_SHOWN);
+	return (
+		<>
+			<FitPages className="fit:flex-1">
+				<ul>
+					{shown.map((t) => (
+						<Meter
+							key={t.topic}
+							label={t.topic}
+							value={t.recall}
+							detail={`${t.seen} ${t.seen === 1 ? "card" : "cards"}`}
+							to={{ set: "all", topic: t.topic }}
+						/>
+					))}
+				</ul>
+			</FitPages>
+			{shown.length < topics.length && (
+				<Button
+					variant="outline"
+					size="sm"
+					className="self-start"
+					onClick={() => setAll(true)}
+				>
+					Show all {topics.length} topics
+				</Button>
+			)}
+		</>
 	);
 }
 

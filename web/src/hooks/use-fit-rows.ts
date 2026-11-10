@@ -3,17 +3,19 @@ import { type RefObject, useLayoutEffect, useState } from "react";
 /**
  * How many body rows of the table inside `ref` fit in it, measured from the rows it renders
  * (header and borders included), so any row content or font gives the right count. It updates
- * when the box or the table resizes; with no rows to measure it keeps the last count.
+ * when the box or the table resizes; with no rows to measure it keeps the last count. While
+ * not `active` (the box is not sized to the screen) it measures nothing.
  */
 export function useFitRows(
 	ref: RefObject<HTMLElement | null>,
+	active: boolean,
 	minimum = 5,
 ): number {
 	const [count, setCount] = useState(minimum);
 	useLayoutEffect(() => {
 		const box = ref.current;
 		const table = box?.querySelector("table");
-		if (!box || !table) return;
+		if (!active || !box || !table) return;
 		const measure = () => {
 			const rows = table.tBodies[0]?.rows;
 			if (!rows?.length) return;
@@ -35,6 +37,6 @@ export function useFitRows(
 		observer.observe(box);
 		observer.observe(table);
 		return () => observer.disconnect();
-	}, [ref, minimum]);
+	}, [ref, active, minimum]);
 	return count;
 }
