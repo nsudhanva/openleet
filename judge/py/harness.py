@@ -15,9 +15,11 @@ A problem's `spec` (built offline, stored with its tests):
 
 import itertools
 import json
+import math
 import re
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from typing import Any
 
 from prelude import ListNode, Node, TreeNode
@@ -46,30 +48,30 @@ def element(type_: str) -> str | None:
     return bare(match.group(1)) if match else None
 
 
-# ---------------------------------------------------------------------------------------------
-# Linked lists and trees in LeetCode's JSON form
+def link(nodes: list) -> Any:
+    """Chains `nodes` through `.next` and returns the head (None for no nodes)."""
+    for a, b in itertools.pairwise(nodes):
+        a.next = b
+    return nodes[0] if nodes else None
+
+
+def walk(head: Any) -> Iterator[Any]:
+    """The nodes of a solution's linked list; raises once it is too long to be acyclic."""
+    count = 0
+    while head is not None:
+        yield head
+        count += 1
+        if count > MAX_LIST:
+            raise ValueError("Output linked list has a cycle")
+        head = head.next
 
 
 def to_list_node(values: list | None) -> ListNode | None:
-    head = tail = None
-    for value in values or []:
-        node = ListNode(value)
-        if tail is None:
-            head = tail = node
-        else:
-            tail.next = node
-            tail = node
-    return head
+    return link([ListNode(v) for v in values or []])
 
 
 def from_list_node(head: ListNode | None) -> list:
-    values = []
-    while head is not None:
-        values.append(head.val)
-        if len(values) > MAX_LIST:
-            raise ValueError("Output linked list has a cycle")
-        head = head.next
-    return values
+    return [node.val for node in walk(head)]
 
 
 def to_tree(values: list | None, node_type: type = TreeNode) -> TreeNode | None:
@@ -120,10 +122,6 @@ def find_node(root: Any, value: Any) -> Any:
     raise HarnessError(f"No node with value {value!r} in the tree")
 
 
-# ---------------------------------------------------------------------------------------------
-# Generic, type-driven conversion
-
-
 def decode(value: Any, type_: str) -> Any:
     kind = bare(type_)
     if kind == "ListNode":
@@ -153,7 +151,7 @@ def encode(value: Any, type_: str | None = None) -> Any:
     if isinstance(value, float):
         if kind == "int" and value.is_integer():
             return int(value)
-        if value != value or value in (float("inf"), float("-inf")):
+        if not math.isfinite(value):
             return str(value)
         return value
     if isinstance(value, (list, tuple)):
@@ -168,16 +166,17 @@ def encode(value: Any, type_: str | None = None) -> Any:
     raise TypeError(f"Cannot print a {type(value).__name__} result")
 
 
-# ---------------------------------------------------------------------------------------------
-# Special cases, chosen per problem by spec["adapter"]
-
-
+@dataclass(slots=True)
 class Call:
     """How one test calls a function-kind solution: positional args and how to read the result."""
 
-    def __init__(self, args: list, read: Callable[[Any], Any]):
-        self.args = args
-        self.read = read
+    args: list
+    read: Callable[[Any], Any]
+
+
+def node_value(node: Any) -> Any:
+    """An answer that is one node, printed as LeetCode does: its value."""
+    return None if node is None else node.val
 
 
 def generic_call(spec: dict, data: dict) -> Call:
@@ -205,8 +204,7 @@ def cycle_call(spec: dict, data: dict) -> Call:
     """Linked List Cycle I/II: `pos` links the tail back; the answer is a node or a bool."""
     values, pos = data["head"], data.get("pos", -1)
     nodes = [ListNode(v) for v in values]
-    for a, b in itertools.pairwise(nodes):
-        a.next = b
+    head = link(nodes)
     if nodes and pos is not None and pos >= 0:
         nodes[-1].next = nodes[pos]
     index = {id(n): i for i, n in enumerate(nodes)}
@@ -216,13 +214,12 @@ def cycle_call(spec: dict, data: dict) -> Call:
             return index.get(id(result), -2)
         return encode(result, spec["returns"])
 
-    return Call([nodes[0] if nodes else None], read)
+    return Call([head], read)
 
 
 def node_value_call(spec: dict, data: dict) -> Call:
     """Answers that are one tree node (lowest common ancestor): LeetCode prints its value."""
-    call = generic_call(spec, data)
-    return Call(call.args, lambda result: None if result is None else result.val)
+    return Call(generic_call(spec, data).args, node_value)
 
 
 def intersection_call(spec: dict, data: dict) -> Call:
@@ -235,12 +232,7 @@ def intersection_call(spec: dict, data: dict) -> Call:
     if not data["intersectVal"]:
         a += [ListNode(v) for v in list_a[skip_a:]]
         b += [ListNode(v) for v in list_b[skip_b:]]
-    for chain in (a + shared, b + shared):
-        for x, y in itertools.pairwise(chain):
-            x.next = y
-    head_a = (a + shared)[0] if a + shared else None
-    head_b = (b + shared)[0] if b + shared else None
-    return Call([head_a, head_b], lambda result: None if result is None else result.val)
+    return Call([link(a + shared), link(b + shared)], node_value)
 
 
 def delete_node_call(spec: dict, data: dict) -> Call:
@@ -258,27 +250,21 @@ def random_list_call(spec: dict, data: dict) -> Call:
     """Copy List with Random Pointer: [[val, random_index], ...] in and out."""
     pairs = data["head"]
     nodes = [Node(v) for v, _ in pairs]
-    for i, (_, r) in enumerate(pairs):
-        if i + 1 < len(nodes):
-            nodes[i].next = nodes[i + 1]
-        nodes[i].random = nodes[r] if r is not None else None
+    head = link(nodes)
+    for node, (_, r) in zip(nodes, pairs, strict=True):
+        node.random = nodes[r] if r is not None else None
     originals = {id(n) for n in nodes}
 
     def read(result: Any) -> Any:
-        out, seen, node = [], [], result
-        while node is not None:
+        seen = []
+        for node in walk(result):
             if id(node) in originals:
                 raise ValueError("The copy reuses nodes of the original list")
             seen.append(node)
-            node = node.next
-            if len(seen) > MAX_LIST:
-                raise ValueError("Output linked list has a cycle")
         index = {id(n): i for i, n in enumerate(seen)}
-        for n in seen:
-            out.append([n.val, None if n.random is None else index.get(id(n.random))])
-        return out
+        return [[n.val, None if n.random is None else index.get(id(n.random))] for n in seen]
 
-    return Call([nodes[0] if nodes else None], read)
+    return Call([head], read)
 
 
 def graph_call(spec: dict, data: dict) -> Call:
@@ -373,10 +359,7 @@ def run(namespace: dict, spec: dict, prepared: Any) -> Any:
     """Runs one prepared test against the code already executed into `namespace`."""
     if spec["kind"] == "design":
         return run_design(namespace, spec, prepared)
-    cls = namespace.get(spec["cls"])
-    if cls is None:
-        raise NameError(f"class {spec['cls']} is not defined")
-    method = getattr(cls(), spec["method"], None)
+    method = getattr(solution_class(namespace, spec)(), spec["method"], None)
     if method is None:
         raise AttributeError(f"{spec['cls']} has no method {spec['method']}")
     return prepared.read(method(*prepared.args))
@@ -384,10 +367,8 @@ def run(namespace: dict, spec: dict, prepared: Any) -> Any:
 
 def run_design(namespace: dict, spec: dict, data: dict) -> list:
     ops, args = data["ops"], data["args"]
-    cls = namespace.get(spec["cls"])
-    if cls is None:
-        raise NameError(f"class {spec['cls']} is not defined")
     methods = spec.get("methods", {})
+    cls = solution_class(namespace, spec)
     obj = cls(*decode_args(args[0], methods.get("__init__", {}).get("params", [])))
     out: list = [None]
     for op, op_args in zip(ops[1:], args[1:], strict=True):
@@ -395,6 +376,14 @@ def run_design(namespace: dict, spec: dict, data: dict) -> list:
         result = getattr(obj, op)(*decode_args(op_args, info.get("params", [])))
         out.append(encode(result, info.get("returns")))
     return out
+
+
+def solution_class(namespace: dict, spec: dict) -> Any:
+    """The class the spec names, as the solution defined it."""
+    cls = namespace.get(spec["cls"])
+    if cls is None:
+        raise NameError(f"class {spec['cls']} is not defined")
+    return cls
 
 
 def decode_args(values: list, types: list[str]) -> list:

@@ -28,19 +28,21 @@ class Zygote:
         self.process = subprocess.Popen(
             [sys.executable, str(ZYGOTE)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env
         )
-        assert json.loads(self.process.stdout.readline())["ready"]
+        # Both are pipes, as requested above.
+        assert self.process.stdin and self.process.stdout
+        self.stdin, self.stdout = self.process.stdin, self.process.stdout
+        assert json.loads(self.stdout.readline())["ready"]
 
     def run(self, job: dict) -> list[dict]:
-        self.process.stdin.write(json.dumps(job).encode() + b"\n")
-        self.process.stdin.flush()
+        self.stdin.write(json.dumps(job).encode() + b"\n")
+        self.stdin.flush()
         events, timer = [], None
         try:
-            while line := self.process.stdout.readline():
+            while line := self.stdout.readline():
                 event = json.loads(line)
                 events.append(event)
                 if "pid" in event:
-                    pid = event["pid"]
-                    timer = threading.Timer(WALL_SECONDS, os.kill, (pid, signal.SIGKILL))
+                    timer = threading.Timer(WALL_SECONDS, os.kill, (event["pid"], signal.SIGKILL))
                     timer.start()
                 if "done" in event or "fatal" in event:
                     return events
@@ -87,23 +89,23 @@ def outcomes(events: list[dict], count: int) -> tuple[list, int, str | None]:
     return results, cpu, error
 
 
-def vote(item: dict, results_dir: Path) -> None:
-    tests = [{"input": e["input"]} for e in item["examples"]]
-    tests += [{"input": i} for i in item["inputs"]]
+def ballots(spec: dict, codes: dict[str, str], tests: list[dict], limits: dict) -> dict:
+    """What each named reference printed for every test, its CPU ms, and any run-level error."""
     voters = {}
-    for name, code in item["voters"].items():
-        job = {
-            "spec": item["spec"],
-            "code": code,
-            "tests": tests,
-            "limits": LIMITS,
-            "keep_going": True,
-        }
+    for name, code in codes.items():
+        job = {"spec": spec, "code": code, "tests": tests, "limits": limits, "keep_going": True}
         try:
             results, cpu, error = outcomes(zygote().run(job), len(tests))
         except (RuntimeError, OSError, ValueError) as failure:
             results, cpu, error = [None] * len(tests), 0, repr(failure)
         voters[name] = {"results": results, "cpuMs": cpu, "error": error}
+    return voters
+
+
+def vote(item: dict, results_dir: Path) -> None:
+    tests = [{"input": e["input"]} for e in item["examples"]]
+    tests += [{"input": i} for i in item["inputs"]]
+    voters = ballots(item["spec"], item["voters"], tests, LIMITS)
     (results_dir / f"{item['slug']}.json").write_text(
         json.dumps({"slug": item["slug"], "voters": voters})
     )
