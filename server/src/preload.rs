@@ -1,7 +1,7 @@
-//! The data a page of the web app loads first, so the server can preload it with the page:
-//! the API requests of its route loaders (web/src/routes, their queries from
-//! web/src/lib/schemas.ts). The browser then fetches the data alongside the app's code
-//! instead of after it.
+//! What a page of the web app loads first, so the server can preload it with the page: the
+//! API requests of its route loaders (web/src/routes, their queries from
+//! web/src/lib/schemas.ts) and its route's code. The browser then fetches both alongside the
+//! app's main code instead of after it.
 //!
 //! A preload helps only when the app later asks for the same URL, byte for byte; otherwise
 //! the browser fetches twice and warns. So this mirrors how the app's router reads search
@@ -27,7 +27,8 @@ const MAX_QUERY: usize = 200;
 /// Problem slugs are short; a longer path segment is no problem's.
 const MAX_SLUG: usize = 128;
 
-/// `<link rel="preload">` tags for the data the page at `path?query` loads first.
+/// `<link rel="preload">` tags for the data the page at `path?query` loads first. (Its route's
+/// code is preloaded too, by the version of index.html made for that route: build.rs.)
 pub fn links(path: &str, query: Option<&str>) -> String {
     let mut links = String::new();
     for url in urls(path, query) {
@@ -39,6 +40,20 @@ pub fn links(path: &str, query: Option<&str>) -> String {
         );
     }
     links
+}
+
+/// The route file (web/src/routes) that renders `path`.
+pub fn route(path: &str) -> Option<&'static str> {
+    match path {
+        "/" => Some("index"),
+        "/problems" => Some("problems"),
+        "/progress" => Some("progress"),
+        "/about" => Some("about"),
+        _ => path
+            .strip_prefix("/code/")
+            .filter(|slug| !slug.is_empty() && !slug.contains('/'))
+            .map(|_| "code.$slug"),
+    }
 }
 
 /// The API requests the page's route loaders make first, in order: the root route's (every
@@ -337,9 +352,25 @@ mod tests {
     }
 
     #[test]
+    fn knows_the_routes() {
+        assert_eq!(route("/"), Some("index"));
+        assert_eq!(route("/code/two-sum"), Some("code.$slug"));
+        assert_eq!(route("/code/"), None);
+        assert_eq!(route("/code/a/b"), None);
+        assert_eq!(route("/nope"), None);
+    }
+
+    #[test]
     fn writes_link_tags() {
+        let data = |page| {
+            let links = links(page, None);
+            links[..links
+                .find("<link rel=\"modulepreload\"")
+                .unwrap_or(links.len())]
+                .to_owned()
+        };
         assert_eq!(
-            links("/progress", None),
+            data("/progress"),
             concat!(
                 r#"<link rel="preload" as="fetch" crossorigin href="/api/readiness?company=google">"#,
                 r#"<link rel="preload" as="fetch" crossorigin href="/api/companies">"#,

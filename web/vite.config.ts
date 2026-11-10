@@ -75,8 +75,12 @@ const proxy = { "/api": process.env.API_URL ?? "http://127.0.0.1:8080" };
 /** A static SPA in dist/: the Rust server (server/) serves it and the JSON API under /api. */
 export default defineConfig({
 	resolve: { tsconfigPaths: true },
-	// One stylesheet for the whole app (inlined by inlineCss), so no chunk loads CSS of its own.
-	build: { cssCodeSplit: false },
+	build: {
+		// One stylesheet for the whole app (inlined by inlineCss), so no chunk loads CSS of its own.
+		cssCodeSplit: false,
+		// The server reads it to preload each page's route code (server/build.rs).
+		manifest: true,
+	},
 	server: { port: 3000, proxy },
 	preview: { port: 3000, proxy },
 	plugins: [

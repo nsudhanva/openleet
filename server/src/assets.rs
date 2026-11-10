@@ -21,17 +21,32 @@ pub struct Asset {
     pub zstd: Option<&'static [u8]>,
 }
 
-/// index.html cut where a page's preloads go (before `</body>`), with the part before also
-/// compressed and left open (flushed, not finished), so a response only appends the rest.
+/// index.html cut where a page's data preloads go (before `</body>`): the part before, with
+/// preloads for one route's code, also compressed and left open (flushed, not finished), so a
+/// response only appends the rest. build.rs makes one for each route.
 pub struct Page {
     pub head: &'static [u8],
-    pub tail: &'static [u8],
     pub br_head: &'static [u8],
     pub zstd_head: &'static [u8],
 }
 
+/// The pages by route file (src/preload.rs), "" for any other path, and the rest of index.html.
+pub struct Pages {
+    pub tail: &'static [u8],
+    pub routes: &'static [(&'static str, Page)],
+}
+
+impl Pages {
+    /// The page for `path`, with its route.
+    fn get(&self, path: &str) -> Option<&(&'static str, Page)> {
+        let route = preload::route(path).unwrap_or_default();
+        let page = |name: &str| self.routes.iter().find(|(r, _)| *r == name);
+        page(route).or_else(|| page(""))
+    }
+}
+
 static ASSETS: &[Asset] = include!(concat!(env!("OUT_DIR"), "/assets.rs"));
-static PAGE: Option<Page> = include!(concat!(env!("OUT_DIR"), "/page.rs"));
+static PAGES: Pages = include!(concat!(env!("OUT_DIR"), "/pages.rs"));
 static BY_PATH: LazyLock<HashMap<&'static str, &'static Asset>> =
     LazyLock::new(|| ASSETS.iter().map(|a| (a.path, a)).collect());
 
@@ -68,7 +83,7 @@ pub async fn serve(uri: Uri, headers: HeaderMap) -> Response {
         return StatusCode::NOT_FOUND.into_response();
     };
     if asset.path == INDEX
-        && let Some(page) = &PAGE
+        && let Some(page) = PAGES.get(path)
     {
         return serve_page(page, asset, &uri, &headers);
     }
@@ -90,11 +105,17 @@ pub async fn serve(uri: Uri, headers: HeaderMap) -> Response {
     )
 }
 
-/// index.html with `<link rel="preload">` tags for the data the page at `uri` loads first.
-fn serve_page(page: &Page, asset: &Asset, uri: &Uri, headers: &HeaderMap) -> Response {
+/// index.html with preloads for the code and data the page at `uri` loads first.
+fn serve_page(
+    (route, page): &(&str, Page),
+    asset: &Asset,
+    uri: &Uri,
+    headers: &HeaderMap,
+) -> Response {
     let links = preload::links(uri.path(), uri.query());
-    let etag = fingerprint::etag(&[asset.etag.as_bytes(), links.as_bytes()].concat());
-    let rest = [links.as_bytes(), page.tail].concat();
+    let version = [asset.etag, route, &links].join("\n");
+    let etag = fingerprint::etag(version.as_bytes());
+    let rest = [links.as_bytes(), PAGES.tail].concat();
     respond(headers, asset.mime, REVALIDATE, &etag, |coding| {
         Some(Body::from(match coding {
             Coding::Br => brotli_append(page.br_head, &rest),
@@ -231,13 +252,19 @@ mod tests {
 
     #[tokio::test]
     async fn pages_carry_their_preloads_in_every_coding() {
-        let Some(page) = &PAGE else {
+        let Some((_, page)) = PAGES.get("/code/two-sum") else {
             return; // an API-only build embeds no web app
         };
         let plain = body(get("/code/two-sum?x=1", "identity").await).await;
         let links = preload::links("/code/two-sum", Some("x=1"));
-        assert_eq!(plain, [page.head, links.as_bytes(), page.tail].concat());
+        assert_eq!(plain, [page.head, links.as_bytes(), PAGES.tail].concat());
         assert!(links.contains("/api/code/two-sum"));
+        let code = r#"<link rel="modulepreload" crossorigin href="/assets/code._slug-"#;
+        assert!(String::from_utf8_lossy(page.head).contains(code));
+        assert!(
+            !String::from_utf8_lossy(PAGES.get("/nope").unwrap().1.head)
+                .contains("modulepreload\" crossorigin href=\"/assets/code")
+        );
 
         let response = get("/code/two-sum?x=1", "gzip, br").await;
         assert_eq!(response.headers()[header::CONTENT_ENCODING], "br");
@@ -254,7 +281,7 @@ mod tests {
 
     #[tokio::test]
     async fn each_page_has_its_own_etag() {
-        if PAGE.is_none() {
+        if PAGES.routes.is_empty() {
             return;
         }
         let etag = |response: &Response| response.headers()[header::ETAG].clone();
