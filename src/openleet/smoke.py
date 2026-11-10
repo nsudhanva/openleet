@@ -28,7 +28,7 @@ from typing import Any, TextIO
 from openleet.judging import SPECS_PATH
 
 DEFAULT_URL = "http://localhost:8080"
-# The judge may queue a submission behind others and then run it for up to 20 s of CPU.
+# The judge may queue a submission behind others and then run it for up to 30 s of CPU.
 TIMEOUT_S = 240
 BUSY_RETRIES = 20
 BUSY_WAIT_S = 3.0
@@ -37,7 +37,7 @@ STDOUT_CAP = 16 << 10
 MAX_CODE_BYTES = 64 << 10
 MARK = -987654321
 # The judge's largest time limit (server/src/judge.rs, TimePolicy::MAX_MS).
-MAX_LIMIT_MS = 20_000
+MAX_LIMIT_MS = 30_000
 UNICODE = "héllo ✓ 日本語 🚀"
 CONCURRENT = 8
 # Category order for the sample: rare kinds first, so a small sample still covers them.
@@ -359,7 +359,7 @@ def categories(entry: dict) -> list[str]:
 
 def judged(specs: dict) -> dict[str, dict]:
     """Problems with a reference that fits the time limit. The limit admits the slowest
-    reference only up to its 20 s cap (server/src/judge.rs, TimePolicy), and specs.json's
+    reference only up to its 30 s cap (server/src/judge.rs, TimePolicy), and specs.json's
     reference may be that slowest one, so problems over the cap are left out."""
     return {
         slug: entry

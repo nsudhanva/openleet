@@ -9,7 +9,7 @@ problem from 1 to 1000. Live: <https://openleet.sudhanva.me>
 flowchart LR
     B[Browser] -- HTTPS / HTTP/2 --> S
     subgraph VM [GCP e2-micro, 1 GB RAM, systemd]
-        S["openleet<br/>Rust: API + embedded web app<br/>~20 MB RAM"]
+        S["openleet<br/>Rust: API + embedded web app"]
         S -- read/write --> D[(DuckDB<br/>progress, drafts,<br/>submissions)]
         S -- read only --> T[(tests.duckdb)]
         S -- Unix socket --> J["openleet-judge<br/>Rust daemon"]
@@ -18,12 +18,9 @@ flowchart LR
     end
 ```
 
-A page load is one round trip, then everything at once. index.html carries the stylesheet and
-a static shell (header and empty page), so the first paint needs nothing else. For each page
-the server adds preloads for its route's code and for the API requests its loaders make first
-(`server/src/preload.rs`, tested against `web/src/lib/page-loads.json`), so code and data
-download together; the app renders once both are in. index.html is compressed at build time
-for each route, and a response only appends the data preloads as stored bytes.
+A page loads in one round trip. index.html inlines the stylesheet and a static shell, and the
+server adds preloads for the route's code and its first API calls (`server/src/preload.rs`), so
+code and data download together.
 
 ## A submission
 
@@ -50,6 +47,11 @@ sequenceDiagram
     S-->>W: Accepted / Wrong Answer / TLE / ...
 ```
 
+The time limit is the larger of 4× the fastest reference and 1.25× the slowest, times
+`JUDGE_CPU_SCALE` (3.25 on the VM, which runs Python about 3× slower than a laptop), plus
+500 ms, kept between 2 and 30 s. A solution gets about 370 MB of heap before Memory Limit
+Exceeded.
+
 ## Where the tests come from
 
 ```mermaid
@@ -63,10 +65,9 @@ flowchart LR
     R -- any disagree --> X[Dropped]
 ```
 
-A reference counts only if it reproduces the statement's own example outputs. The time limit is
-at least 4× the fastest reference and 1.25× the slowest, so what LeetCode accepted passes here.
-Rebuild with `uv run openleet judge all`; `uv run openleet judge publish` uploads the new
-`tests.duckdb` to the `corpus` release and records it in `data/judge/corpus.json`.
+A reference counts only if it reproduces the statement's own example outputs. Rebuild with
+`uv run openleet judge all`; `uv run openleet judge publish` uploads `tests.duckdb` to the
+`corpus` release and pins it in `data/judge/corpus.json`.
 
 Sources: company lists from
 [liquidslr/leetcode-company-wise-problems](https://github.com/liquidslr/leetcode-company-wise-problems),
@@ -88,16 +89,21 @@ flowchart LR
     U --> V["CI polls /api/version<br/>until REV is live"]
 ```
 
-Restarts drop no connection: `openleet.socket` holds ports 80 and 443 while the server restarts.
-The server heals itself: systemd restarts it if it exits or stops pinging the watchdog (it pings
-only while its database answers), rustls-acme renews the certificate 30 days before expiry, and
-the server copies its database to `/var/lib/openleet/backups/<date>.duckdb` daily (14 kept). On
-start it migrates the database (`server/src/db/migrations`, copying it to
-`backups/pre-migration-*` first) or, if the file is unusable, moves it to
-`/var/lib/openleet/quarantine/` and restores the newest backup.
+On the VM everything is a systemd unit enabled at boot, so a reboot or stop/start needs no step.
+
+- `openleet-http.socket` and `openleet-https.socket` hold ports 80 and 443, so a restart drops
+  no connection.
+- systemd restarts the server if it exits or misses its watchdog ping (sent only while the
+  database answers). `openleet-health.timer` restarts the server after 3 failed checks and the
+  judge when it reports down.
+- rustls-acme renews the certificate 30 days before expiry.
+- The database is copied to `/var/lib/openleet/backups/` daily (14 kept). On start the server
+  runs migrations (`server/src/db/migrations`) or, if the file is unusable, quarantines it and
+  restores the newest backup.
+
 Roll back by pointing `/opt/openleet/current` at an older release. New server: copy `deploy/`,
-run `sudo deploy/install.sh`, fill in `/etc/openleet.env` (with `DEPLOY_SECRET`, the same value
-as the GitHub secret), run `sudo /opt/openleet/update.sh`.
+run `sudo deploy/install.sh`, set `DEPLOY_SECRET` in `/etc/openleet.env` (the same value as the
+GitHub secret), run `sudo /opt/openleet/update.sh`.
 
 ## Run locally
 
@@ -115,7 +121,7 @@ docker compose up -d --build   # or build both images from this checkout
 HTTP_PORT=8088 docker compose up -d   # port 80 taken: http://openleet.localhost:8088
 ```
 
-Working on the server: the judge needs Linux, so on macOS only the judge runs in Docker:
+Working on the server: the judge needs Linux, so on macOS only the judge runs in Docker.
 
 ```bash
 uv sync && uv run openleet judge fetch && bun install && bun run build
@@ -124,15 +130,15 @@ JUDGE_SOCKET=tcp://127.0.0.1:7777 JUDGE_CPU_SCALE=1 cargo run --release -p openl
 # http://localhost:8080   (bun run dev: web on :3000 with hot reload)
 ```
 
+Every check CI runs, also the pre-push hook (`uv run prek install`):
+
 ```bash
-bun run check && bun run typecheck && bun run test
-cargo fmt --check && cargo clippy --all-targets && cargo test
-uv run ruff check && uv run ty check
+uv run prek run --all-files --hook-stage pre-push
 ```
 
-End to end, over HTTP only, against a running server (local or production): references,
-wrong and crashing variants, time and memory limits, sandbox abuse, bad requests. It puts back
-every draft it changes; its submissions stay in the history.
+End to end over HTTP against a running server: references, wrong and crashing variants, time
+and memory limits, sandbox abuse, bad requests. It puts back every draft it changes; its
+submissions stay in the history.
 
 ```bash
 uv run openleet smoke --base-url http://localhost:8080 --allow-network   # local Docker judge
@@ -166,6 +172,7 @@ deploy/  systemd units, install and update scripts
 | `POST /api/submit` `{slug, code}` | Run every test |
 | `GET /api/submissions?slug=` | Your submissions |
 | `GET /api/health` | `ok`, `db`, `judge`, certificate expiry; 503 when the database is down |
+| `GET /api/version` | The running revision |
 
 Errors are `{"error": "..."}` with the status: 400 for invalid input (malformed JSON included),
 404 for an unknown problem or endpoint, 415 for a body not sent as `application/json`.
