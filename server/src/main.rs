@@ -32,7 +32,7 @@ use tower_http::compression::CompressionLayer;
 
 use openleet::content::Content;
 
-use crate::db::Store;
+use crate::db::{Opening, Store};
 use crate::deploy::Deploy;
 use crate::judge::Judge;
 use crate::listen::Sockets;
@@ -43,6 +43,9 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 /// How often today's scores are saved even without new attempts (memory decays over time).
 const SCORE_REFRESH: Duration = Duration::from_mins(15);
+/// How often the server checks that the current UTC day has a backup (taken at startup, then
+/// once a day; a failed one is retried at the next check).
+const BACKUP_CHECK: Duration = Duration::from_hours(1);
 /// How long a stopping server waits for in-flight HTTPS requests (a submission can take
 /// several seconds to judge).
 const DRAIN: Duration = Duration::from_secs(30);
@@ -127,13 +130,33 @@ fn database_path(state_dir: &Path) -> Result<PathBuf> {
 
 fn load_state(config: &Config) -> Result<Shared> {
     let content = Content::load(&config.problems, &config.data_dir.join("approaches.json"))?;
-    let store = Store::open(
+    let (store, opening) = Store::open(
         &database_path(&config.state_dir)?,
         &config.data_dir.join("judge/tests.duckdb"),
     )?;
-    let imported = store.import_sqlite(&config.state_dir.join("progress.db"))?;
-    if imported > 0 {
-        tracing::info!("imported {imported} attempts from the old SQLite database");
+    match &opening {
+        Opening::Existing(migrated) => {
+            tracing::info!("progress database at schema version {}", migrated.to);
+        }
+        Opening::Created => tracing::info!("created the progress database"),
+        Opening::Recovered {
+            quarantined,
+            backup,
+        } => tracing::error!(
+            "progress database recovered from {}; the unusable files are in {}",
+            backup.as_deref().map_or_else(
+                || "nothing (it starts empty)".into(),
+                |b| b.display().to_string()
+            ),
+            quarantined.display()
+        ),
+    }
+    // The SQLite database of older servers is imported once, into a database that starts out
+    // empty; never again after that (clearing your progress must not bring it back).
+    if opening.started_empty()
+        && let Some(imported) = store.import_sqlite(&config.state_dir.join("progress.db"))?
+    {
+        tracing::info!("imported the old SQLite database: {imported:?}");
     }
     let judge = Judge::load(
         &config.data_dir.join("judge/specs.json"),
@@ -199,6 +222,8 @@ async fn main() -> Result<()> {
         }
     });
 
+    tokio::spawn(back_up_daily(Arc::clone(&state)));
+
     let router = app(state);
     let http = SocketAddr::from((Ipv6Addr::UNSPECIFIED, config.http_port));
     match config.tls_domains() {
@@ -212,6 +237,30 @@ async fn main() -> Result<()> {
         Some(domains) => serve_tls(&config, domains, router, &mut sockets, http).await?,
     }
     Ok(())
+}
+
+/// Takes the day's backup of the progress database when there is none yet (see
+/// `db::backup`). The copy runs on the blocking pool and holds the database for the few
+/// milliseconds a small database takes.
+async fn back_up_daily(state: Shared) {
+    let mut tick = tokio::time::interval(BACKUP_CHECK);
+    loop {
+        tick.tick().await;
+        let day = jiff::Timestamp::now()
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .date();
+        let started = std::time::Instant::now();
+        match state.db(move |store| store.backup(day)).await {
+            Ok(Some(backup)) => tracing::info!(
+                "backup: {} ({} KiB) in {} ms",
+                backup.file.display(),
+                backup.bytes.div_ceil(1024),
+                started.elapsed().as_millis()
+            ),
+            Ok(None) => {}
+            Err(error) => tracing::error!("backup failed: {error}"),
+        }
+    }
 }
 
 /// The primary domain and the aliases that redirect to it.
