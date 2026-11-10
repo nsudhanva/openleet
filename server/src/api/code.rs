@@ -112,6 +112,7 @@ pub async fn save_draft(
     State(state): State<Shared>,
     Json(input): Json<DraftInput>,
 ) -> ApiResult<StatusCode> {
+    judge::check_code_size(&input.code)?;
     state
         .db_for(&input.slug, move |store, slug| {
             store.save_draft(slug, &input.code, now_ms())
@@ -125,6 +126,7 @@ pub async fn reset_draft(
     State(state): State<Shared>,
     Json(input): Json<DraftInput>,
 ) -> ApiResult<impl IntoResponse> {
+    judge::check_code_size(&input.code)?;
     let draft = state
         .db_for(&input.slug, move |store, slug| {
             store.reset_draft(slug, &input.code, now_ms())
@@ -138,6 +140,7 @@ pub async fn restore_draft(
     State(state): State<Shared>,
     Json(input): Json<DraftInput>,
 ) -> ApiResult<impl IntoResponse> {
+    judge::check_code_size(&input.code)?;
     state
         .db_for(&input.slug, move |store, slug| {
             store.restore_draft(slug, &input.code, now_ms())

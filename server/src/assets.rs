@@ -63,8 +63,7 @@ pub async fn serve(uri: Uri, headers: HeaderMap) -> Response {
         .header(header::CONTENT_TYPE, asset.mime)
         .header(header::CACHE_CONTROL, cache)
         .header(header::ETAG, asset.etag)
-        .header(header::VARY, "accept-encoding")
-        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff");
+        .header(header::VARY, "accept-encoding");
     if headers
         .get(header::IF_NONE_MATCH)
         .is_some_and(|v| v.as_bytes() == asset.etag.as_bytes())

@@ -1,6 +1,9 @@
 //! Embeds the built web app (web/dist) in the binary, compressed ahead of time with Brotli
-//! (quality 11) and zstd (level 19), so serving a file costs no CPU at all.
+//! (quality 11) and zstd (level 19), so serving a file costs no CPU at all, and hashes the
+//! inline scripts of its index.html for the Content-Security-Policy (src/security.rs).
 
+#[path = "src/csp.rs"]
+mod csp;
 #[path = "src/fingerprint.rs"]
 mod fingerprint;
 
@@ -111,4 +114,9 @@ fn main() {
     }
     code.push(']');
     fs::write(out_dir.join("assets.rs"), code).expect("write assets.rs");
+
+    let index = fs::read_to_string(dist.join("index.html")).unwrap_or_default();
+    let hashes = csp::inline_script_hashes(&index);
+    fs::write(out_dir.join("script_hashes.rs"), format!("&{hashes:?}"))
+        .expect("write script_hashes.rs");
 }

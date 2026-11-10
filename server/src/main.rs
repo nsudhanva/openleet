@@ -4,6 +4,8 @@
 mod acme;
 mod api;
 mod assets;
+#[cfg(test)]
+mod csp;
 mod db;
 mod deploy;
 mod error;
@@ -11,6 +13,7 @@ mod fingerprint;
 mod health;
 mod judge;
 mod listen;
+mod security;
 mod state;
 
 use std::net::{Ipv6Addr, SocketAddr};
@@ -190,6 +193,10 @@ fn app(state: Shared) -> Router {
     Router::new()
         .nest("/api", api)
         .fallback(assets::serve)
+        .layer(axum::middleware::map_response(security::headers))
+        .layer(tower::limit::GlobalConcurrencyLimitLayer::new(
+            security::MAX_IN_FLIGHT,
+        ))
         .with_state(state)
 }
 
@@ -375,7 +382,13 @@ async fn serve_tls(
         shutdown().await;
         stopper.graceful_shutdown(Some(DRAIN));
     });
-    let server = axum_server::from_tcp(https_listener)?;
+    let mut server = axum_server::from_tcp(https_listener)?;
+    // Slow clients may not hold a connection open by trickling in their headers.
+    server
+        .http_builder()
+        .http1()
+        .timer(hyper_util::rt::TokioTimer::new())
+        .header_read_timeout(security::HEADER_READ_TIMEOUT);
     health::ready();
     server
         .acceptor(acceptor)

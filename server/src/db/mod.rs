@@ -36,6 +36,8 @@ pub use sqlite::Imported;
 
 /// DuckDB's buffer pool; the whole box has 1 GB and the judge needs most of it.
 const MEMORY_LIMIT: &str = "64MB";
+/// Submissions kept per problem (each holds up to 64 KB of code).
+pub const SUBMISSIONS_KEPT: usize = 100;
 
 /// Your code for a problem: the current draft and the version Reset replaced.
 #[derive(Default, Serialize)]
@@ -512,10 +514,14 @@ impl Store {
         }
     }
 
-    /// Stores a judged submission and returns its id.
+    /// Stores a judged submission and returns its id. Only the problem's newest
+    /// [`SUBMISSIONS_KEPT`] are kept, plus its latest accepted one (which marks it solved);
+    /// older ones go in the same transaction.
     pub fn insert_submission(&self, s: &NewSubmission) -> Result<i64> {
-        self.with(|c| {
-            c.prepare_cached(
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction()?;
+        let id = tx
+            .prepare_cached(
                 "INSERT INTO submissions (slug, submitted_at, code, verdict, tests_passed,
                     tests_total, cpu_ms, detail)
                  VALUES (?, to_timestamp(? / 1000), ?, ?, ?, ?, ?, ?::JSON::VARIANT)
@@ -526,8 +532,16 @@ impl Store {
                     s.slug, s.at, s.code, s.verdict, s.passed, s.total, s.cpu_ms, s.detail
                 ],
                 |r| r.get(0),
-            )
-        })
+            )?;
+        tx.prepare_cached(
+            "DELETE FROM submissions WHERE slug = $1
+                AND id NOT IN (SELECT id FROM submissions WHERE slug = $1 ORDER BY id DESC LIMIT $2)
+                AND id IS DISTINCT FROM (SELECT max(id) FROM submissions
+                                         WHERE slug = $1 AND verdict = 'accepted')",
+        )?
+        .execute(params![s.slug, SUBMISSIONS_KEPT])?;
+        tx.commit()?;
+        Ok(id)
     }
 
     /// A problem's submissions, newest first, without code or detail.
@@ -811,6 +825,37 @@ mod tests {
         let detail: serde_json::Value = serde_json::from_str(one.detail.unwrap().get()).unwrap();
         assert_eq!(detail["failing"]["kind"], "hidden");
         assert_eq!(store.solved().unwrap(), HashSet::from(["a".to_owned()]));
+    }
+
+    #[test]
+    fn keeps_the_newest_submissions_and_the_latest_accepted_one() {
+        let (store, _dir) = store();
+        let submit = |slug, verdict| {
+            store
+                .insert_submission(&NewSubmission {
+                    slug,
+                    at: 1,
+                    code: "x",
+                    verdict,
+                    passed: 0,
+                    total: 1,
+                    cpu_ms: 1,
+                    detail: "null",
+                })
+                .unwrap()
+        };
+        let accepted = submit("a", "accepted");
+        let other = submit("b", "wrong_answer");
+        let mut last = 0;
+        for _ in 0..SUBMISSIONS_KEPT + 5 {
+            last = submit("a", "wrong_answer");
+        }
+        let kept = store.submissions("a", 1000).unwrap();
+        assert_eq!(kept.len(), SUBMISSIONS_KEPT + 1);
+        assert_eq!(kept[0].id, last);
+        assert_eq!(kept[SUBMISSIONS_KEPT].id, accepted);
+        assert!(store.solved().unwrap().contains("a"));
+        assert_eq!(store.submissions("b", 10).unwrap()[0].id, other);
     }
 
     #[test]
