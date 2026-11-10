@@ -10,7 +10,52 @@
 		/>
 	</head>
 	<body>
-		<div id="app"></div>
+		<div id="app">
+			<!--
+				The shell, painted from this file and its inlined CSS before any script runs: the site
+				header and the empty page frame, laid out like components/site-header.tsx and
+				routes/__root.tsx. The app replaces it in one paint once the page's data is in.
+			-->
+			<header
+				class="sticky top-0 z-40 h-12 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70"
+			>
+				<div
+					class="mx-auto flex h-full max-w-7xl items-center gap-1 px-2 sm:gap-2 sm:px-5"
+				>
+					<a
+						href="/"
+						class="mr-1 flex items-center gap-2 font-bold tracking-tight sm:mr-2"
+						aria-label="OpenLeet home"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							class="size-5 text-card-margin"
+							aria-hidden="true"
+						>
+							<path d="M7 2h10" />
+							<path d="M5 6h14" />
+							<rect width="18" height="12" x="3" y="10" rx="2" />
+						</svg>
+						<span class="hidden md:inline">OpenLeet</span>
+					</a>
+					<nav aria-label="Main" class="flex items-center gap-0.5">
+						<a href="/" class="shell-nav">Study</a>
+						<a href="/problems" class="shell-nav">Problems</a>
+						<a href="/progress" class="shell-nav">Progress</a>
+						<a href="/about" class="shell-nav">About</a>
+					</nav>
+				</div>
+			</header>
+			<main
+				class="mx-auto flex h-[calc(100dvh-3rem)] w-full max-w-7xl flex-col overflow-y-auto px-3 py-3 sm:px-5"
+			></main>
+		</div>
 		<script type="module" src="/src/main.tsx"></script>
 	</body>
 </html>

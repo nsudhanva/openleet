@@ -42,12 +42,39 @@ function preloadFonts(): Plugin {
 	};
 }
 
+/**
+ * Inlines the stylesheet into index.html, so the page (and its static shell) paints from the
+ * HTML alone, with no request in between. It is one file for the whole app; the HTML that
+ * carries it is cached and revalidated like any page.
+ */
+function inlineCss(): Plugin {
+	return {
+		name: "inline-css",
+		apply: "build",
+		transformIndexHtml: {
+			order: "post",
+			handler: (html, { bundle = {} }) =>
+				html.replace(
+					/<link rel="stylesheet"[^>]*href="\/([^"]+\.css)"[^>]*>/g,
+					(link, file: string) => {
+						const asset = bundle[file];
+						if (asset?.type !== "asset") return link;
+						delete bundle[file];
+						return `<style>${String(asset.source)}</style>`;
+					},
+				),
+		},
+	};
+}
+
 /** Where `vite` and `vite preview` send /api: the Rust server (server/) by default. */
 const proxy = { "/api": process.env.API_URL ?? "http://127.0.0.1:8080" };
 
 /** A static SPA in dist/: the Rust server (server/) serves it and the JSON API under /api. */
 export default defineConfig({
 	resolve: { tsconfigPaths: true },
+	// One stylesheet for the whole app (inlined by inlineCss), so no chunk loads CSS of its own.
+	build: { cssCodeSplit: false },
 	server: { port: 3000, proxy },
 	preview: { port: 3000, proxy },
 	plugins: [
@@ -58,5 +85,6 @@ export default defineConfig({
 		tailwindcss(),
 		themeBeforePaint(),
 		preloadFonts(),
+		inlineCss(),
 	],
 });

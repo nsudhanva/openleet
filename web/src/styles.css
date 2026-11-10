@@ -147,6 +147,11 @@
 }
 
 @layer components {
+	/* index.html's shell: a nav link as components/site-header.tsx draws it (a small ghost button). */
+	.shell-nav {
+		@apply inline-flex h-7 shrink-0 items-center justify-center rounded-[min(var(--radius-md),12px)] border border-transparent px-2 text-[0.8rem] font-medium whitespace-nowrap text-muted-foreground sm:px-2.5;
+	}
+
 	/* The card's red header rule. */
 	.card-margin {
 		border-bottom: 2px solid var(--card-margin);
