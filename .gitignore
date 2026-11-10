@@ -31,12 +31,14 @@ client_secret*.json
 .claude/settings.local.json
 
 # Fetched sources and local server state: DuckDB, the old SQLite progress database it imports,
-# and the HTTPS certificate cache (STATE_DIR=data)
+# the HTTPS certificate cache, backups and quarantine (STATE_DIR=data)
 data/.cache/
 data/*.db
 data/*.db-*
 data/*.duckdb
 data/*.duckdb.wal
 data/acme/
+data/backups/
+data/quarantine/
 # A release asset ("corpus"), named in data/judge/corpus.json: uv run openleet judge fetch
 data/judge/tests.duckdb
