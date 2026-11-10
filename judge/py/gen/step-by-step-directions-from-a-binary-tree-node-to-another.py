@@ -1,20 +1,9 @@
 """Step-By-Step Directions at n = 10^5: two 50,000-deep chains with start and dest at their
 ends (long path, deep recursion), a single chain, or a random tree."""
 
+from _shapes import level_order
+
 SEEDS = 3
-
-
-def level_order(vals, left, right):
-    out, queue = [], [0]
-    for node in queue:
-        if node is None:
-            out.append(None)
-        else:
-            out.append(vals[node])
-            queue += [left[node], right[node]]
-    while out and out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):

@@ -1,20 +1,9 @@
 """Smallest String From Leaf with 8500 nodes: a deep chain with side leaves (long strings to
 compare), or a random tree of mostly equal letters so leaf strings tie for a long time."""
 
+from _shapes import level_order
+
 SEEDS = 3
-
-
-def level_order(vals, left, right):
-    out, queue = [], [0]
-    for node in queue:
-        if node is None:
-            out.append(None)
-        else:
-            out.append(vals[node])
-            queue += [left[node], right[node]]
-    while out and out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):

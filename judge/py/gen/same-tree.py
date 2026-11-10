@@ -1,6 +1,8 @@
 """Same Tree on 100-node trees (random or a skewed chain): identical, one value changed deep,
 or one structural difference."""
 
+from _shapes import level_order
+
 SEEDS = 3
 
 
@@ -15,19 +17,6 @@ def build(rng, n, chain):
             free += [(i, 0), (i, 1)]
         (left if side == 0 else right)[parent] = i
     return left, right
-
-
-def level_order(vals, left, right):
-    out, queue = [], [0]
-    for node in queue:
-        if node is None:
-            out.append(None)
-        else:
-            out.append(vals[node])
-            queue += [left[node], right[node]]
-    while out and out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):

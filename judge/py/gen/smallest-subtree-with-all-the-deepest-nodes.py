@@ -1,20 +1,9 @@
 """Smallest Subtree with All Deepest Nodes at 500 nodes with unique values: two long chains of
 equal depth (LCA at the root), a single 500-deep chain, or a random tree."""
 
+from _shapes import level_order
+
 SEEDS = 3
-
-
-def level_order(vals, left, right):
-    out, queue = [], [0]
-    for node in queue:
-        if node is None:
-            out.append(None)
-        else:
-            out.append(vals[node])
-            queue += [left[node], right[node]]
-    while out and out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):

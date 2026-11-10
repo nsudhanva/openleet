@@ -2,24 +2,10 @@
 10^5 for the left one) or a random BST, with hasNext/next interleaved up to 10^5 calls and next
 only while values remain."""
 
+from _shapes import level_order
+
 SEEDS = 3
 CALLS = 10**5
-
-
-def _level_order(vals, left, right):
-    out, queue, i = [], [0], 0
-    while i < len(queue):
-        node = queue[i]
-        i += 1
-        if node is None:
-            out.append(None)
-            continue
-        out.append(vals[node])
-        queue.append(left[node])
-        queue.append(right[node])
-    while out and out[-1] is None:
-        out.pop()
-    return out
 
 
 def _bst(rng, n, kind):
@@ -64,7 +50,7 @@ def generate(rng):
     nl = [None if left[old] is None else new[left[old]] for old in order]
     nr = [None if right[old] is None else new[right[old]] for old in order]
     nv = [vals[old] for old in order]
-    ops, args = ["BSTIterator"], [[_level_order(nv, nl, nr)]]
+    ops, args = ["BSTIterator"], [[level_order(nv, nl, nr)]]
     remaining = n
     while len(ops) - 1 < CALLS:
         if remaining and rng.random() < 0.7:

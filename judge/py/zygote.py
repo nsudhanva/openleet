@@ -40,6 +40,7 @@ import prelude
 # that run side by side (the test builder) each need their own.
 SANDBOX_ID = int(os.environ.get("JUDGE_SANDBOX_UID", "61000"))
 GEN_DIR = Path(os.environ.get("JUDGE_GEN_DIR", Path(__file__).parent / "gen"))
+sys.path.append(str(GEN_DIR))  # generators import _shapes
 SOLUTION_FILE = "solution.py"
 STACK_BYTES = 256 * 1024 * 1024
 RECURSION_LIMIT = 1_000_000

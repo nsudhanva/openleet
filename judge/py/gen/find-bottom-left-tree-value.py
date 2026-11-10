@@ -1,25 +1,10 @@
 """Find Bottom Left Tree Value with 10^4 nodes and full 32-bit values: a random tree, or a
 zigzag chain 10^4 deep whose bottom node is on the right side."""
 
-from collections import deque
+from _shapes import level_order
 
 SEEDS = 2
 N = 10**4
-
-
-def level_order(vals, left, right):
-    out, q = [], deque([0])
-    while q:
-        u = q.popleft()
-        if u < 0:
-            out.append(None)
-            continue
-        out.append(vals[u])
-        q.append(left[u])
-        q.append(right[u])
-    while out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):
@@ -36,4 +21,4 @@ def generate(rng):
             p, side = slots.pop()
             (left if side == 0 else right)[p] = i
             slots += [(i, 0), (i, 1)]
-    return {"root": level_order(vals, left, right)}
+    return {"root": level_order(vals, left, right, empty=-1)}

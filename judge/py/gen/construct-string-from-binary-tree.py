@@ -1,25 +1,10 @@
 """Construct String from Binary Tree with 10^4 nodes: a random tree, or a single zigzag chain
 10^4 deep that punishes quadratic string concatenation and shallow recursion."""
 
-from collections import deque
+from _shapes import level_order
 
 SEEDS = 2
 N = 10**4
-
-
-def level_order(vals, left, right):
-    out, q = [], deque([0])
-    while q:
-        u = q.popleft()
-        if u < 0:
-            out.append(None)
-            continue
-        out.append(vals[u])
-        q.append(left[u])
-        q.append(right[u])
-    while out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):
@@ -36,4 +21,4 @@ def generate(rng):
             p, side = slots.pop()
             (left if side == 0 else right)[p] = i
             slots += [(i, 0), (i, 1)]
-    return {"root": level_order(vals, left, right)}
+    return {"root": level_order(vals, left, right, empty=-1)}

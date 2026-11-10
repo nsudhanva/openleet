@@ -2,25 +2,10 @@
 end, or a random BST whose key
 (a node with at most one child, so the result is unique) is present or absent."""
 
-from collections import deque
+from _shapes import level_order
 
 SEEDS = 3
 N = 10**4
-
-
-def level_order(vals, left, right):
-    out, q = [], deque([0])
-    while q:
-        u = q.popleft()
-        if u < 0:
-            out.append(None)
-            continue
-        out.append(vals[u])
-        q.append(left[u])
-        q.append(right[u])
-    while out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):
@@ -49,4 +34,4 @@ def generate(rng):
             key = rng.randint(-(10**5), 10**5)
             while key in present:
                 key = rng.randint(-(10**5), 10**5)
-    return {"root": level_order(vals, left, right), "key": key}
+    return {"root": level_order(vals, left, right, empty=-1), "key": key}

@@ -1,25 +1,11 @@
 """Maximum Level Sum of a Binary Tree with 10^4 nodes and values in [-10^5, 10^5]: a random
 tree, or a near-complete tree with mostly negative values."""
 
+from _shapes import level_order
+
 SEEDS = 2
 N = 10**4
 LIMIT = 10**5
-
-
-def level_order(root, left, right, val):
-    out, queue, i = [], [root], 0
-    while i < len(queue):
-        node = queue[i]
-        i += 1
-        if node is None:
-            out.append(None)
-            continue
-        out.append(val[node])
-        queue.append(left[node])
-        queue.append(right[node])
-    while out and out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):
@@ -44,4 +30,4 @@ def generate(rng):
             else:
                 right[(i - 1) // 2] = i
         val = [rng.randint(-LIMIT, LIMIT // 10) for _ in range(N)]
-    return {"root": level_order(0, left, right, val)}
+    return {"root": level_order(val, left, right)}

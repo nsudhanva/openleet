@@ -1,23 +1,9 @@
 """Maximum Depth of Binary Tree with 10^4 nodes: a zigzag chain 10^4 deep, or a random tree."""
 
+from _shapes import level_order
+
 SEEDS = 2
 N = 10**4
-
-
-def level_order(root, left, right, val):
-    out, queue, i = [], [root], 0
-    while i < len(queue):
-        node = queue[i]
-        i += 1
-        if node is None:
-            out.append(None)
-            continue
-        out.append(val[node])
-        queue.append(left[node])
-        queue.append(right[node])
-    while out and out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):
@@ -41,4 +27,4 @@ def generate(rng):
             slots.append((i, 0))
             slots.append((i, 1))
     val = [rng.randint(-100, 100) for _ in range(N)]
-    return {"root": level_order(0, left, right, val)}
+    return {"root": level_order(val, left, right)}

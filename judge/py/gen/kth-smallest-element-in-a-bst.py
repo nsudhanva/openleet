@@ -1,24 +1,10 @@
 """Kth Smallest in a BST with 10^4 distinct values: a right-leaning chain 10^4 deep (k near
 n) or a random-insertion BST."""
 
+from _shapes import level_order
+
 SEEDS = 2
 N = 10**4
-
-
-def level_order(root, left, right, val):
-    out, queue, i = [], [root], 0
-    while i < len(queue):
-        node = queue[i]
-        i += 1
-        if node is None:
-            out.append(None)
-            continue
-        out.append(val[node])
-        queue.append(left[node])
-        queue.append(right[node])
-    while out and out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):
@@ -47,4 +33,4 @@ def generate(rng):
                         break
                     cur = right[cur]
         k = rng.randint(1, N)
-    return {"root": level_order(root, left, right, vals), "k": k}
+    return {"root": level_order(vals, left, right, root), "k": k}

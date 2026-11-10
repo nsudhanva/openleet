@@ -1,24 +1,10 @@
 """Sum of Left Leaves at the maximum 1000 nodes: a random shape, or a zigzag-deep tree where
 many left children are leaves."""
 
+from _shapes import level_order
+
 SEEDS = 3
 N = 1000
-
-
-def serialize(vals, left, right, root):
-    out, queue, i = [], [root], 0
-    while i < len(queue):
-        node = queue[i]
-        i += 1
-        if node is None:
-            out.append(None)
-            continue
-        out.append(vals[node])
-        queue.append(left[node])
-        queue.append(right[node])
-    while out and out[-1] is None:
-        out.pop()
-    return out
 
 
 def generate(rng):
@@ -44,4 +30,4 @@ def generate(rng):
             slots.append((v, 0))
             slots.append((v, 1))
     vals = [rng.randint(-1000, 1000) for _ in range(N)]
-    return {"root": serialize(vals, left, right, 0)}
+    return {"root": level_order(vals, left, right)}

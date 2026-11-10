@@ -1,0 +1,170 @@
+"""Building blocks shared by the stress-test generators in this directory.
+
+A binary tree is a pair of child lists: left[i] and right[i] hold node i's children or the
+`empty` marker (None by default, -1 where a generator keeps the lists all-int). Node 0 is the
+root unless a builder returns one. Stored stress tests are keyed by the hash of each seed's
+input, so every function here must keep drawing from rng in exactly the same order.
+"""
+
+
+def pick_shape(rng):
+    """0, 1 or 2, drawn so that seeds 0, 1 and 2 each land on a different one."""
+    return rng.getrandbits(6) % 3
+
+
+def random_string(rng, alphabet, length):
+    """length characters, each drawn independently from alphabet."""
+    return "".join(rng.choice(alphabet) for _ in range(length))
+
+
+def level_order(vals, left, right, root=0, empty=None):
+    """LeetCode's level-order list for the tree, with trailing Nones dropped."""
+    out, queue = [], [root]
+    for node in queue:
+        if node == empty:
+            out.append(None)
+        else:
+            out.append(vals[node])
+            queue += (left[node], right[node])
+    while out and out[-1] is None:
+        out.pop()
+    return out
+
+
+def inorder(left, right, root=0, empty=None):
+    """Node ids in in-order."""
+    order, stack, node = [], [], root
+    while stack or node != empty:
+        while node != empty:
+            stack.append(node)
+            node = left[node]
+        node = stack.pop()
+        order.append(node)
+        node = right[node]
+    return order
+
+
+def traversals(left, right, root=0, empty=None):
+    """Node ids in pre-order, in-order and post-order."""
+    pre, ino, post = [], [], []
+    stack = [(root, 0)]
+    while stack:
+        node, state = stack.pop()
+        if state == 0:
+            pre.append(node)
+            stack.append((node, 1))
+            if left[node] != empty:
+                stack.append((left[node], 0))
+        elif state == 1:
+            ino.append(node)
+            stack.append((node, 2))
+            if right[node] != empty:
+                stack.append((right[node], 0))
+        else:
+            post.append(node)
+    return pre, ino, post
+
+
+def leaf_sums(vals, left, right, empty=None):
+    """Every root-to-leaf path sum."""
+    sums, stack = [], [(0, vals[0])]
+    while stack:
+        node, total = stack.pop()
+        if left[node] == empty and right[node] == empty:
+            sums.append(total)
+        for child in (left[node], right[node]):
+            if child != empty:
+                stack.append((child, total + vals[child]))
+    return sums
+
+
+def random_tree(rng, n, empty=None):
+    """A random n-node tree: each new node fills an open child slot chosen uniformly."""
+    left, right = [empty] * n, [empty] * n
+    slots = [(0, 0), (0, 1)]
+    for i in range(1, n):
+        j = rng.randrange(len(slots))
+        slots[j], slots[-1] = slots[-1], slots[j]
+        parent, side = slots.pop()
+        (left, right)[side][parent] = i
+        slots += [(i, 0), (i, 1)]
+    return left, right
+
+
+def thin_tree(rng, n, window, empty=None):
+    """A long, thin n-node tree: each new node fills one of the `window` newest open slots."""
+    left, right = [empty] * n, [empty] * n
+    slots = [(0, 0), (0, 1)]
+    for i in range(1, n):
+        parent, side = slots.pop(len(slots) - 1 - rng.randrange(min(window, len(slots))))
+        (left, right)[side][parent] = i
+        slots += [(i, 0), (i, 1)]
+    return left, right
+
+
+def skewed_tree(rng, n, empty=None, rate=1.0):
+    """A deep n-node tree: each new node fills the k-th newest open slot, k ~ Exp(rate)."""
+    left, right = [empty] * n, [empty] * n
+    slots = [(0, 0), (0, 1)]
+    for i in range(1, n):
+        j = len(slots) - 1 - min(len(slots) - 1, int(rng.expovariate(rate)))
+        slots[j], slots[-1] = slots[-1], slots[j]
+        parent, side = slots.pop()
+        (left, right)[side][parent] = i
+        slots += [(i, 0), (i, 1)]
+    return left, right
+
+
+def zigzag_path(rng, n, empty=None):
+    """The path 0 -> 1 -> ... -> n - 1, each node a left child with probability 1/2."""
+    left, right = [empty] * n, [empty] * n
+    for i in range(1, n):
+        (left if rng.random() < 0.5 else right)[i - 1] = i
+    return left, right
+
+
+def shaped_tree(rng, n, kind):
+    """An n-node tree of one kind: 'random', 'chain' (a path, each child on a random side) or
+    'deep' (a chain with one node in ten attached at random instead)."""
+    left, right = [None] * n, [None] * n
+    slots = [(0, 0), (0, 1)]
+    for i in range(1, n):
+        if kind == "chain" or (kind == "deep" and rng.random() < 0.9):
+            parent, side = i - 1, rng.randrange(2)
+            if (left, right)[side][parent] is not None:
+                side = 1 - side
+        else:
+            while True:
+                j = rng.randrange(len(slots))
+                slots[j], slots[-1] = slots[-1], slots[j]
+                parent, side = slots.pop()
+                if (left, right)[side][parent] is None:
+                    break
+        (left, right)[side][parent] = i
+        slots += [(i, 0), (i, 1)]
+    return left, right
+
+
+def random_bst(rng, n, lean=None):
+    """(root, left, right) of a BST whose node ids are their in-order ranks 0..n-1. Each subtree's
+    root is a random rank, or with lean 'right' / 'left' its smallest / largest, giving a chain."""
+    left, right = [None] * n, [None] * n
+    root = None
+    stack = [(0, n - 1, None, 0)]
+    while stack:
+        lo, hi, parent, side = stack.pop()
+        if lo > hi:
+            continue
+        if lean == "right":
+            mid = lo
+        elif lean == "left":
+            mid = hi
+        else:
+            mid = rng.randint(lo, hi)
+        if parent is None:
+            root = mid
+        else:
+            (left, right)[side][parent] = mid
+        stack.append((lo, mid - 1, mid, 0))
+        stack.append((mid + 1, hi, mid, 1))
+    return root, left, right

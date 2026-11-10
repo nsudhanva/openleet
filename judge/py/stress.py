@@ -21,6 +21,7 @@ import harness
 from vote import outcomes, zygote
 
 GEN_DIR = Path(__file__).with_name("gen")
+sys.path.append(str(GEN_DIR))  # generators import _shapes
 # Reference solutions get far more time than submissions: their times set the limits.
 LIMITS = {"cpu_s": 120, "as_mb": 3072, "out_bytes": 512 << 20, "stdout_bytes": 0}
 
