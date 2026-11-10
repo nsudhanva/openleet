@@ -1,6 +1,6 @@
-//! Durable state in DuckDB: the attempt log, notes, daily scores, code drafts and submissions
-//! (`STATE_DIR/openleet.duckdb`, schema in `migrations/`), plus the judge's read-only test
-//! corpus attached alongside.
+//! Durable state in DuckDB: the attempt log, notes, daily scores, code drafts, submissions and
+//! practice plans (`STATE_DIR/openleet.duckdb`, schema in `migrations/`), plus the judge's
+//! read-only test corpus attached alongside.
 //!
 //! Hot reads never come here: the server keeps the attempt log, card states and notes in
 //! memory and only writes through. DuckDB earns its place on the analytical side (submission
@@ -13,6 +13,7 @@
 pub mod backup;
 mod corpus;
 pub mod migrate;
+mod plans;
 mod sqlite;
 
 use std::collections::{HashMap, HashSet};
@@ -32,6 +33,7 @@ pub use backup::Backup;
 use corpus::Corpus;
 pub use corpus::TestRow;
 use migrate::{Migrated, Shape};
+pub use plans::{Changed, MAX_PINNED_PLANS, PlanChange, PlanKey, SavedPlan};
 pub use sqlite::Imported;
 
 /// DuckDB's buffer pool; the whole box has 1 GB and the judge needs most of it.
@@ -102,6 +104,15 @@ pub struct NewSubmission<'a> {
     pub total: u16,
     pub cpu_ms: u32,
     pub detail: &'a str,
+}
+
+/// What the submissions say about each problem, loaded at startup.
+#[derive(Debug, Default)]
+pub struct Submitted {
+    /// Slugs with an accepted submission.
+    pub solved: HashSet<String>,
+    /// Slugs with any recorded submission.
+    pub tried: HashSet<String>,
 }
 
 /// How [`Store::open`] found the progress database.
@@ -596,6 +607,23 @@ impl Store {
                 c.prepare("SELECT DISTINCT slug FROM submissions WHERE verdict = 'accepted'")?;
             let rows = stmt.query_map([], |r| r.get(0))?;
             rows.collect()
+        })
+    }
+
+    /// Problems with any recorded submission.
+    pub fn tried(&self) -> Result<HashSet<String>> {
+        self.with(|c| {
+            let mut stmt = c.prepare("SELECT DISTINCT slug FROM submissions")?;
+            let rows = stmt.query_map([], |r| r.get(0))?;
+            rows.collect()
+        })
+    }
+
+    /// The solved and the tried problems.
+    pub fn submitted(&self) -> Result<Submitted> {
+        Ok(Submitted {
+            solved: self.solved()?,
+            tried: self.tried()?,
         })
     }
 

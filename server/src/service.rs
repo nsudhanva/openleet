@@ -9,6 +9,7 @@ use crate::content::Content;
 use crate::lists::ListEntry;
 use crate::lists::{ListId, ProblemFilter};
 use crate::model::{Approach, Attempt, CompanySlugs, Difficulty, Grade, Problem, ProblemView};
+use crate::plan::{Marks, Plan, PlanOrder, PlanStatus};
 use crate::scheduler::{
     CardList, CardState, CardStates, CardStatus, QueueFilter, card_status, queue_head,
 };
@@ -131,7 +132,8 @@ impl DeckQuery {
     }
 }
 
-/// Raw query-string values of the problem table endpoint.
+/// Raw query-string values of the problem table and of a practice plan
+/// (`GET /api/next`, `PUT /api/plans`).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ProblemParams<'a> {
     /// Company slug or "any".
@@ -142,29 +144,55 @@ pub struct ProblemParams<'a> {
     pub topic: Option<&'a str>,
     /// Difficulty.
     pub difficulty: Option<&'a str>,
-    /// Free-text search.
+    /// Free-text search (the table only).
     pub q: Option<&'a str>,
+    /// Which problems still count: unsolved, untried or all.
+    pub status: Option<&'a str>,
+    /// The order: rank, number, easy-first or random.
+    pub order: Option<&'a str>,
 }
 
-/// Query of the problem table: a list, a filter over it and an optional search.
+/// Query of the problem table, which is also a practice plan: a list, a filter over it, an
+/// optional status and an order, and an optional search.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProblemQuery<'a> {
     /// Which list.
     pub list: ListId,
     /// Which problems of it.
     pub filter: ProblemFilter,
-    /// Only problems matching this search, best match first; `None` keeps list order.
+    /// Only problems matching this search, best match first; `None` keeps the order.
     pub q: Option<&'a str>,
+    /// Which problems still count; `None` when not given.
+    pub status: Option<PlanStatus>,
+    /// The order without a search.
+    pub order: PlanOrder,
 }
 
 impl<'a> ProblemQuery<'a> {
-    /// Builds a query leniently, like [`DeckQuery::parse`]; a blank search means none.
+    /// Builds a query leniently, like [`DeckQuery::parse`]; a blank search means none, and an
+    /// unknown status or order is none given.
     #[must_use]
     pub fn parse(content: &Content, params: &ProblemParams<'a>) -> Self {
         Self {
             list: content.list_id(params.company, params.period),
             filter: content.problem_filter(params.topic, params.difficulty),
             q: params.q.filter(|q| !q.trim().is_empty()),
+            status: params.status.and_then(|s| s.parse().ok()),
+            order: params
+                .order
+                .and_then(|o| o.parse().ok())
+                .unwrap_or_default(),
+        }
+    }
+
+    /// The practice plan: without a status, the unsolved problems.
+    #[must_use]
+    pub fn plan(&self) -> Plan {
+        Plan {
+            list: self.list,
+            filter: self.filter,
+            status: self.status.unwrap_or_default(),
+            order: self.order,
         }
     }
 }
@@ -298,20 +326,28 @@ fn row<'a>(
     }
 }
 
-/// The problems of one list that pass the filter, with their progress: in list order, or
-/// best match first with a search. Without a search this is one pass over the list.
+/// The problems of one list that pass the filter and the status (every problem without
+/// one), with their progress: in the query's order, or best match first with a search.
 #[must_use]
 pub fn problem_rows<'a>(
     content: &'a Content,
     query: &ProblemQuery<'_>,
     states: &CardStates,
+    marks: Marks<'_>,
     now: i64,
 ) -> Vec<ProblemRow<'a>> {
+    let status = query.status.unwrap_or(PlanStatus::All);
+    let counts = |p: &Problem| status.keeps(&p.slug, marks);
     let list = content.list(query.list);
     let Some(q) = query.q else {
-        return list
-            .iter()
-            .filter(|entry| query.filter.matches(content.problem_at(entry)))
+        let plan = Plan {
+            status,
+            ..query.plan()
+        };
+        return plan
+            .entries(content)
+            .into_iter()
+            .filter(|entry| counts(content.problem_at(entry)))
             .map(|entry| row(content, entry, states, now, None))
             .collect();
     };
@@ -324,7 +360,10 @@ pub fn problem_rows<'a>(
     content
         .search_index
         .matches(q, |problem| {
-            entry_of(problem).is_some_and(|e| query.filter.matches(content.problem_at(e)))
+            entry_of(problem).is_some_and(|e| {
+                let p = content.problem_at(e);
+                query.filter.matches(p) && counts(p)
+            })
         })
         .into_iter()
         .filter_map(|hit| {
@@ -359,7 +398,7 @@ pub fn new_attempt(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     use serde_json::json;
 
@@ -484,7 +523,18 @@ mod tests {
         states: &CardStates,
         now: i64,
     ) -> Vec<ProblemRow<'a>> {
-        problem_rows(content, &ProblemQuery::parse(content, params), states, now)
+        let none = HashSet::new();
+        let marks = Marks {
+            solved: &none,
+            tried: &none,
+        };
+        problem_rows(
+            content,
+            &ProblemQuery::parse(content, params),
+            states,
+            marks,
+            now,
+        )
     }
 
     #[test]
@@ -510,8 +560,14 @@ mod tests {
                 list: content.list_id(Some("any"), Some("lc1000")),
                 filter: ProblemFilter::default(),
                 q: None,
+                status: None,
+                order: PlanOrder::Rank,
             },
             &states,
+            Marks {
+                solved: &HashSet::new(),
+                tried: &HashSet::new(),
+            },
             T0,
         );
         let lc: Vec<_> = lc.iter().map(|r| (r.id, r.rank, r.frequency)).collect();
@@ -554,6 +610,65 @@ mod tests {
         // Unknown values filter nothing, like an unknown company or period.
         assert_eq!(ids(Some("Nope"), Some("Impossible")), [1, 2, 3]);
         assert_eq!(ids(Some(""), Some("")), [1, 2, 3]);
+    }
+
+    #[test]
+    fn parses_plan_status_and_order_leniently() {
+        let content = tagged();
+        let parse = |status, order| {
+            ProblemQuery::parse(
+                &content,
+                &ProblemParams {
+                    status,
+                    order,
+                    ..ProblemParams::default()
+                },
+            )
+        };
+        let unknown = parse(Some("solved"), Some("best"));
+        assert_eq!((unknown.status, unknown.order), (None, PlanOrder::Rank));
+        // A plan without a status is the unsolved problems; the table shows every problem.
+        assert_eq!(unknown.plan().status, PlanStatus::Unsolved);
+        let given = parse(Some("untried"), Some("easy-first"));
+        assert_eq!(
+            (given.plan().status, given.plan().order),
+            (PlanStatus::Untried, PlanOrder::EasyFirst)
+        );
+        assert_eq!(parse(Some(""), Some("")).plan(), parse(None, None).plan());
+    }
+
+    #[test]
+    fn rows_follow_the_status_and_order() {
+        let content = tagged();
+        let states = CardStates::new();
+        let solved: HashSet<String> = ["p1".to_owned()].into();
+        let tried: HashSet<String> = ["p1".to_owned(), "p2".to_owned()].into();
+        let marks = Marks {
+            solved: &solved,
+            tried: &tried,
+        };
+        let ids = |status, order, q| {
+            let params = ProblemParams {
+                status,
+                order,
+                q,
+                ..ProblemParams::default()
+            };
+            let query = ProblemQuery::parse(&content, &params);
+            problem_rows(&content, &query, &states, marks, T0)
+                .iter()
+                .map(|r| r.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(None, None, None), [1, 2, 3]);
+        assert_eq!(ids(Some("unsolved"), None, None), [2, 3]);
+        assert_eq!(ids(Some("untried"), None, None), [3]);
+        assert_eq!(ids(Some("all"), Some("number"), None), [1, 2, 3]);
+        assert_eq!(ids(None, Some("easy-first"), None), [1, 2, 3]);
+        // A search keeps its own order and still applies the status.
+        let hits = ids(Some("unsolved"), None, Some("problem"));
+        assert!(!hits.is_empty() && !hits.contains(&1), "{hits:?}");
+        assert!(ids(None, None, Some("problem")).contains(&1));
     }
 
     #[test]

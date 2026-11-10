@@ -215,9 +215,11 @@ pub async fn submit(
                 cpu_ms,
                 detail: &detail,
             })?;
+            let mut progress = state.progress.write();
             if verdict == Verdict::Accepted.as_str() {
-                state.progress.write().solved.insert(input.slug);
+                progress.solved.insert(input.slug.clone());
             }
+            progress.tried.insert(input.slug);
             Ok(id)
         })
         .await?;

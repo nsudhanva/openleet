@@ -20,11 +20,18 @@ pub struct Migration {
 }
 
 /// Every migration, in version order (versions are 1, 2, 3, ... with no gaps).
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "progress",
-    sql: include_str!("migrations/0001_progress.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "progress",
+        sql: include_str!("migrations/0001_progress.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "plans",
+        sql: include_str!("migrations/0002_plans.sql"),
+    },
+];
 
 /// The version this build migrates databases to.
 pub fn latest() -> u32 {
@@ -224,6 +231,85 @@ mod tests {
             .collect::<duckdb::Result<_>>()
             .unwrap();
         assert!(missing.is_empty(), "uncommented: {missing:?}");
+    }
+
+    #[test]
+    fn migrates_a_version_1_database_to_plans_keeping_its_rows() {
+        let dir = TempDir::new("migrate-v1");
+        let path = dir.path("p.duckdb");
+        {
+            let mut conn = Connection::open(&path).unwrap();
+            assert_eq!(migrate_to(&mut conn, 1).unwrap().to, 1);
+            conn.execute_batch(
+                "INSERT INTO attempts (slug, answered_at, grade, guessed_topics, topic_score,
+                    hints_used) VALUES ('two-sum', to_timestamp(1793316907.566), 'good',
+                    ['Array'], 1.0, 0);
+                 INSERT INTO notes VALUES ('two-sum', 'Use a hash map.', to_timestamp(1));",
+            )
+            .unwrap();
+            assert_eq!(shape(&conn).unwrap(), Shape::Version(1));
+        }
+        let mut conn = Connection::open(&path).unwrap();
+        let migrated = migrate(&mut conn).unwrap();
+        assert_eq!(
+            migrated,
+            Migrated {
+                from: Shape::Version(1),
+                to: 2
+            }
+        );
+        assert_eq!(
+            strings(
+                &conn,
+                "SELECT format('{}|{}', slug, epoch_ms(answered_at)) FROM attempts"
+            ),
+            ["two-sum|1793316907566"]
+        );
+        assert_eq!(
+            strings(&conn, "SELECT body FROM notes"),
+            ["Use a hash map."]
+        );
+        assert_eq!(
+            strings(&conn, "SELECT name FROM schema_migrations ORDER BY version"),
+            ["progress", "plans"]
+        );
+        // The new table takes plans, with NULL filters, and rejects impossible ones.
+        let id: i64 = conn
+            .query_row(
+                "INSERT INTO plans (company, period, status, sort_order, created_at, used_at)
+                 VALUES ('google', '6m', 'unsolved', 'rank', now(), now()) RETURNING id",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(id, 1);
+        let insert = |columns: &str, values: &str| {
+            conn.execute_batch(&format!(
+                "INSERT INTO plans (company, period, status, sort_order{columns}, created_at, used_at)
+                 VALUES ({values}, now(), now())"
+            ))
+        };
+        insert(
+            ", topic, difficulty, name",
+            "'any', 'lc1000', 'all', 'random', 'Trie', 'Hard', 'Tries'",
+        )
+        .unwrap();
+        for (columns, values) in [
+            ("", "'google', '1y', 'all', 'rank'"),
+            ("", "'google', '6m', 'solved', 'rank'"),
+            ("", "'google', '6m', 'all', 'best'"),
+            ("", "'', '6m', 'all', 'rank'"),
+            (", topic", "'google', '6m', 'all', 'rank', ''"),
+            (
+                ", difficulty",
+                "'google', '6m', 'all', 'rank', 'Impossible'",
+            ),
+            (", name", "'google', '6m', 'all', 'rank', ''"),
+        ] {
+            assert!(insert(columns, values).is_err(), "{columns} {values}");
+        }
+        let too_long = format!("'google', '6m', 'all', 'rank', '{}'", "x".repeat(61));
+        assert!(insert(", name", &too_long).is_err());
     }
 
     #[test]

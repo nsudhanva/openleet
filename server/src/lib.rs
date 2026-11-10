@@ -4,6 +4,7 @@
 pub mod content;
 pub mod lists;
 pub mod model;
+pub mod plan;
 pub mod scheduler;
 pub mod scorer;
 pub mod search;

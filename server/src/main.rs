@@ -169,7 +169,12 @@ fn load_state(config: &Config) -> Result<Shared> {
         config.judge.clone(),
         config.cpu_scale,
     )?;
-    let progress = Progress::new(store.attempts()?, store.notes()?, store.solved()?);
+    let progress = Progress::new(
+        store.attempts()?,
+        store.notes()?,
+        store.submitted()?,
+        store.plans()?,
+    );
     let companies = api::companies_response(&content);
     Ok(Arc::new(AppState {
         companies,

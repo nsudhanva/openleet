@@ -4,13 +4,14 @@
 //! never through `json!` / `serde_json::Value`, which would widen 93.2 to 93.19999694824219.
 
 mod code;
+mod plans;
 mod study;
 
 use std::collections::HashMap;
 
 use axum::extract::{DefaultBodyLimit, Query, State};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post, put};
+use axum::routing::{delete, get, patch, post, put};
 use axum::{Json, Router};
 use serde::Serialize;
 
@@ -39,6 +40,12 @@ pub fn routes() -> Router<Shared> {
         .route("/search", get(study::search))
         .route("/report", get(study::report))
         .route("/readiness", get(study::readiness))
+        .route("/next", get(plans::next))
+        .route("/plans", get(plans::plans).put(plans::use_plan))
+        .route(
+            "/plans/{id}",
+            patch(plans::edit_plan).delete(plans::delete_plan),
+        )
         .route("/code/{slug}", get(code::code_info))
         .route("/drafts", put(code::save_draft))
         .route("/drafts/reset", post(code::reset_draft))

@@ -8,12 +8,13 @@ use parking_lot::{Mutex, RwLock};
 
 use openleet::content::Content;
 use openleet::model::{Attempt, CompanyFilter, Problem};
+use openleet::plan::Marks;
 use openleet::scheduler::{CardStates, card_states, record_attempt};
 use openleet::scorer::{ScoreReport, day_key, score_report};
 use openleet::service;
 
 use crate::acme::CertificateSlot;
-use crate::db::{DailyScore, Store};
+use crate::db::{DailyScore, SavedPlan, Store, Submitted};
 use crate::error::{ApiError, ApiResult};
 use crate::judge::Judge;
 
@@ -27,6 +28,10 @@ pub struct Progress {
     pub notes: HashMap<String, String>,
     /// Slugs with an accepted submission.
     pub solved: HashSet<String>,
+    /// Slugs with any recorded submission.
+    pub tried: HashSet<String>,
+    /// Practice plans used, as [`Store::plans`] lists them; replaced after every plan write.
+    pub plans: Vec<SavedPlan>,
     /// Reports per company, computed on first read after the log changed.
     reports: HashMap<CompanyFilter, ScoreReport>,
 }
@@ -36,15 +41,26 @@ impl Progress {
     pub fn new(
         attempts: Vec<Attempt>,
         notes: HashMap<String, String>,
-        solved: HashSet<String>,
+        submitted: Submitted,
+        plans: Vec<SavedPlan>,
     ) -> Self {
         let states = card_states(&attempts);
         Self {
             attempts,
             states,
             notes,
-            solved,
+            solved: submitted.solved,
+            tried: submitted.tried,
+            plans,
             reports: HashMap::new(),
+        }
+    }
+
+    /// What the learner did in the judge, for plans.
+    pub fn marks(&self) -> Marks<'_> {
+        Marks {
+            solved: &self.solved,
+            tried: &self.tried,
         }
     }
 
@@ -195,7 +211,12 @@ pub fn test_state_with(dir: &std::path::Path, judge: &str, content: Content) -> 
         deploy: None,
         store,
         judge,
-        progress: RwLock::new(Progress::new(Vec::new(), HashMap::new(), HashSet::new())),
+        progress: RwLock::new(Progress::new(
+            Vec::new(),
+            HashMap::new(),
+            Submitted::default(),
+            Vec::new(),
+        )),
         progress_updates: Mutex::new(()),
         certificate: CertificateSlot::default(),
     })

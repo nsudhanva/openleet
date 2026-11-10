@@ -183,8 +183,9 @@ pub async fn reset_progress(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `?company=&period=&topic=&difficulty=&q=`: the rows of one list that pass the filter, in
-/// list order, or best match first with a search.
+/// `?company=&period=&topic=&difficulty=&status=&order=&q=`: the rows of one list that pass
+/// the filter and status (every row without one), in the order, or best match first with a
+/// search.
 pub async fn problems(State(state): State<Shared>, Query(params): Params) -> Response {
     let query = ProblemQuery::parse(
         &state.content,
@@ -194,10 +195,18 @@ pub async fn problems(State(state): State<Shared>, Query(params): Params) -> Res
             topic: param(&params, "topic"),
             difficulty: param(&params, "difficulty"),
             q: param(&params, "q"),
+            status: param(&params, "status"),
+            order: param(&params, "order"),
         },
     );
     let progress = state.progress.read();
-    let rows = service::problem_rows(&state.content, &query, &progress.states, now_ms());
+    let rows = service::problem_rows(
+        &state.content,
+        &query,
+        &progress.states,
+        progress.marks(),
+        now_ms(),
+    );
     Json(&rows).into_response()
 }
 

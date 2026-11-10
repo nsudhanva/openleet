@@ -8,7 +8,7 @@ flowchart LR
     B[Browser] -- HTTPS / HTTP/2 --> S
     subgraph VM [Server, systemd]
         S["openleet<br/>Rust: API + embedded web app"]
-        S -- read/write --> D[(DuckDB<br/>progress, drafts,<br/>submissions)]
+        S -- read/write --> D[(DuckDB<br/>progress, drafts,<br/>submissions, plans)]
         S -- read only --> T[(tests.duckdb)]
         S -- Unix socket --> J["openleet-judge<br/>Rust daemon"]
         J --> Z["Python zygote<br/>LeetCode env loaded once"]
@@ -16,8 +16,9 @@ flowchart LR
     end
 ```
 
-The server keeps the attempt log, card states and notes in memory and writes every change through
-to DuckDB.
+The server keeps the attempt log, card states, notes, the solved and tried problems and the
+practice plans in memory and writes every change through to DuckDB. A plan's next problem is
+computed from memory on each request (`server/src/plan.rs`).
 
 A page loads in one round trip. `web/index.html` inlines the stylesheet and a static shell, and the
 server adds preload links for the route's code and its first API calls (`server/src/preload.rs`),
