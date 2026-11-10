@@ -18,7 +18,10 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     tmpfs: [/data, /config]
-    mem_limit: 64m
+    # Go's collector keeps Caddy near this target instead of growing to the container limit.
+    environment:
+      GOMEMLIMIT: 40MiB
+    mem_limit: 96m
     depends_on:
       app:
         condition: service_healthy
