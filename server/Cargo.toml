@@ -30,6 +30,7 @@ unicode-normalization = "0.1.26"
 hmac = "0.13.0"
 sha2.workspace = true
 sd-notify = "0.5.0"
+socket2 = { version = "0.6.5", features = ["all"] }
 async-trait = "0.1.92"
 x509-parser = "0.18.1"
 pem = "3.0.6"

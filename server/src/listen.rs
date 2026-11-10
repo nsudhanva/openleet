@@ -13,6 +13,12 @@ use anyhow::{Context, Result};
 const FIRST_FD: RawFd = 3;
 /// Names given to unnamed sockets, by position.
 const DEFAULT_NAMES: [&str; 2] = ["http", "https"];
+/// Unsent bytes a connection may queue in the kernel (`TCP_NOTSENT_LOWAT`). HTTP/2 keeps the
+/// rest in its own queue, where it takes turns between responses: every response's headers
+/// and first bytes go out early, instead of waiting behind everything written before them
+/// while TCP's congestion window is still small.
+#[cfg(target_os = "linux")]
+const NOT_SENT_LOW_WATER: u32 = 16 << 10;
 
 /// Sockets passed by systemd, by name (`LISTEN_FDNAMES`).
 #[derive(Default)]
@@ -92,6 +98,13 @@ impl Sockets {
             None => TcpListener::bind(fallback).with_context(|| format!("binding {fallback}"))?,
         };
         listener.set_nonblocking(true)?;
+        // Accepted connections inherit it from the listening socket.
+        #[cfg(target_os = "linux")]
+        if let Err(error) =
+            socket2::SockRef::from(&listener).set_tcp_notsent_lowat(NOT_SENT_LOW_WATER)
+        {
+            tracing::warn!("TCP_NOTSENT_LOWAT on the {name} socket: {error}");
+        }
         Ok(listener)
     }
 }
