@@ -18,6 +18,13 @@ flowchart LR
     end
 ```
 
+A page load is one round trip, then everything at once. index.html carries the stylesheet and
+a static shell (header and empty page), so the first paint needs nothing else. For each page
+the server adds preloads for its route's code and for the API requests its loaders make first
+(`server/src/preload.rs`, tested against `web/src/lib/page-loads.json`), so code and data
+download together; the app renders once both are in. index.html is compressed at build time
+for each route, and a response only appends the data preloads as stored bytes.
+
 ## A submission
 
 ```mermaid
