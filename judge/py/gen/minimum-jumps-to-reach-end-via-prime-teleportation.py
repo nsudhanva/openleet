@@ -2,18 +2,11 @@
 multiples (teleport edges are quadratic if listed one by one), distinct large primes with no
 multiples, or random values."""
 
+from _shapes import primes_upto
+
 SEEDS = 3
 N = 10**5
 TOP = 10**6
-
-
-def primes_upto(limit):
-    sieve = bytearray([1]) * (limit + 1)
-    sieve[0] = sieve[1] = 0
-    for p in range(2, int(limit**0.5) + 1):
-        if sieve[p]:
-            sieve[p * p :: p] = bytearray(len(range(p * p, limit + 1, p)))
-    return [i for i in range(limit + 1) if sieve[i]]
 
 
 def generate(rng):

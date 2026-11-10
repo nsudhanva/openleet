@@ -1,17 +1,10 @@
 """Super Ugly Number at n = 10^5 with 100 primes, the size where heap-with-duplicates or
 O(n * k) scans are slow, and the answer still fits in 32 bits."""
 
+from _shapes import primes_upto
+
 SEEDS = 2
 N = 10**5
-
-
-def primes_upto(limit):
-    sieve = [True] * (limit + 1)
-    sieve[0] = sieve[1] = False
-    for i in range(2, int(limit**0.5) + 1):
-        if sieve[i]:
-            sieve[i * i :: i] = [False] * len(sieve[i * i :: i])
-    return [i for i in range(limit + 1) if sieve[i]]
 
 
 def generate(rng):

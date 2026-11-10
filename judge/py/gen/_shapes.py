@@ -221,3 +221,13 @@ def nary_tree(rng, n, max_depth):
     while out and out[-1] is None:
         out.pop()
     return out
+
+
+def primes_upto(limit):
+    """Every prime p <= limit, by the sieve of Eratosthenes."""
+    sieve = bytearray([1]) * (limit + 1)
+    sieve[0] = sieve[1] = 0
+    for p in range(2, int(limit**0.5) + 1):
+        if sieve[p]:
+            sieve[p * p :: p] = bytes(len(range(p * p, limit + 1, p)))
+    return [i for i in range(limit + 1) if sieve[i]]

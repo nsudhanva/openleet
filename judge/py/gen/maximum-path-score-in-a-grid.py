@@ -2,7 +2,6 @@
 the state space is about 4 * 10^7 if done naively."""
 
 SEEDS = 3
-N = 200
 
 
 def generate(rng):

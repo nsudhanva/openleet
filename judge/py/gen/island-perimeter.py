@@ -2,7 +2,6 @@
 random, then any enclosed water filled in)."""
 
 SEEDS = 3
-N = 100
 
 
 def generate(rng):
