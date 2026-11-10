@@ -1,5 +1,5 @@
 import { RouterProvider } from "@tanstack/react-router";
-import { StrictMode } from "react";
+import { StrictMode, startTransition } from "react";
 import { createRoot } from "react-dom/client";
 import { router } from "./router";
 import "./styles.css";
@@ -15,9 +15,12 @@ router
 	.load()
 	.catch(console.error)
 	.finally(() =>
-		createRoot(root).render(
-			<StrictMode>
-				<RouterProvider router={router} />
-			</StrictMode>,
+		// A transition renders in slices, between which the browser stays responsive.
+		startTransition(() =>
+			createRoot(root).render(
+				<StrictMode>
+					<RouterProvider router={router} />
+				</StrictMode>,
+			),
 		),
 	);
