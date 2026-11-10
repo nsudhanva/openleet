@@ -5,15 +5,17 @@
 //! memory and only writes through. DuckDB earns its place on the analytical side (submission
 //! history and statistics) and as a compact, compressed store for the test corpus.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use duckdb::{Config, Connection, OptionalExt, params};
+use openleet_proto::Expected;
 use parking_lot::Mutex;
 use serde::Serialize;
+use serde_json::value::RawValue;
 
-use cards::model::{Attempt, Grade};
+use openleet::model::{Attempt, Grade};
 
 /// DuckDB's buffer pool; the whole box has 1 GB and the judge needs most of it.
 const MEMORY_LIMIT: &str = "64MB";
@@ -40,7 +42,15 @@ CREATE TABLE IF NOT EXISTS daily_scores (
     accuracy DOUBLE
 );
 CREATE TABLE IF NOT EXISTS notes (slug VARCHAR PRIMARY KEY, text VARCHAR NOT NULL, at_ms BIGINT NOT NULL);
-CREATE TABLE IF NOT EXISTS drafts (slug VARCHAR PRIMARY KEY, code VARCHAR NOT NULL, at_ms BIGINT NOT NULL);
+-- Editor code per problem; an empty `code` means the starter. `previous` is what Reset replaced,
+-- for Restore.
+CREATE TABLE IF NOT EXISTS drafts (
+    slug VARCHAR PRIMARY KEY,
+    code VARCHAR NOT NULL,
+    at_ms BIGINT NOT NULL,
+    previous VARCHAR
+);
+ALTER TABLE drafts ADD COLUMN IF NOT EXISTS previous VARCHAR;
 CREATE TABLE IF NOT EXISTS submissions (
     id BIGINT PRIMARY KEY DEFAULT nextval('submission_id'),
     slug VARCHAR NOT NULL,
@@ -55,14 +65,29 @@ CREATE TABLE IF NOT EXISTS submissions (
 );
 ";
 
+/// Your code for a problem: the current draft and the version Reset replaced.
+#[derive(Default, Serialize)]
+pub struct Draft {
+    pub code: Option<String>,
+    pub previous: Option<String>,
+}
+
 /// One stored test of the judge's corpus.
 pub struct TestRow {
     pub kind: String,
     /// The test as the zygote takes it: `{"input": ...}` or a generator reference.
     pub test: String,
-    pub expected: String,
+    pub expected: Expected,
 }
 
+impl TestRow {
+    /// Whether the test is one of the problem's examples (shown and used by Run).
+    pub fn is_example(&self) -> bool {
+        self.kind == "example"
+    }
+}
+
+/// One day's readiness, coverage and accuracy, for the progress chart.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DailyScore {
@@ -72,6 +97,10 @@ pub struct DailyScore {
     pub accuracy: Option<f64>,
 }
 
+/// The columns [`SubmissionRow::from_row`] reads, in order.
+const SUBMISSION_COLUMNS: &str = "id, at_ms, verdict::VARCHAR, passed, total, cpu_ms";
+
+/// A stored submission; `code` and `detail` only when one submission is read.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmissionRow {
@@ -84,7 +113,23 @@ pub struct SubmissionRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<Box<serde_json::value::RawValue>>,
+    pub detail: Option<Box<RawValue>>,
+}
+
+impl SubmissionRow {
+    /// A row's [`SUBMISSION_COLUMNS`], without code or detail.
+    fn from_row(r: &duckdb::Row<'_>) -> duckdb::Result<Self> {
+        Ok(Self {
+            id: r.get(0)?,
+            at: r.get(1)?,
+            verdict: r.get(2)?,
+            passed: r.get(3)?,
+            total: r.get(4)?,
+            cpu_ms: r.get(5)?,
+            code: None,
+            detail: None,
+        })
+    }
 }
 
 /// A finished submission, as stored.
@@ -99,9 +144,18 @@ pub struct NewSubmission<'a> {
     pub detail: &'a str,
 }
 
+/// Reads one problem's tests. Corpora built before digests existed have no
+/// `expected_sha256` column.
+const TESTS_QUERY: &str = "SELECT kind, test, expected, expected_sha256 FROM corpus.tests
+    WHERE slug = ? ORDER BY idx";
+const TESTS_QUERY_WITHOUT_DIGESTS: &str = "SELECT kind, test, expected, NULL::VARCHAR
+    FROM corpus.tests WHERE slug = ? ORDER BY idx";
+
+/// The progress database, with the test corpus attached when present.
 pub struct Store {
     conn: Mutex<Connection>,
-    has_tests: bool,
+    /// The query for a problem's tests; `None` without a corpus.
+    tests_query: Option<&'static str>,
 }
 
 impl Store {
@@ -118,16 +172,29 @@ impl Store {
         let conn = Connection::open_with_flags(path, config)
             .with_context(|| format!("opening {}", path.display()))?;
         conn.execute_batch(SCHEMA)?;
-        let has_tests = tests.exists();
-        if has_tests {
+        let tests_query = if tests.exists() {
             conn.execute(
                 &format!("ATTACH '{}' AS corpus (READ_ONLY)", tests.display()),
                 [],
             )?;
-        }
+            let digests: bool = conn.query_row(
+                "SELECT count(*) > 0 FROM duckdb_columns()
+                 WHERE database_name = 'corpus' AND table_name = 'tests'
+                   AND column_name = 'expected_sha256'",
+                [],
+                |r| r.get(0),
+            )?;
+            Some(if digests {
+                TESTS_QUERY
+            } else {
+                TESTS_QUERY_WITHOUT_DIGESTS
+            })
+        } else {
+            None
+        };
         Ok(Self {
             conn: Mutex::new(conn),
-            has_tests,
+            tests_query,
         })
     }
 
@@ -213,6 +280,7 @@ impl Store {
         })
     }
 
+    /// Appends one attempt to the log.
     pub fn insert_attempt(&self, a: &Attempt) -> Result<()> {
         let guessed = serde_json::to_string(&a.guessed)?;
         self.with(|c| {
@@ -239,10 +307,11 @@ impl Store {
         })
     }
 
-    pub fn save_daily_score(&self, day: &str, at: i64, s: &DailyScore) -> Result<()> {
+    /// Stores one day's scores, replacing that day's earlier ones.
+    pub fn save_daily_score(&self, at: i64, s: &DailyScore) -> Result<()> {
         self.with(|c| {
             c.prepare_cached("INSERT OR REPLACE INTO daily_scores VALUES (?::DATE, ?, ?, ?, ?)")?
-                .execute(params![day, at, s.readiness, s.coverage, s.accuracy])
+                .execute(params![s.day, at, s.readiness, s.coverage, s.accuracy])
                 .map(drop)
         })
     }
@@ -266,6 +335,7 @@ impl Store {
         })
     }
 
+    /// Every note, by slug.
     pub fn notes(&self) -> Result<HashMap<String, String>> {
         self.with(|c| {
             let mut stmt = c.prepare("SELECT slug, text FROM notes")?;
@@ -274,57 +344,130 @@ impl Store {
         })
     }
 
-    /// Upserts a text row keyed by slug (notes, drafts); empty text deletes it.
-    fn save_text(&self, table: Table, slug: &str, text: &str, at: i64) -> Result<()> {
-        let (delete, merge) = table.statements();
+    /// Saves your answer to a problem; empty text deletes it.
+    pub fn save_note(&self, slug: &str, text: &str, at: i64) -> Result<()> {
         self.with(|c| {
             if text.is_empty() {
-                c.prepare_cached(delete)?.execute([slug]).map(drop)
-            } else {
-                c.prepare_cached(merge)?
-                    .execute(params![slug, text, at])
+                c.prepare_cached("DELETE FROM notes WHERE slug = ?")?
+                    .execute([slug])
                     .map(drop)
+            } else {
+                c.prepare_cached(
+                    "MERGE INTO notes USING (SELECT ? AS slug, ? AS text, ? AS at_ms) AS new
+                     USING (slug) WHEN MATCHED THEN UPDATE WHEN NOT MATCHED THEN INSERT",
+                )?
+                .execute(params![slug, text, at])
+                .map(drop)
             }
         })
     }
 
-    pub fn save_note(&self, slug: &str, text: &str, at: i64) -> Result<()> {
-        self.save_text(Table::Notes, slug, text, at)
-    }
-
+    /// Saves the editor's code ('' for "back to the starter"), keeping any previous version.
     pub fn save_draft(&self, slug: &str, code: &str, at: i64) -> Result<()> {
-        self.save_text(Table::Drafts, slug, code, at)
+        self.with(|c| {
+            c.prepare_cached(
+                "MERGE INTO drafts USING (SELECT ? AS slug, ? AS code, ? AS at_ms) AS new
+                 USING (slug)
+                 WHEN MATCHED THEN UPDATE SET code = new.code, at_ms = new.at_ms
+                 WHEN NOT MATCHED THEN INSERT (slug, code, at_ms) VALUES (new.slug, new.code, new.at_ms)",
+            )?
+            .execute(params![slug, code, at])?;
+            // Nothing left to keep.
+            c.prepare_cached("DELETE FROM drafts WHERE slug = ? AND code = '' AND previous IS NULL")?
+                .execute([slug])
+                .map(drop)
+        })
     }
 
-    pub fn draft(&self, slug: &str) -> Result<Option<String>> {
-        self.with(|c| {
-            c.prepare_cached("SELECT code FROM drafts WHERE slug = ?")?
-                .query_row([slug], |r| r.get(0))
+    /// A problem's draft; empty when there is none.
+    pub fn draft(&self, slug: &str) -> Result<Draft> {
+        let row = self.with(|c| {
+            c.prepare_cached("SELECT nullif(code, ''), previous FROM drafts WHERE slug = ?")?
+                .query_row([slug], |r| {
+                    Ok(Draft {
+                        code: r.get(0)?,
+                        previous: r.get(1)?,
+                    })
+                })
                 .optional()
-        })
+        })?;
+        Ok(row.unwrap_or_default())
+    }
+
+    /// Reset: the editor goes back to the starter and `current` becomes the previous version
+    /// (an empty `current` keeps the previous version there was).
+    pub fn reset_draft(&self, slug: &str, current: &str, at: i64) -> Result<Draft> {
+        self.with(|c| {
+            c.prepare_cached(
+                "MERGE INTO drafts USING (SELECT ? AS slug, nullif(?, '') AS current, ? AS at_ms) AS new
+                 USING (slug)
+                 WHEN MATCHED THEN UPDATE SET code = '', at_ms = new.at_ms,
+                     previous = coalesce(new.current, drafts.previous)
+                 WHEN NOT MATCHED AND new.current IS NOT NULL THEN
+                     INSERT (slug, code, at_ms, previous) VALUES (new.slug, '', new.at_ms, new.current)",
+            )?
+            .execute(params![slug, current, at])
+            .map(drop)
+        })?;
+        self.draft(slug)
+    }
+
+    /// Restore: the previous version comes back and `current` becomes the previous one, so
+    /// Restore again undoes it. `None` when there is nothing to restore.
+    pub fn restore_draft(&self, slug: &str, current: &str, at: i64) -> Result<Option<Draft>> {
+        if self.draft(slug)?.previous.is_none() {
+            return Ok(None);
+        }
+        self.with(|c| {
+            c.prepare_cached(
+                "UPDATE drafts SET code = previous, previous = nullif(?, ''), at_ms = ?
+                 WHERE slug = ?",
+            )?
+            .execute(params![current, at, slug])
+            .map(drop)
+        })?;
+        self.draft(slug).map(Some)
     }
 
     /// A problem's tests in order. The corpus is sorted by slug, so zone maps skip every
     /// row group but the one or two that hold it.
     pub fn tests(&self, slug: &str) -> Result<Vec<TestRow>> {
-        if !self.has_tests {
+        let Some(query) = self.tests_query else {
             return Ok(Vec::new());
-        }
-        self.with(|c| {
-            let mut stmt = c.prepare_cached(
-                "SELECT kind, test, expected FROM corpus.tests WHERE slug = ? ORDER BY idx",
-            )?;
+        };
+        let rows = self.with(|c| {
+            let mut stmt = c.prepare_cached(query)?;
             let rows = stmt.query_map([slug], |r| {
-                Ok(TestRow {
-                    kind: r.get(0)?,
-                    test: r.get(1)?,
-                    expected: r.get(2)?,
-                })
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                ))
             })?;
-            rows.collect()
-        })
+            rows.collect::<duckdb::Result<Vec<_>>>()
+        })?;
+        rows.into_iter()
+            .enumerate()
+            .map(|(idx, (kind, test, value, digest))| {
+                let expected = match (value, digest) {
+                    (_, Some(digest)) => Expected::Sha256(digest),
+                    (Some(value), None) => Expected::Value(
+                        RawValue::from_string(value)
+                            .with_context(|| format!("expected output {idx} of {slug}"))?,
+                    ),
+                    (None, None) => anyhow::bail!("test {idx} of {slug} has no expected output"),
+                };
+                Ok(TestRow {
+                    kind,
+                    test,
+                    expected,
+                })
+            })
+            .collect()
     }
 
+    /// Stores a judged submission and returns its id.
     pub fn insert_submission(&self, s: &NewSubmission) -> Result<i64> {
         self.with(|c| {
             c.prepare_cached(
@@ -338,60 +481,37 @@ impl Store {
         })
     }
 
-    /// A problem's submissions, newest first.
+    /// A problem's submissions, newest first, without code or detail.
     pub fn submissions(&self, slug: &str, limit: usize) -> Result<Vec<SubmissionRow>> {
         self.with(|c| {
-            let mut stmt = c.prepare_cached(
-                "SELECT id, at_ms, verdict::VARCHAR, passed, total, cpu_ms FROM submissions
-                 WHERE slug = ? ORDER BY id DESC LIMIT ?",
-            )?;
-            let rows = stmt.query_map(params![slug, limit], |r| {
-                Ok(SubmissionRow {
-                    id: r.get(0)?,
-                    at: r.get(1)?,
-                    verdict: r.get(2)?,
-                    passed: r.get(3)?,
-                    total: r.get(4)?,
-                    cpu_ms: r.get(5)?,
-                    code: None,
-                    detail: None,
-                })
-            })?;
+            let mut stmt = c.prepare_cached(&format!(
+                "SELECT {SUBMISSION_COLUMNS} FROM submissions WHERE slug = ? ORDER BY id DESC LIMIT ?"
+            ))?;
+            let rows = stmt.query_map(params![slug, limit], SubmissionRow::from_row)?;
             rows.collect()
         })
     }
 
+    /// One submission with its code and result detail.
     pub fn submission(&self, id: i64) -> Result<Option<SubmissionRow>> {
-        let row = self.with(|c| {
-            c.prepare_cached(
-                "SELECT id, at_ms, verdict::VARCHAR, passed, total, cpu_ms, code,
-                        detail::JSON::VARCHAR FROM submissions WHERE id = ?",
-            )?
+        self.with(|c| {
+            c.prepare_cached(&format!(
+                "SELECT {SUBMISSION_COLUMNS}, code, detail::JSON::VARCHAR FROM submissions WHERE id = ?"
+            ))?
             .query_row([id], |r| {
-                Ok((
-                    SubmissionRow {
-                        id: r.get(0)?,
-                        at: r.get(1)?,
-                        verdict: r.get(2)?,
-                        passed: r.get(3)?,
-                        total: r.get(4)?,
-                        cpu_ms: r.get(5)?,
-                        code: Some(r.get(6)?),
-                        detail: None,
-                    },
-                    r.get::<_, Option<String>>(7)?,
-                ))
+                let detail: Option<String> = r.get(7)?;
+                Ok(SubmissionRow {
+                    code: Some(r.get(6)?),
+                    detail: detail.and_then(|d| RawValue::from_string(d).ok()),
+                    ..SubmissionRow::from_row(r)?
+                })
             })
             .optional()
-        })?;
-        Ok(row.map(|(mut sub, detail)| {
-            sub.detail = detail.and_then(|d| serde_json::value::RawValue::from_string(d).ok());
-            sub
-        }))
+        })
     }
 
     /// Problems with at least one accepted submission.
-    pub fn solved(&self) -> Result<Vec<String>> {
+    pub fn solved(&self) -> Result<HashSet<String>> {
         self.with(|c| {
             let mut stmt =
                 c.prepare("SELECT DISTINCT slug FROM submissions WHERE verdict = 'accepted'")?;
@@ -406,46 +526,64 @@ impl Store {
     }
 }
 
-#[derive(Clone, Copy)]
-enum Table {
-    Notes,
-    Drafts,
-}
-
-impl Table {
-    /// (delete, upsert) statements; MERGE keeps one row per slug.
-    const fn statements(self) -> (&'static str, &'static str) {
-        match self {
-            Self::Notes => (
-                "DELETE FROM notes WHERE slug = ?",
-                "MERGE INTO notes USING (SELECT ? AS slug, ? AS text, ? AS at_ms) AS new
-                 USING (slug) WHEN MATCHED THEN UPDATE WHEN NOT MATCHED THEN INSERT",
-            ),
-            Self::Drafts => (
-                "DELETE FROM drafts WHERE slug = ?",
-                "MERGE INTO drafts USING (SELECT ? AS slug, ? AS code, ? AS at_ms) AS new
-                 USING (slug) WHEN MATCHED THEN UPDATE WHEN NOT MATCHED THEN INSERT",
-            ),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn store() -> (Store, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!(
-            "cards-db-{}-{:?}",
+            "openleet-db-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         (
-            Store::open(&dir.join("cards.duckdb"), &dir.join("missing.duckdb")).unwrap(),
+            Store::open(&dir.join("openleet.duckdb"), &dir.join("missing.duckdb")).unwrap(),
             dir,
         )
+    }
+
+    /// A store over a corpus with two tests of "a", made with or without the digest column.
+    fn store_with_corpus(digests: bool) -> Store {
+        let dir = std::env::temp_dir().join(format!(
+            "openleet-corpus-{digests}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let corpus = dir.join("tests.duckdb");
+        let c = Connection::open(&corpus).unwrap();
+        if digests {
+            c.execute_batch(
+                "CREATE TABLE tests (slug VARCHAR, idx USMALLINT, kind VARCHAR, test VARCHAR,
+                    expected VARCHAR, expected_sha256 VARCHAR);
+                 INSERT INTO tests VALUES ('a', 1, 'stress', '{\"gen\":\"a\"}', NULL, 'ab12'),
+                    ('a', 0, 'example', '{\"input\":{}}', '[1, 2]', NULL);",
+            )
+            .unwrap();
+        } else {
+            c.execute_batch(
+                "CREATE TABLE tests (slug VARCHAR, idx USMALLINT, kind VARCHAR, test VARCHAR,
+                    expected VARCHAR);
+                 INSERT INTO tests VALUES ('a', 0, 'example', '{\"input\":{}}', '[1, 2]');",
+            )
+            .unwrap();
+        }
+        drop(c);
+        Store::open(&dir.join("openleet.duckdb"), &corpus).unwrap()
+    }
+
+    #[test]
+    fn reads_expected_values_and_digests() {
+        let tests = store_with_corpus(true).tests("a").unwrap();
+        assert_eq!(tests.len(), 2);
+        assert!(matches!(&tests[0].expected, Expected::Value(v) if v.get() == "[1, 2]"));
+        assert!(matches!(&tests[1].expected, Expected::Sha256(d) if d == "ab12"));
+        let old = store_with_corpus(false).tests("a").unwrap();
+        assert!(matches!(&old[0].expected, Expected::Value(v) if v.get() == "[1, 2]"));
+        assert_eq!(store_with_corpus(false).tests("b").unwrap().len(), 0);
     }
 
     fn attempt(slug: &str, at: i64, grade: Grade) -> Attempt {
@@ -476,7 +614,7 @@ mod tests {
         store.delete_attempts(Some("a")).unwrap();
         assert_eq!(store.attempts().unwrap().len(), 1);
         store.delete_attempts(None).unwrap();
-        assert!(store.attempts().unwrap().is_empty());
+        assert_eq!(store.attempts().unwrap().len(), 0);
     }
 
     #[test]
@@ -492,28 +630,50 @@ mod tests {
         assert!(store.notes().unwrap().is_empty());
         store.save_draft("a", "code 1", 1).unwrap();
         store.save_draft("a", "code 2", 2).unwrap();
-        assert_eq!(store.draft("a").unwrap().as_deref(), Some("code 2"));
+        assert_eq!(store.draft("a").unwrap().code.as_deref(), Some("code 2"));
         store.save_draft("a", "", 3).unwrap();
-        assert_eq!(store.draft("a").unwrap(), None);
+        assert_eq!(store.draft("a").unwrap().code, None);
+    }
+
+    #[test]
+    fn reset_and_restore_swap_versions() {
+        let (store, _dir) = store();
+        // Reset with nothing saved yet still keeps what was in the editor.
+        let reset = store.reset_draft("a", "mine", 1).unwrap();
+        assert_eq!(
+            (reset.code, reset.previous.as_deref()),
+            (None, Some("mine"))
+        );
+        store.save_draft("a", "new try", 2).unwrap();
+        let restored = store.restore_draft("a", "new try", 3).unwrap().unwrap();
+        assert_eq!(restored.code.as_deref(), Some("mine"));
+        assert_eq!(restored.previous.as_deref(), Some("new try"));
+        // Restoring again swaps back.
+        let again = store.restore_draft("a", "mine", 4).unwrap().unwrap();
+        assert_eq!(again.code.as_deref(), Some("new try"));
+        // Reset of an empty editor keeps the earlier previous version.
+        store.reset_draft("a", "", 5).unwrap();
+        assert_eq!(store.draft("a").unwrap().previous.as_deref(), Some("mine"));
+        assert!(store.restore_draft("b", "x", 6).unwrap().is_none());
     }
 
     #[test]
     fn daily_scores_keep_one_row_per_day() {
         let (store, _dir) = store();
-        let score = |r| DailyScore {
-            day: String::new(),
+        let daily = |day: &str, r| DailyScore {
+            day: day.to_owned(),
             readiness: r,
             coverage: 0.1,
             accuracy: None,
         };
         store
-            .save_daily_score("2026-11-01", 1, &score(0.1))
+            .save_daily_score(1, &daily("2026-11-01", 0.1))
             .unwrap();
         store
-            .save_daily_score("2026-11-02", 2, &score(0.2))
+            .save_daily_score(2, &daily("2026-11-02", 0.2))
             .unwrap();
         store
-            .save_daily_score("2026-11-02", 3, &score(0.3))
+            .save_daily_score(3, &daily("2026-11-02", 0.3))
             .unwrap();
         let days = store.daily_scores(60).unwrap();
         assert_eq!(
@@ -549,7 +709,7 @@ mod tests {
         assert_eq!(one.code.as_deref(), Some("print(1)"));
         let detail: serde_json::Value = serde_json::from_str(one.detail.unwrap().get()).unwrap();
         assert_eq!(detail["failing"]["kind"], "hidden");
-        assert_eq!(store.solved().unwrap(), ["a"]);
+        assert_eq!(store.solved().unwrap(), HashSet::from(["a".to_owned()]));
     }
 
     #[test]

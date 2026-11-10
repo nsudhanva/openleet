@@ -1,5 +1,5 @@
 //! Free-text problem search: number, title (words, prefixes, acronym, small typos),
-//! difficulty, topic and statement text (port of `web/src/lib/search.ts`).
+//! difficulty, topic and statement text.
 
 use serde::Serialize;
 use unicode_normalization::UnicodeNormalization;
@@ -29,7 +29,7 @@ pub struct SearchHit<'a> {
     pub slug: &'a str,
     /// LeetCode number.
     pub id: u32,
-    /// 6-month Google rank, or `100000 + id` for classic-only problems.
+    /// Best 6-month rank across companies, or `100000 + id` when no company asked it then.
     pub rank: u32,
     /// Display title.
     pub title: &'a str,
@@ -353,7 +353,7 @@ impl SearchIndex {
     }
 
     /// Ranks problems for a free-text query. Every word must match somewhere; ties go to
-    /// the problem Google asks more often. At most `limit` hits.
+    /// the problem with the better 6-month rank. At most `limit` hits.
     #[must_use]
     pub fn search(&self, query: &str, limit: usize) -> Vec<SearchHit<'_>> {
         let raw = query.trim_matches(is_js_space);
@@ -442,16 +442,8 @@ impl SearchIndex {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-    use std::sync::LazyLock;
-
     use super::*;
-    use crate::content::Content;
-
-    static CONTENT: LazyLock<Content> = LazyLock::new(|| {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
-        Content::load(&dir).expect("load data/")
-    });
+    use crate::content::testdata::CONTENT;
 
     fn top(query: &str) -> Option<&'static str> {
         CONTENT
@@ -542,11 +534,18 @@ mod tests {
     }
 
     #[test]
-    fn classic_problems_rank_after_google_ones() {
-        let hits = CONTENT.search_index.search("1000", 5);
-        let hit = hits.first().expect("problem 1000");
-        assert_eq!((hit.id, hit.rank), (1000, 101_000));
+    fn ranks_by_the_best_six_month_rank_across_companies() {
+        let unasked = CONTENT
+            .problems
+            .iter()
+            .find(|p| p.best_frequency(crate::model::Period::Months6).is_none())
+            .expect("a problem nobody asked in 6 months");
+        let hits = CONTENT.search_index.search(&unasked.id.to_string(), 5);
+        let hit = hits.first().expect("found by number");
+        assert_eq!((hit.id, hit.rank), (unasked.id, 100_000 + unasked.id));
         assert_eq!(hit.field, SearchField::Number);
+        assert_eq!(top("two sum"), Some("two-sum"));
+        assert_eq!(CONTENT.search_index.search("two sum", 1)[0].rank, 1);
     }
 
     #[test]

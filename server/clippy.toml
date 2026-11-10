@@ -1,1 +1,1 @@
-doc-valid-idents = ["LeetCode", "DuckDB", ".."]
+doc-valid-idents = ["LeetCode", "DuckDB", "OpenLeet", "ETag", "ETags", ".."]

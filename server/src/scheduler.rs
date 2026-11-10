@@ -1,12 +1,11 @@
-//! Leitner scheduling: card state replayed from the attempt log, study sets and queue order
-//! (port of `web/src/lib/scheduler.ts`).
+//! Leitner scheduling: card state replayed from the attempt log, study sets and queue order.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{Attempt, Difficulty, Grade, Period, Problem, wire_enum};
+use crate::model::{Attempt, Difficulty, Grade, Problem, wire_enum};
 
 /// One minute in milliseconds.
 pub const MINUTE: i64 = 60_000;
@@ -194,13 +193,11 @@ pub fn in_set(set: StudySet, state: Option<&CardState>, now: i64) -> bool {
     }
 }
 
-/// Which cards to study.
+/// Which cards of a list to study.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct QueueFilter {
     /// The study set.
     pub set: StudySet,
-    /// Only problems in this period's list; `None` keeps every problem.
-    pub period: Option<Period>,
     /// Only problems with this topic tag.
     pub topic: Option<String>,
     /// Only problems of this difficulty.
@@ -215,66 +212,63 @@ pub fn matches_filter(
     filter: &QueueFilter,
     now: i64,
 ) -> bool {
-    filter.period.is_none_or(|p| problem.in_period(p))
-        && filter.topic.as_deref().is_none_or(|t| problem.has_topic(t))
+    filter.topic.as_deref().is_none_or(|t| problem.has_topic(t))
         && filter.difficulty.is_none_or(|d| problem.difficulty == d)
         && in_set(filter.set, state, now)
 }
 
-/// Queue order key: due reviews (visit-again first, then oldest due), then new problems by
-/// the period's order, then cards not yet due (soonest first).
-fn priority(
-    problem: &Problem,
-    state: Option<&CardState>,
-    now: i64,
-    period: Period,
-) -> (u8, u8, i64) {
+/// Queue order key: due reviews (visit-again first, then oldest due), then new problems in
+/// list order, then cards not yet due (soonest first).
+type Key = (u8, u8, i64);
+
+fn priority(position: usize, state: Option<&CardState>, now: i64) -> Key {
     match (card_status(state, now), state) {
         (CardStatus::Due, Some(s)) => (0, u8::from(s.list != Some(CardList::Again)), s.due),
         (CardStatus::Later, Some(s)) => (2, 0, s.due),
-        _ => (1, 0, i64::from(problem.new_card_rank(period))),
+        _ => (1, 0, i64::try_from(position).unwrap_or(i64::MAX)),
     }
 }
 
-/// Every problem passing the filter, with its queue key, in list order.
+/// Every problem of `list` passing the filter, with its queue key, in list order.
 fn ranked<'p>(
-    problems: &'p [Problem],
+    list: impl IntoIterator<Item = &'p Problem>,
     states: &CardStates,
     filter: &QueueFilter,
     now: i64,
-) -> impl Iterator<Item = ((u8, u8, i64), &'p Problem)> {
-    let period = filter.period.unwrap_or_default();
-    problems.iter().filter_map(move |p| {
+) -> impl Iterator<Item = (Key, &'p Problem)> {
+    list.into_iter().enumerate().filter_map(move |(i, p)| {
         let state = states.get(&p.slug);
-        matches_filter(p, state, filter, now).then(|| (priority(p, state, now, period), p))
+        matches_filter(p, state, filter, now).then(|| (priority(i, state, now), p))
     })
 }
 
-/// The problems in a study set, in the order they will be shown.
+/// The problems of a study list (given in new-card order) that are in the set, in the order
+/// they will be shown.
 #[must_use]
-pub fn queue<'a>(
-    problems: &'a [Problem],
+pub fn queue<'p>(
+    list: impl IntoIterator<Item = &'p Problem>,
     states: &CardStates,
     filter: &QueueFilter,
     now: i64,
-) -> Vec<&'a Problem> {
-    let mut keyed: Vec<_> = ranked(problems, states, filter, now).collect();
+) -> Vec<&'p Problem> {
+    let mut keyed: Vec<_> = ranked(list, states, filter, now).collect();
     // Stable, so ties keep list order.
     keyed.sort_by_key(|&(key, _)| key);
     keyed.into_iter().map(|(_, p)| p).collect()
 }
 
-/// The first card of [`queue`] and the queue's length, in one pass without sorting.
+/// The first card of [`queue`] and the queue's length, in one pass without sorting or
+/// allocating.
 #[must_use]
-pub fn queue_head<'a>(
-    problems: &'a [Problem],
+pub fn queue_head<'p>(
+    list: impl IntoIterator<Item = &'p Problem>,
     states: &CardStates,
     filter: &QueueFilter,
     now: i64,
-) -> (Option<&'a Problem>, usize) {
-    let mut head: Option<((u8, u8, i64), &'a Problem)> = None;
+) -> (Option<&'p Problem>, usize) {
+    let mut head: Option<(Key, &'p Problem)> = None;
     let mut count = 0;
-    for (key, problem) in ranked(problems, states, filter, now) {
+    for (key, problem) in ranked(list, states, filter, now) {
         count += 1;
         // Strictly smaller only, so ties keep the earliest problem like the stable sort.
         if head.is_none_or(|(best, _)| key.cmp(&best) == Ordering::Less) {
@@ -288,17 +282,9 @@ pub fn queue_head<'a>(
 mod tests {
     use super::*;
     use crate::model::fixtures::{T0, attempt, attempt_scored, problem};
-    use crate::model::{Asked, AskedBy};
 
     fn slugs(list: &[&Problem]) -> Vec<String> {
         list.iter().map(|p| p.slug.clone()).collect()
-    }
-
-    fn smart(period: Option<Period>) -> QueueFilter {
-        QueueFilter {
-            period,
-            ..QueueFilter::default()
-        }
     }
 
     #[test]
@@ -349,19 +335,23 @@ mod tests {
     }
 
     #[test]
-    fn orders_due_reviews_then_new_by_rank() {
+    fn orders_due_reviews_then_new_in_list_order() {
         let problems = [problem(1), problem(2), problem(3), problem(4)];
         let states = card_states(&[
             attempt("p3", Grade::Good, T0),
             attempt("p4", Grade::Again, T0),
             attempt("p2", Grade::Skip, T0),
         ]);
-        let filter = smart(None);
+        let filter = QueueFilter::default();
         let at = |t| slugs(&queue(&problems, &states, &filter, t));
         assert_eq!(at(T0 + 1), ["p1"]);
         assert_eq!(at(T0 + 2 * DAY), ["p4", "p3", "p1", "p2"]);
         let (head, count) = queue_head(&problems, &states, &filter, T0 + 2 * DAY);
         assert_eq!((head.map(|p| p.slug.as_str()), count), (Some("p4"), 4));
+        // New cards follow the order the list gives, not the problem numbers.
+        let reversed: Vec<&Problem> = problems.iter().rev().collect();
+        let order = queue(reversed.iter().copied(), &CardStates::new(), &filter, T0);
+        assert_eq!(slugs(&order), ["p4", "p3", "p2", "p1"]);
     }
 
     #[test]
@@ -383,7 +373,6 @@ mod tests {
                 set: StudySet::Less,
                 topic: Some("Graph".to_owned()),
                 difficulty: Some(Difficulty::Hard),
-                period: None,
             }),
             ["p1"]
         );
@@ -394,85 +383,5 @@ mod tests {
             }),
             ["p1"]
         );
-    }
-
-    #[test]
-    fn limits_a_period_to_its_problems_in_its_order() {
-        let p2 = Problem {
-            asked: AskedBy {
-                months6: Some(Asked {
-                    rank: 2,
-                    frequency: 9.0,
-                }),
-                days30: Some(Asked {
-                    rank: 2,
-                    frequency: 50.0,
-                }),
-                months3: None,
-            },
-            ..problem(2)
-        };
-        let p3 = Problem {
-            asked: AskedBy {
-                months6: Some(Asked {
-                    rank: 3,
-                    frequency: 8.0,
-                }),
-                days30: Some(Asked {
-                    rank: 1,
-                    frequency: 90.0,
-                }),
-                months3: None,
-            },
-            ..problem(3)
-        };
-        let problems = [problem(1), p2, p3];
-        let order = queue(
-            &problems,
-            &CardStates::new(),
-            &smart(Some(Period::Days30)),
-            T0,
-        );
-        assert_eq!(slugs(&order), ["p3", "p2"]);
-    }
-
-    fn classic(id: u32) -> Problem {
-        Problem {
-            asked: AskedBy::default(),
-            ..problem(id)
-        }
-    }
-
-    #[test]
-    fn lc1000_takes_free_problems_up_to_1000_by_number() {
-        // Google rank order differs from number order on purpose.
-        let mut google = problem(900);
-        google.asked.months6 = Some(Asked {
-            rank: 1,
-            frequency: 50.0,
-        });
-        let mut premium = classic(5);
-        premium.premium = true;
-        let problems = [google, classic(1001), classic(20), premium, classic(3)];
-        let filter = smart(Some(Period::Lc1000));
-        let order = queue(&problems, &CardStates::new(), &filter, T0);
-        assert_eq!(slugs(&order), ["p3", "p20", "p900"]);
-        let (head, count) = queue_head(&problems, &CardStates::new(), &filter, T0);
-        assert_eq!((head.map(|p| p.id), count), (Some(3), 3));
-    }
-
-    #[test]
-    fn classic_only_problems_follow_google_ones_without_a_period() {
-        let problems = [classic(2), problem(7), classic(1)];
-        let order = queue(&problems, &CardStates::new(), &smart(None), T0);
-        assert_eq!(slugs(&order), ["p7", "p1", "p2"]);
-        // The Google lists leave them out.
-        let six = queue(
-            &problems,
-            &CardStates::new(),
-            &smart(Some(Period::Months6)),
-            T0,
-        );
-        assert_eq!(slugs(&six), ["p7"]);
     }
 }

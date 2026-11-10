@@ -1,6 +1,9 @@
 //! Embeds the built web app (web/dist) in the binary, compressed ahead of time with Brotli
 //! (quality 11) and zstd (level 19), so serving a file costs no CPU at all.
 
+#[path = "src/fingerprint.rs"]
+mod fingerprint;
+
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
@@ -54,13 +57,6 @@ fn mime(path: &Path) -> &'static str {
     }
 }
 
-/// FNV-1a, enough for a strong ETag of build output.
-fn fingerprint(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, b| {
-        (hash ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3)
-    })
-}
-
 fn main() {
     let dist = PathBuf::from(env::var("WEB_DIST").unwrap_or_else(|_| "../web/dist".into()));
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
@@ -106,9 +102,9 @@ fn main() {
         let raw = fs::canonicalize(path).expect("canonical path");
         writeln!(
             code,
-            "    Asset {{ path: {route:?}, mime: {:?}, etag: \"\\\"{:016x}\\\"\", raw: include_bytes!({:?}), br: {br}, zstd: {zst} }},",
+            "    Asset {{ path: {route:?}, mime: {:?}, etag: {:?}, raw: include_bytes!({:?}), br: {br}, zstd: {zst} }},",
             mime(path),
-            fingerprint(&bytes),
+            fingerprint::etag(&bytes),
             raw.display().to_string(),
         )
         .expect("write code");

@@ -1,0 +1,70 @@
+//! The JSON API under /api (shapes documented in web/src/lib/types.ts).
+//!
+//! Responses that hold `f32` frequencies are serialized straight to text with `Json(&value)`,
+//! never through `json!` / `serde_json::Value`, which would widen 93.2 to 93.19999694824219.
+
+mod code;
+mod study;
+
+use std::collections::HashMap;
+
+use axum::extract::{DefaultBodyLimit, Query, State};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{delete, get, post, put};
+use axum::{Json, Router};
+use serde::Serialize;
+
+use crate::deploy;
+use crate::error::ApiError;
+use crate::state::Shared;
+
+pub use study::companies_response;
+
+/// Every endpoint, relative to /api.
+pub fn routes() -> Router<Shared> {
+    Router::new()
+        .route("/companies", get(study::companies))
+        .route("/deck", get(study::deck))
+        .route("/attempts", post(study::record_attempt))
+        .route("/notes", put(study::save_note))
+        .route("/progress", delete(study::reset_progress))
+        .route("/problems", get(study::problems))
+        .route("/problems/{slug}", get(study::problem))
+        .route("/search", get(study::search))
+        .route("/report", get(study::report))
+        .route("/readiness", get(study::readiness))
+        .route("/code/{slug}", get(code::code_info))
+        .route("/drafts", put(code::save_draft))
+        .route("/drafts/reset", post(code::reset_draft))
+        .route("/drafts/restore", post(code::restore_draft))
+        .route("/run", post(code::run))
+        .route("/submit", post(code::submit))
+        .route("/submissions", get(code::submissions))
+        .route("/submissions/{id}", get(code::submission))
+        .route("/version", get(version))
+        .route(
+            "/deploy",
+            post(deploy::deploy).layer(DefaultBodyLimit::max(deploy::MAX_BODY)),
+        )
+        .fallback(|| async { ApiError::no_endpoint() })
+}
+
+/// A request's query string.
+type Params = Query<HashMap<String, String>>;
+
+fn param<'a>(params: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
+    params.get(key).map(String::as_str)
+}
+
+#[derive(Serialize)]
+struct Version<'a> {
+    revision: &'a str,
+}
+
+/// The running release, so CI can wait for a deploy to go live.
+async fn version(State(state): State<Shared>) -> Response {
+    Json(&Version {
+        revision: &state.revision,
+    })
+    .into_response()
+}

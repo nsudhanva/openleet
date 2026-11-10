@@ -5,14 +5,17 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
-use cards::service::{InvalidInput, UnknownProblem};
+use openleet::service::{InvalidInput, UnknownProblem};
 
+/// Why a request failed; each variant maps to one HTTP status.
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
     #[error("{0}")]
     BadRequest(String),
     #[error("{0}")]
     NotFound(String),
+    #[error("Bad signature")]
+    Unauthorized,
     #[error("The judge is busy; try again in a few seconds.")]
     Busy,
     #[error("The judge is not available.")]
@@ -22,6 +25,13 @@ pub enum ApiError {
 }
 
 pub type ApiResult<T> = Result<T, ApiError>;
+
+impl ApiError {
+    /// The 404 for a path no endpoint serves (or a disabled one).
+    pub fn no_endpoint() -> Self {
+        Self::NotFound("No such endpoint".into())
+    }
+}
 
 impl From<UnknownProblem> for ApiError {
     fn from(error: UnknownProblem) -> Self {
@@ -40,6 +50,7 @@ impl IntoResponse for ApiError {
         let status = match &self {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
+            Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::Busy | Self::JudgeDown => StatusCode::SERVICE_UNAVAILABLE,
             Self::Internal(error) => {
                 tracing::error!("{error:#}");

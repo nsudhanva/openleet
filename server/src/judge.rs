@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use judge_proto::{Checker, Endpoint, Job, Outcome, Verdict};
+use openleet_proto::{Checker, Endpoint, Expected, Job, Outcome, Verdict};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_json::value::RawValue;
@@ -29,32 +29,40 @@ const SHOWN_CHARS: usize = 4000;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
+    /// Whether the harness can judge it.
     pub supported: bool,
+    /// Why it cannot be judged.
     pub reason: Option<String>,
+    /// The harness spec, sent with every job.
     pub spec: Option<Box<RawValue>>,
+    /// The editor's starting code.
     pub starter: Option<String>,
     #[serde(default)]
     pub checker: Checker,
     #[serde(default)]
     pub floats: bool,
+    /// CPU time of the fastest reference solution over every test.
     pub ref_cpu_ms: Option<u32>,
+    /// CPU time of the slowest reference solution over every test.
     pub slow_cpu_ms: Option<u32>,
+    /// A reference solution, which answers custom Run cases.
     pub reference: Option<String>,
     #[serde(default)]
     pub tests: TestCounts,
+    /// Parameter names in signature order, from the spec.
     #[serde(skip)]
     pub names: Vec<String>,
+    /// Whether it is a design problem (operations and arguments instead of parameters).
     #[serde(skip)]
     pub design: bool,
 }
 
+/// How many tests of each kind a problem has.
 #[derive(Default, Deserialize, Serialize)]
+#[serde(default)]
 pub struct TestCounts {
-    #[serde(default)]
     pub example: u32,
-    #[serde(default)]
     pub hidden: u32,
-    #[serde(default)]
     pub stress: u32,
 }
 
@@ -100,6 +108,7 @@ impl TimePolicy {
     }
 }
 
+/// The judge catalog and a client for the judge daemon, one job at a time.
 pub struct Judge {
     entries: HashMap<String, Entry>,
     endpoint: Endpoint,
@@ -109,6 +118,7 @@ pub struct Judge {
 }
 
 impl Judge {
+    /// Reads specs.json (a missing file means no problem can be judged).
     pub fn load(specs: &Path, endpoint: Endpoint, scale: f64) -> Result<Self> {
         let mut entries: HashMap<String, Entry> = if specs.exists() {
             serde_json::from_slice(&std::fs::read(specs)?).context("reading specs.json")?
@@ -134,6 +144,7 @@ impl Judge {
         })
     }
 
+    /// A problem's catalog entry.
     pub fn entry(&self, slug: &str) -> Option<&Entry> {
         self.entries.get(slug)
     }
@@ -221,8 +232,17 @@ pub fn show_input(entry: &Entry, test: &str) -> String {
     clip(lines.join("\n"))
 }
 
+/// A JSON value as people read it, cut when long.
 pub fn show_value(raw: &str) -> String {
     clip(raw.to_owned())
+}
+
+/// An expected output as people read it; big answers are stored only as a checksum.
+pub fn show_expected(expected: &Expected) -> String {
+    match expected {
+        Expected::Value(value) => show_value(value.get()),
+        Expected::Sha256(_) => "(large answer, compared by checksum)".to_owned(),
+    }
 }
 
 /// Parses the Testcase box: one JSON value per line, one line per input name, case after case.
@@ -263,8 +283,8 @@ fn custom_tests(entry: &Entry, names: &[String], text: &str) -> ApiResult<Vec<Bo
                     .map_err(|e| ApiError::BadRequest(format!("{key}: not valid JSON ({e})")))?;
                 input.insert((*key).to_owned(), value);
             }
-            let test = serde_json::json!({ "input": input });
-            RawValue::from_string(test.to_string()).map_err(|e| ApiError::Internal(e.into()))
+            let case = serde_json::json!({ "input": input });
+            RawValue::from_string(case.to_string()).map_err(|e| ApiError::Internal(e.into()))
         })
         .collect()
 }
@@ -275,12 +295,14 @@ fn input_names(entry: &Entry, examples: &[TestRow]) -> Vec<String> {
     if let Some(Value::Object(test)) = examples
         .first()
         .and_then(|t| serde_json::from_str(&t.test).ok())
-        && let Some(Value::Object(input)) = test.get("input") {
-            names.extend(input.keys().filter(|k| !entry.names.contains(k)).cloned());
-        }
+        && let Some(Value::Object(input)) = test.get("input")
+    {
+        names.extend(input.keys().filter(|k| !entry.names.contains(k)).cloned());
+    }
     names
 }
 
+/// One case of a Run.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunCase {
@@ -291,6 +313,7 @@ pub struct RunCase {
     pub ok: Option<bool>,
 }
 
+/// The result of `POST /api/run`.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunResult {
@@ -300,6 +323,7 @@ pub struct RunResult {
     pub error: Option<String>,
 }
 
+/// The first failing test of a submission.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Failing {
@@ -310,6 +334,7 @@ pub struct Failing {
     pub kind: String,
 }
 
+/// The result of `POST /api/submit`.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmitResult {
@@ -321,6 +346,26 @@ pub struct SubmitResult {
     pub limit_ms: u32,
     pub error: Option<String>,
     pub failing: Option<Failing>,
+}
+
+/// What a stored submission keeps of its result page (its shape depends on the verdict).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmissionDetail<'a> {
+    pub failing: Option<&'a Failing>,
+    pub error: Option<&'a str>,
+    pub limit_ms: u32,
+}
+
+impl SubmitResult {
+    /// The part of the result stored with the submission.
+    pub fn detail(&self) -> SubmissionDetail<'_> {
+        SubmissionDetail {
+            failing: self.failing.as_ref(),
+            error: self.error.as_deref(),
+            limit_ms: self.limit_ms,
+        }
+    }
 }
 
 fn checked_code(code: &str) -> ApiResult<()> {
@@ -356,23 +401,23 @@ impl Judge {
     ) -> ApiResult<RunResult> {
         checked_code(code)?;
         let spec = spec_of(entry)?;
-        let (tests, expected) = match custom {
-            Some(text) => {
-                let tests = custom_tests(entry, &input_names(entry, examples), text)?;
-                let expected = self.reference_answers(entry, &spec, &tests).await?;
-                (tests, expected)
-            }
-            None => {
-                let tests = examples
-                    .iter()
-                    .map(|t| raw(&t.test))
-                    .collect::<ApiResult<Vec<_>>>()?;
-                let expected = examples
-                    .iter()
-                    .map(|t| raw(&t.expected).map(Some))
-                    .collect::<ApiResult<Vec<_>>>()?;
-                (tests, expected)
-            }
+        let (tests, expected) = if let Some(text) = custom {
+            let tests = custom_tests(entry, &input_names(entry, examples), text)?;
+            let expected = self
+                .reference_answers(entry, &spec, &tests)
+                .await?
+                .into_iter()
+                .map(|answer| answer.map(Expected::Value))
+                .collect();
+            (tests, expected)
+        } else {
+            let tests = examples
+                .iter()
+                .map(|t| raw(&t.test))
+                .collect::<ApiResult<Vec<_>>>()?;
+            let expected: Vec<Option<Expected>> =
+                examples.iter().map(|t| Some(t.expected.clone())).collect();
+            (tests, expected)
         };
         let all_known = expected.iter().all(Option::is_some);
         let job = Job {
@@ -395,7 +440,7 @@ impl Judge {
             .map(|((case, test), want)| RunCase {
                 input: show_input(entry, test.get()),
                 output: case.output.as_ref().map(|o| show_value(o.get())),
-                expected: want.as_ref().map(|w| show_value(w.get())),
+                expected: want.as_ref().map(show_expected),
                 stdout: case.stdout.clone(),
                 ok: case.ok,
             })
@@ -460,12 +505,7 @@ impl Judge {
                 .iter()
                 .map(|t| raw(&t.test))
                 .collect::<ApiResult<_>>()?,
-            expected: Some(
-                tests
-                    .iter()
-                    .map(|t| raw(&t.expected))
-                    .collect::<ApiResult<_>>()?,
-            ),
+            expected: Some(tests.iter().map(|t| t.expected.clone()).collect()),
             checker: entry.checker,
             floats: entry.floats,
             cpu_limit_ms: limit_ms,
@@ -476,13 +516,12 @@ impl Judge {
     }
 }
 
-/// The result page for a submission, from the judge's outcome.
+/// The result page for a submission, from the judge's outcome; `id` is set once stored.
 pub fn submit_result(
     entry: &Entry,
     tests: &[TestRow],
     outcome: &Outcome,
     limit_ms: u32,
-    id: i64,
 ) -> SubmitResult {
     let total = u16::try_from(tests.len()).unwrap_or(u16::MAX);
     let passed = u16::try_from(outcome.cases.iter().filter(|c| c.ok == Some(true)).count())
@@ -495,13 +534,13 @@ pub fn submit_result(
             output: case
                 .and_then(|c| c.output.as_ref())
                 .map(|o| show_value(o.get())),
-            expected: Some(show_value(&test.expected)),
+            expected: Some(show_expected(&test.expected)),
             stdout: case.map(|c| c.stdout.clone()).unwrap_or_default(),
             kind: test.kind.clone(),
         })
     });
     SubmitResult {
-        id,
+        id: 0,
         verdict: outcome.verdict.as_str(),
         passed,
         total,

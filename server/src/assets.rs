@@ -8,6 +8,7 @@ use axum::body::Body;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 
+/// One embedded file with its precompressed variants.
 pub struct Asset {
     pub path: &'static str,
     pub mime: &'static str,
@@ -42,6 +43,7 @@ fn accepts(headers: &HeaderMap, coding: &str) -> bool {
         })
 }
 
+/// Serves an embedded file, or the app's index.html for client-side routes.
 pub async fn serve(uri: Uri, headers: HeaderMap) -> Response {
     let path = uri.path();
     let asset = BY_PATH.get(path).or_else(|| {
