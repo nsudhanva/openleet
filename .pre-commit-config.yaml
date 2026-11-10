@@ -91,8 +91,8 @@ repos:
         pass_filenames: false
         stages: [pre-push]
       - id: tests
-        name: tests (cargo, vitest)
-        entry: sh -c 'cargo test --locked -q && bun run test'
+        name: tests (cargo, Python, vitest)
+        entry: sh -c 'cargo test --locked -q && uv run python -m unittest discover -s judge/py && uv run python -m unittest discover -s deploy && bun run test'
         language: system
         pass_filenames: false
         stages: [pre-push]

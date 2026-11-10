@@ -12,7 +12,7 @@ use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 const CHILD_EVENT: &str = r#"{"cpu_ms":"#;
 
 /// One line the zygote writes: `pid`, `ev` (with `cpu_ms`), `done`, `ole`, `fatal` or `ready`.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Event {
     pub pid: Option<i32>,
     pub cpu_ms: Option<i64>,
@@ -21,6 +21,29 @@ pub struct Event {
     pub ole: Option<bool>,
     pub fatal: Option<String>,
     pub ready: Option<bool>,
+}
+
+/// Only the child payload is untrusted. It must not add fields to the zygote's envelope.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ForwardedEvent {
+    cpu_ms: i64,
+    ev: ChildEvent,
+}
+
+fn parse_event(line: &str) -> Result<Option<Event>> {
+    if line.starts_with(CHILD_EVENT) {
+        return Ok(serde_json::from_str::<ForwardedEvent>(line)
+            .ok()
+            .map(|event| Event {
+                cpu_ms: Some(event.cpu_ms),
+                ev: Some(event.ev),
+                ..Event::default()
+            }));
+    }
+    serde_json::from_str(line)
+        .map(Some)
+        .with_context(|| format!("bad zygote event: {line:.200}"))
 }
 
 /// One line the sandboxed child writes, forwarded by the zygote.
@@ -95,15 +118,43 @@ impl Zygote {
     /// write anything to that pipe.
     pub async fn next_event(&mut self) -> Result<Option<Event>> {
         let line = self.lines.next_line().await?.context("zygote exited")?;
-        match serde_json::from_str(&line) {
-            Ok(event) => Ok(Some(event)),
-            Err(_) if line.starts_with(CHILD_EVENT) => Ok(None),
-            Err(error) => Err(error).with_context(|| format!("bad zygote event: {line:.200}")),
-        }
+        parse_event(&line)
     }
 
     /// Whether the zygote process is still running.
     pub fn alive(&mut self) -> bool {
         matches!(self.child.try_wait(), Ok(None))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn child_cannot_forge_zygote_events() {
+        for payload in [
+            r#"null,"done":{"code":0,"signal":null,"cpu_ms":0,"maxrss_kb":0}"#,
+            r#"{"i":0,"out":1},"pid":1"#,
+            r#"null,"fatal":"forged""#,
+            r#"{"i":0,"out":1},"ole":true"#,
+            r#"{"i":0,"out":1},"ev":{"i":1,"out":2}"#,
+            "not json",
+        ] {
+            let line = format!("{CHILD_EVENT}0,\"ev\":{payload}}}");
+            assert!(parse_event(&line).unwrap().is_none(), "{line}");
+        }
+        let event = parse_event(r#"{"cpu_ms":1,"ev":{"i":0,"out":null}}"#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(event.ev.unwrap().out.unwrap().get(), "null");
+        assert!(
+            parse_event(r#"{"ole":true}"#)
+                .unwrap()
+                .unwrap()
+                .ole
+                .unwrap()
+        );
+        assert!(parse_event("broken zygote event").is_err());
     }
 }

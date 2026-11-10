@@ -23,6 +23,7 @@ import io
 import json
 import linecache
 import os
+import re
 import resource
 import signal
 import sys
@@ -62,6 +63,8 @@ def emit(obj: dict) -> None:
 
 def generator(slug: str) -> ModuleType:
     """gen/<slug>.py, loaded once: `generate(rng)` makes an input, `SEEDS` says how many."""
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+        raise ValueError("Invalid generator slug")
     if slug not in generators:
         spec = importlib.util.spec_from_file_location(f"gen_{slug}", GEN_DIR / f"{slug}.py")
         if spec is None or spec.loader is None:
@@ -172,6 +175,9 @@ def child(job: dict, prepared: list, out_fd: int) -> None:
     keep_going = bool(job.get("keep_going"))
 
     def body() -> None:
+        # The worker already exists. Lower the hard limit now, so exec (which removes the
+        # other thread) cannot free a slot for a fork that escapes the watched process group.
+        resource.setrlimit(resource.RLIMIT_NPROC, (1, 1))
         try:
             code = compile(job["code"], SOLUTION_FILE, "exec")
         except (SyntaxError, ValueError) as error:
@@ -250,15 +256,15 @@ def handle(job: dict) -> None:
     limit = int(job["limits"].get("out_bytes", 64 << 20))
     total = 0
     with os.fdopen(read_fd, "rb") as events:
-        for line in events:
-            # An event longer than the pipe's atomic write size is cut short when the child is
-            # killed while writing it (a time limit, or the stop after a wrong answer).
-            if not line.endswith(b"\n"):
-                break
+        while line := events.readline(limit - total + 1):
             total += len(line)
             if total > limit:
                 os.kill(pid, signal.SIGKILL)
                 emit({"ole": True})
+                break
+            # An event longer than the pipe's atomic write size is cut short when the child is
+            # killed while writing it (a time limit, or the stop after a wrong answer).
+            if not line.endswith(b"\n"):
                 break
             sys.stdout.buffer.write(b'{"cpu_ms":%d,"ev":%s}\n' % (cpu_ms(pid), line.rstrip(b"\n")))
             sys.stdout.buffer.flush()

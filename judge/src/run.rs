@@ -194,6 +194,13 @@ impl<'a> Run<'a> {
         if self.settled.is_some() && self.job.stop_on_failure {
             return;
         }
+        if i != self.cases.len()
+            || i >= self.job.tests.len()
+            || (ev.out.is_none() && ev.error.is_none() && ev.mle != Some(true))
+        {
+            self.garbled();
+            return;
+        }
         let (output, ok, failure) = if ev.mle == Some(true) {
             (None, None, Some((Verdict::MemoryLimitExceeded, None)))
         } else if let Some(error) = ev.error {
@@ -508,6 +515,21 @@ mod tests {
         let outcome = run.finish(&done(CLEAN));
         assert_eq!(outcome.verdict, Verdict::RuntimeError);
         assert_eq!(outcome.failed, Some(1));
+    }
+
+    #[test]
+    fn missing_answers_and_invalid_case_indexes_are_runtime_errors() {
+        for forged in [r#"{"i":0}"#, r#"{"i":1,"out":2}"#, r#"{"i":99,"out":1}"#] {
+            let job = job(2, Some("[1,2]"));
+            let mut run = start(&job);
+            run.child_event(event(forged), 0);
+            assert_eq!(run.finish(&done(CLEAN)).verdict, Verdict::RuntimeError);
+        }
+        let job = job(2, Some("[1,2]"));
+        let mut run = start(&job);
+        run.child_event(event(r#"{"i":0,"out":1}"#), 0);
+        run.child_event(event(r#"{"i":0,"out":1}"#), 0);
+        assert_eq!(run.finish(&done(CLEAN)).verdict, Verdict::RuntimeError);
     }
 
     #[test]
