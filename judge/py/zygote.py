@@ -15,6 +15,7 @@ Child events: {"i": n, "out": json, "stdout": s} | {"i": n, "error": s, "stdout"
               | {"i": n, "mle": true} | {"compile": s} | {"sandbox": s} (judge fault)
 """
 
+import contextlib
 import gc
 import hashlib
 import importlib.util
@@ -135,6 +136,11 @@ def sandbox(limits: dict, keep_fd: int) -> None:
         os.dup2(null, fd)
     os.closerange(3, keep_fd)
     os.closerange(keep_fd + 1, 1 << 16)
+    # When the judge's memory runs out, the kernel kills this child first, never the zygote
+    # or the daemon. Raising one's own score needs no privilege, but after setuid
+    # /proc/self belongs to root, so it is done here.
+    with contextlib.suppress(OSError):
+        Path("/proc/self/oom_score_adj").write_text("1000")
     if os.getuid() == 0:
         os.setgroups([])
         os.setgid(SANDBOX_ID)
@@ -241,6 +247,10 @@ def handle(job: dict) -> None:
     total = 0
     with os.fdopen(read_fd, "rb") as events:
         for line in events:
+            # An event longer than the pipe's atomic write size is cut short when the child is
+            # killed while writing it (a time limit, or the stop after a wrong answer).
+            if not line.endswith(b"\n"):
+                break
             total += len(line)
             if total > limit:
                 os.kill(pid, signal.SIGKILL)

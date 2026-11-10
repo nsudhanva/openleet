@@ -109,6 +109,15 @@ cargo fmt --check && cargo clippy --all-targets && cargo test
 uv run ruff check && uv run ty check
 ```
 
+End to end, over HTTP only, against a running server (local or production): references,
+wrong and crashing variants, time and memory limits, sandbox abuse, bad requests. It puts back
+every draft it changes; its submissions stay in the history.
+
+```bash
+uv run openleet smoke --base-url http://localhost:8080 --allow-network   # local Docker judge
+uv run openleet smoke --base-url https://openleet.sudhanva.me --seed 7 --json
+```
+
 ```text
 server/  Rust API + web app     judge/   judge daemon + judge/py sandbox
 proto/   shared wire types      web/     React SPA

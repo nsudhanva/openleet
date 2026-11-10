@@ -189,7 +189,15 @@ def judge_problem(item: dict, votes: dict) -> tuple[dict, list[dict]]:
         "slowCpuMs": max(cpu.values()),
         # Runs custom inputs for the expected answer. Mercury's submissions are used offline
         # only (CC BY-NC), so they are never shipped.
-        "reference": next((item["voters"][n] for n in sorted(voters) if trusted(n)), None),
+        # The fastest trusted reference answers custom inputs (Mercury is never shipped).
+        "reference": next(
+            (
+                item["voters"][n]
+                for n in sorted(voters, key=lambda n: (cpu.get(n, math.inf), n))
+                if trusted(n)
+            ),
+            None,
+        ),
     }
     return entry, tests
 

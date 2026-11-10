@@ -97,7 +97,8 @@ impl TimePolicy {
     /// ...and every reference passes: they include submissions LeetCode accepted.
     const SLOWEST_FACTOR: f64 = 1.25;
     const MIN_MS: f64 = 2000.0;
-    const MAX_MS: f64 = 20_000.0;
+    /// The judge's own cap (it refuses more, whatever the server asks).
+    const MAX_MS: f64 = 30_000.0;
     /// Run mode executes only a few small cases.
     const RUN_MS: u32 = 5000;
 
