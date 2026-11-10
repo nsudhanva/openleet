@@ -1,7 +1,7 @@
 """Check Completeness at the maximum 100 nodes: a complete tree (true), a complete tree with one
 interior gap (false), or a random tree."""
 
-from _shapes import level_order, shaped_tree
+from _shapes import level_order, random_tree
 
 SEEDS = 3
 N = 100
@@ -10,7 +10,7 @@ N = 100
 def generate(rng):
     shape = rng.choice(["complete", "gap", "random"])
     if shape == "random":
-        left, right = shaped_tree(rng, N, "random")
+        left, right = random_tree(rng, N)
         vals = [rng.randint(1, 1000) for _ in range(N)]
         return {"root": level_order(vals, left, right)}
     root = [rng.randint(1, 1000) for _ in range(N)]
