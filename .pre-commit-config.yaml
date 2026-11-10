@@ -1,9 +1,11 @@
 # Git hooks, run by prek (`uv run prek install`; pre-commit compatible).
 # pre-commit: fast fixers and linters on the staged files only.
-# pre-push: whole-repo type checks, clippy and tests.
-# Run everything by hand with `uv run prek run --all-files --hook-stage pre-push`.
+# pre-push: the same on the pushed files, plus whole-repo type checks, clippy and tests.
+# Run everything by hand with `uv run prek run --all-files --hook-stage pre-push`; CI runs exactly
+# that. Every tool comes from a lockfile: uv.lock (ruff, ty, shellcheck, actionlint, prek),
+# bun.lock (biome, markdownlint-cli2, tsc) and rust-toolchain.toml (cargo fmt, clippy).
 default_install_hook_types: [pre-commit, pre-push]
-default_stages: [pre-commit]
+default_stages: [pre-commit, pre-push]
 exclude: ^(data/|web/src/routeTree\.gen\.ts$)
 
 repos:
@@ -23,7 +25,7 @@ repos:
     hooks:
       - id: biome
         name: biome (format + lint)
-        entry: bunx biome check --write --no-errors-on-unmatched --files-ignore-unknown=true
+        entry: bun x --no-install biome check --write --no-errors-on-unmatched --files-ignore-unknown=true
         language: system
         types_or: [javascript, jsx, ts, tsx, json, css]
       - id: ruff-check
@@ -36,6 +38,18 @@ repos:
         entry: uv run ruff format
         language: system
         types: [python]
+      - id: uv-lock
+        name: uv.lock up to date
+        entry: uv lock --check
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+      - id: judge-requirements
+        name: judge/py/requirements.txt from pyproject.toml
+        entry: uv export --frozen --quiet --only-group judge --no-emit-project -o judge/py/requirements.txt
+        language: system
+        files: ^(pyproject\.toml|uv\.lock|judge/py/requirements\.txt)$
+        pass_filenames: false
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --all
@@ -44,17 +58,17 @@ repos:
         pass_filenames: false
       - id: markdownlint
         name: markdownlint
-        entry: bunx markdownlint-cli2
+        entry: bun x --no-install markdownlint-cli2
         language: system
         types: [markdown]
       - id: shellcheck
         name: shellcheck
-        entry: shellcheck
+        entry: uv run shellcheck
         language: system
         types: [shell]
       - id: actionlint
         name: actionlint
-        entry: actionlint
+        entry: uv run actionlint
         language: system
         files: ^\.github/workflows/
 
