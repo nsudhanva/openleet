@@ -6,7 +6,6 @@
 		"useIgnoreFile": true
 	},
 	"files": {
-		"ignoreUnknown": false,
 		"includes": [
 			"web/src/**",
 			"web/e2e/**",
@@ -18,7 +17,6 @@
 		]
 	},
 	"formatter": {
-		"enabled": true,
 		"indentStyle": "tab"
 	},
 	"assist": {
@@ -29,7 +27,6 @@
 		}
 	},
 	"linter": {
-		"enabled": true,
 		"rules": {
 			"preset": "recommended",
 			"correctness": {

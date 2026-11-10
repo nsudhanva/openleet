@@ -98,7 +98,7 @@ JUDGE_SOCKET=tcp://127.0.0.1:7777 JUDGE_CPU_SCALE=1 cargo run --release -p openl
 
 ```bash
 bun run check && bun run typecheck && bun run test
-cargo clippy --all-targets && cargo test
+cargo fmt --check && cargo clippy --all-targets && cargo test
 uv run ruff check && uv run ty check
 ```
 

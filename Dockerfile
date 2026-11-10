@@ -1,9 +1,7 @@
 # syntax=docker/dockerfile:1
 # Local development only, for machines that are not Linux: the judge needs Linux (/proc,
-# setuid, rlimits), so it runs here while the server runs natively and connects over TCP:
-#   docker compose up -d judge
-#   JUDGE_SOCKET=tcp://127.0.0.1:7777 cargo run -p openleet
-# Production runs both natively under systemd (see deploy/).
+# setuid, rlimits), so it runs here while the server runs natively and connects over TCP
+# (README, "Run locally"). Production runs both natively under systemd (deploy/).
 
 FROM rust:1.99-slim-trixie AS build
 WORKDIR /src

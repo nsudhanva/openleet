@@ -24,7 +24,7 @@
   },
   {
     "label": "docker: start the judge for local development",
-    "command": "docker compose up -d --build",
+    "command": "bun run up",
     "cwd": "$ZED_WORKTREE_ROOT"
   },
   {
