@@ -6,6 +6,10 @@ import {
 	type Difficulty,
 	PERIODS,
 	type Period,
+	PLAN_ORDERS,
+	PLAN_STATUSES,
+	type PlanOrder,
+	type PlanStatus,
 } from "@/lib/types";
 
 /**
@@ -35,14 +39,36 @@ export type StudySearch = ListFilters & {
 	slug?: string;
 };
 
-/** Search params of the problem table: the list's filters and a search within it. */
+/**
+ * Search params of the problem table: the list's filters, which problems to show and in which
+ * order (left out: every problem, in list order), and a search within it.
+ */
 export type ProblemsSearch = ListFilters & {
+	/** Only these problems; left out, every one ("all" is never in the URL). */
+	status?: Exclude<PlanStatus, "all">;
+	/** Left out, list order ("rank"). */
+	order?: Exclude<PlanOrder, "rank">;
 	/** Free-text search: number, title, topic or statement. */
 	q?: string;
 };
 
+/**
+ * Search params of the code page: the practice plan whose next problem it offers after a
+ * solve (with the root's `company`). Links from the study page and the problem table carry
+ * the list the learner came from.
+ */
+export type PlanSearch = ListFilters & {
+	status: PlanStatus;
+	order: PlanOrder;
+};
+
 export const STUDY_DEFAULTS = { set: "smart", period: "6m" } as const;
 export const PROBLEMS_DEFAULTS = { period: "6m" } as const;
+export const PLAN_DEFAULTS = {
+	period: "6m",
+	status: "unsolved",
+	order: "rank",
+} as const;
 
 const SET_KEYS = Object.keys(STUDY_SETS) as StudySet[];
 
@@ -97,12 +123,32 @@ export function parseStudySearch(
 	});
 }
 
+const TABLE_STATUSES = PLAN_STATUSES.filter((s) => s !== "all");
+const TABLE_ORDERS = PLAN_ORDERS.filter((o) => o !== "rank");
+
 /** Parses the problem table's search params, like {@link parseStudySearch}. */
 export function parseProblemsSearch(
 	search: Partial<ProblemsSearch> & SearchSchemaInput,
 ): ProblemsSearch {
 	const raw: Record<string, unknown> = search;
-	return compact({ ...parseListFilters(raw), q: text(raw.q, MAX_QUERY) });
+	return compact({
+		...parseListFilters(raw),
+		status: oneOf(TABLE_STATUSES, raw.status),
+		order: oneOf(TABLE_ORDERS, raw.order),
+		q: text(raw.q, MAX_QUERY),
+	});
+}
+
+/** Parses the code page's plan, like {@link parseStudySearch}. */
+export function parsePlanSearch(
+	search: Partial<PlanSearch> & SearchSchemaInput,
+): PlanSearch {
+	const raw: Record<string, unknown> = search;
+	return compact({
+		...parseListFilters(raw),
+		status: oneOf(PLAN_STATUSES, raw.status) ?? PLAN_DEFAULTS.status,
+		order: oneOf(PLAN_ORDERS, raw.order) ?? PLAN_DEFAULTS.order,
+	});
 }
 
 /*
@@ -124,6 +170,15 @@ export function deckQuery(search: object): StudySearch & CompanySearch {
 export function problemsQuery(search: object): ProblemsSearch & CompanySearch {
 	const raw = search as SearchSchemaInput;
 	const { company } = parseCompanySearch(raw);
-	const { period, topic, difficulty, q } = parseProblemsSearch(raw);
-	return { company, period, topic, difficulty, q };
+	const { period, topic, difficulty, status, order, q } =
+		parseProblemsSearch(raw);
+	return { company, period, topic, difficulty, status, order, q };
+}
+
+/** A plan as GET /api/next and PUT /api/plans take it. */
+export function planQuery(search: object): PlanSearch & CompanySearch {
+	const raw = search as SearchSchemaInput;
+	const { company } = parseCompanySearch(raw);
+	const { period, topic, difficulty, status, order } = parsePlanSearch(raw);
+	return { company, period, topic, difficulty, status, order };
 }

@@ -31,6 +31,10 @@ const SHORTCUTS: [string, string][] = [
 	["/ or ⌘K", "Search by number, title, topic or text"],
 	["⌘↵", "Code page: run the examples or your test case"],
 	["⌘⇧↵", "Code page: submit against every test"],
+	[
+		"N",
+		"Code page, after an accepted submission: the next problem of your plan",
+	],
 ];
 
 /**
@@ -140,6 +144,14 @@ function About() {
 							saves itself; <strong>Reset</strong> goes back to the starter code
 							and <strong>Restore previous</strong> brings back the code it
 							replaced.
+						</p>
+						<p>
+							After an accepted submission, <strong>Next</strong> offers the
+							next problem of your practice plan: the list you came from, its
+							topic and difficulty, which problems still count (unsolved by
+							default) and an order. Change it with the plan chip on the code
+							page, or switch to a related plan under the result. The Problems
+							page lists the plans you used; pin the ones to keep.
 						</p>
 					</Section>
 				</div>

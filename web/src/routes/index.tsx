@@ -78,6 +78,11 @@ function Study() {
 					key={`${card.problem.slug}:${card.state?.lastAt ?? 0}`}
 					card={card}
 					period={isAskedPeriod(search.period) ? search.period : "6m"}
+					list={{
+						period: search.period,
+						topic: search.topic,
+						difficulty: search.difficulty,
+					}}
 					topics={topics}
 					busy={busy}
 					canGoBack={history.length > 0}

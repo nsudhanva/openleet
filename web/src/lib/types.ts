@@ -119,8 +119,8 @@ export interface AttemptInput {
 }
 
 /**
- * One problem of a list (GET /api/problems?company=&period=&topic=&difficulty=&q=), in list
- * order (best match first with `q`), with its progress. Topics stay off so browsing does not
+ * One problem of a list (GET /api/problems?company=&period=&topic=&difficulty=&status=&order=
+ * &q=), in the plan's order (best match first with `q`), with its progress. Topics stay off so browsing does not
  * spoil guesses.
  */
 export interface ProblemRow
@@ -295,4 +295,71 @@ export interface SubmissionSummary {
 
 export interface Submission extends SubmissionSummary {
 	code: string;
+}
+
+/** Which problems of a practice plan still count (lib/plan.ts has the labels). */
+export const PLAN_STATUSES = ["unsolved", "untried", "all"] as const;
+export type PlanStatus = (typeof PLAN_STATUSES)[number];
+
+/** The order a practice plan walks its problems in. */
+export const PLAN_ORDERS = ["rank", "number", "easy-first", "random"] as const;
+export type PlanOrder = (typeof PLAN_ORDERS)[number];
+
+/**
+ * A practice plan: a list, its filters, which problems still count and an order. Also the
+ * code page's search params (with the root's `company`).
+ */
+export interface PlanView {
+	company: string;
+	period: Period;
+	topic: string | null;
+	difficulty: Difficulty | null;
+	status: PlanStatus;
+	order: PlanOrder;
+	/** "Google · 6 months · Two Pointers · Unsolved". */
+	label: string;
+}
+
+/** The problem a plan offers next. No topics: they would give the guess away. */
+export interface NextProblem
+	extends Pick<Problem, "id" | "slug" | "title" | "difficulty" | "premium"> {
+	/** Rank in the plan's list. */
+	rank: number;
+}
+
+/** Solved out of all the plan's problems, whatever its status. */
+export interface PlanProgress {
+	solved: number;
+	total: number;
+}
+
+/** How a pivot differs from the plan it is offered from. */
+export type PivotKind = "topic" | "list" | "harder" | "weakest";
+
+/** Another plan offered after a solve. */
+export interface Pivot {
+	kind: PivotKind;
+	plan: PlanView;
+	next: NextProblem;
+}
+
+/** GET /api/next: a plan's next problem, its progress and, after a solve, the pivots. */
+export interface NextPage {
+	plan: PlanView;
+	/** Null when the plan has no problem left to do. */
+	next: NextProblem | null;
+	progress: PlanProgress;
+	pivots: Pivot[];
+}
+
+/** A practice plan the learner used (GET /api/plans): pinned, or recent. */
+export interface SavedPlan {
+	id: number;
+	/** The learner's name; null shows the plan's label. */
+	name: string | null;
+	pinned: boolean;
+	plan: PlanView;
+	progress: PlanProgress;
+	/** The first problem still to do; null when none is left. */
+	next: NextProblem | null;
 }

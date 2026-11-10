@@ -19,6 +19,7 @@ import { MyAnswer } from "@/components/study/my-answer";
 import { TopicPicker } from "@/components/study/topic-picker";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useHotkeys } from "@/hooks/use-hotkeys";
+import type { ListFilters } from "@/lib/schemas";
 import { scoreTopics } from "@/lib/scorer";
 import type { AskedPeriod, Grade, StudyCard } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,7 @@ const GRADE_ACTIONS: {
 export function Flashcard({
 	card,
 	period,
+	list,
 	topics,
 	busy,
 	canGoBack,
@@ -59,6 +61,8 @@ export function Flashcard({
 	card: StudyCard;
 	/** The list whose ranks the header shows. */
 	period: AskedPeriod;
+	/** The list and filters studied, which the code page's practice plan carries on. */
+	list: ListFilters;
 	topics: string[];
 	busy: boolean;
 	canGoBack: boolean;
@@ -142,6 +146,7 @@ export function Flashcard({
 					<Link
 						to="/code/$slug"
 						params={{ slug: problem.slug }}
+						search={list}
 						className={cn(
 							buttonVariants({ variant: "ghost", size: "xs" }),
 							"text-muted-foreground",

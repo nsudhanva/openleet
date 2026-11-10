@@ -4,6 +4,7 @@ import { CompanyPicker } from "@/components/company-picker";
 import { ConfirmClear } from "@/components/confirm-clear";
 import { FitPages } from "@/components/fit-pages";
 import { PageHeader } from "@/components/page-header";
+import { ProgressBar } from "@/components/progress-bar";
 import { Button } from "@/components/ui/button";
 import { useCompanies } from "@/hooks/use-companies";
 import { useFitScreen } from "@/hooks/use-media";
@@ -261,12 +262,7 @@ function Meter({
 						{percent(value)} <span className="text-xs">({detail})</span>
 					</span>
 				</div>
-				<div className="h-2 overflow-hidden rounded-full bg-muted">
-					<div
-						className="h-full rounded-full bg-primary"
-						style={{ width: `${value * 100}%` }}
-					/>
-				</div>
+				<ProgressBar value={value} />
 			</Link>
 		</li>
 	);

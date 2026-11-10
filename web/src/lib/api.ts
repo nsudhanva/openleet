@@ -1,16 +1,18 @@
 import { notFound } from "@tanstack/react-router";
 import type { CompanySearch } from "@/lib/companies";
-import type { ProblemsSearch, StudySearch } from "@/lib/schemas";
+import type { PlanSearch, ProblemsSearch, StudySearch } from "@/lib/schemas";
 import type {
 	AttemptInput,
 	CodeInfo,
 	Company,
 	Difficulty,
 	DraftVersions,
+	NextPage,
 	Period,
 	ProblemRow,
 	Report,
 	RunResult,
+	SavedPlan,
 	SearchHit,
 	StudyCard,
 	StudyDeck,
@@ -193,6 +195,23 @@ export const api = {
 	submissions: (slug: string) =>
 		json<SubmissionSummary[]>("GET", "/api/submissions", { query: { slug } }),
 	submission: (id: number) => json<Submission>("GET", `/api/submissions/${id}`),
+
+	/** The plan's next problem after `slug` (from the start without one), and the pivots. */
+	next: (
+		plan: CompanySearch & PlanSearch,
+		slug?: string,
+		signal?: AbortSignal,
+	) => json<NextPage>("GET", "/api/next", { query: { ...plan, slug }, signal }),
+	/** Pinned plans, then the recent ones. */
+	plans: (signal?: AbortSignal) =>
+		json<SavedPlan[]>("GET", "/api/plans", { signal }),
+	/** Remembers that the plan was used (the same plan keeps its row). */
+	rememberPlan: (plan: CompanySearch & PlanSearch) =>
+		json<SavedPlan>("PUT", "/api/plans", { body: plan }),
+	/** `name: null` drops the name, so the plan shows its label. */
+	editPlan: (id: number, change: { name?: string | null; pinned?: boolean }) =>
+		json<SavedPlan>("PATCH", `/api/plans/${id}`, { body: change }),
+	deletePlan: (id: number) => empty("DELETE", `/api/plans/${id}`),
 };
 
 /** For route loaders: an unknown problem (404) shows the not-found page. */

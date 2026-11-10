@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { getRouteApi, Link } from "@tanstack/react-router";
 import {
 	ArrowLeftIcon,
 	CheckIcon,
@@ -20,6 +20,8 @@ import type { CodeEditorHandle } from "@/components/code/code-editor";
 import { RunResultView, SubmitResultView } from "@/components/code/results";
 import { SubmissionChart } from "@/components/code/submission-chart";
 import { SubmissionList } from "@/components/code/submission-list";
+import { NextPanel } from "@/components/plan/next-panel";
+import { PlanChip } from "@/components/plan/plan-chip";
 import {
 	type Pane,
 	ProblemCard,
@@ -38,6 +40,7 @@ import { useShown } from "@/hooks/use-shown";
 import { api, messageOf } from "@/lib/api";
 import { companyName } from "@/lib/companies";
 import { cpuTime } from "@/lib/format";
+import type { Plan } from "@/lib/plan";
 import { examplesToTestcase } from "@/lib/testcase";
 import { TONE } from "@/lib/tones";
 import type {
@@ -54,6 +57,8 @@ export interface CodePageData {
 	code: CodeInfo;
 	submissions: SubmissionSummary[];
 }
+
+const route = getRouteApi("/code/$slug");
 
 const CodeEditor = lazy(async () => ({
 	default: (await import("@/components/code/code-editor")).CodeEditor,
@@ -144,6 +149,22 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 
 	const companies = useCompanies();
 	const company = useCompany();
+	// The root route's company and the page's own plan params.
+	const plan: Plan = route.useSearch();
+	const navigate = route.useNavigate();
+	// The plan is remembered once the learner settles on a change, not on every pick.
+	const planSave = useAutosave(
+		(next: Plan) => api.rememberPlan(next).then(() => undefined),
+		1500,
+	);
+	const changePlan = (next: Plan) => {
+		navigate({
+			search: (prev) => ({ ...prev, ...next }),
+			replace: true,
+			resetScroll: false,
+		});
+		planSave.schedule(next);
+	};
 	const editor = useRef<CodeEditorHandle>(null);
 	const source = useRef(code.draft ?? starter);
 	// Code back at the starter is no draft at all: the API takes it as ''.
@@ -284,6 +305,7 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 				problem={problem}
 				actions={
 					<>
+						<PlanChip plan={plan} onChange={changePlan} />
 						{solved && (
 							<Badge className={cn("font-semibold", TONE.success)}>
 								<CheckIcon className="sm:hidden" aria-hidden />
@@ -346,7 +368,13 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 									/>
 								)}
 								{tab === "result" && (
-									<ResultPanel key={runs} busy={busy} outcome={outcome} />
+									<ResultPanel
+										key={runs}
+										busy={busy}
+										outcome={outcome}
+										plan={plan}
+										slug={slug}
+									/>
 								)}
 								{tab === "submissions" && (
 									<div className="space-y-2">
@@ -458,9 +486,14 @@ function TestcasePanel({
 function ResultPanel({
 	busy,
 	outcome,
+	plan,
+	slug,
 }: {
 	busy: Job | null;
 	outcome: Outcome | null;
+	/** After an accepted submission, the plan whose next problem to offer. */
+	plan: Plan;
+	slug: string;
 }): ReactNode {
 	if (busy)
 		return (
@@ -478,7 +511,14 @@ function ResultPanel({
 		case "run":
 			return <RunResultView result={outcome.result} />;
 		case "submit":
-			return <SubmitResultView result={outcome.result} />;
+			return (
+				<div className="space-y-3">
+					<SubmitResultView result={outcome.result} />
+					{outcome.result.verdict === "accepted" && (
+						<NextPanel plan={plan} slug={slug} />
+					)}
+				</div>
+			);
 		case "error":
 			return (
 				<p role="alert" className="text-sm text-destructive">
