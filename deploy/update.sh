@@ -12,6 +12,10 @@ REQUEST=/var/lib/openleet/deploy-request
 HISTORY=$ROOT/deployed
 KEEP=3
 
+# systemd serializes its own runs; the lock also covers invocations by hand.
+exec 9>"$ROOT/update.lock"
+flock -n 9 || exit 0
+
 # A revision names a directory that gets `rm -rf`: accept only the hex CI writes.
 valid() {
 	case $1 in '' | *[!0123456789abcdef]*) return 1 ;; esac
@@ -46,11 +50,14 @@ fetch "$archive.sha256"
 (cd "$work" && sha256sum -c "$archive.sha256" >/dev/null)
 
 release="$ROOT/releases/$revision"
-rm -rf "$release"
-mkdir -p "$release"
+current=$(readlink -f "$ROOT/current" 2>/dev/null || true)
+if [ "$release" != "$current" ]; then
+	rm -rf "$release"
+	mkdir -p "$release"
+	tar --zstd --no-same-owner --no-same-permissions -xf "$work/$archive" -C "$release"
+fi
 # Root runs parts of the release, so root owns all of it (not CI's uid). The data (reference
 # solutions, expected outputs) is readable by the server only, never by submissions.
-tar --zstd --no-same-owner --no-same-permissions -xf "$work/$archive" -C "$release"
 chown -R root:root "$release"
 chgrp -R openleet "$release/data"
 chmod -R o-rwx "$release/data"
@@ -59,11 +66,12 @@ chmod -R o-rwx "$release/data"
 # mv -T renames over the old link in one step, so `current` always points at a whole release.
 ln -sfn "$release" "$ROOT/current.next"
 mv -T "$ROOT/current.next" "$ROOT/current"
-echo "$revision" >>"$HISTORY"
 # The judge first (a submission in flight fails once), then the server: systemd holds its
 # sockets, so the restart refuses no connection.
 systemctl restart openleet-judge.service
 systemctl restart openleet.service
+# A failed restart must remain retryable on the next timer tick.
+echo "$revision" >>"$HISTORY"
 
 # Keep the newest releases for a quick rollback (point `current` back and restart), never the
 # running one. Release names are hex revisions, so parsing ls is safe.
