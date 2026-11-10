@@ -19,7 +19,7 @@ use crate::zygote::Zygote;
 const MAX_JOB_BYTES: usize = 64 << 20;
 /// A client has this long to send its job line.
 const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
-/// No job may ask for more CPU than this, whatever the client says.
+/// No job may ask for more CPU than this (reference milliseconds), whatever the client says.
 const MAX_CPU_LIMIT_MS: u32 = 30_000;
 /// The users the zygote runs submissions as (61000 in production, 61001+ in the test builder).
 const SANDBOX_UIDS: std::ops::Range<u32> = 61_000..62_000;
@@ -135,7 +135,7 @@ async fn serve(read: Reader, mut write: Writer, zygote: &mut Zygote) -> Result<(
     let outcome = match serde_json::from_slice::<Job>(&line) {
         Ok(mut job) => {
             job.cpu_limit_ms = job.cpu_limit_ms.min(MAX_CPU_LIMIT_MS);
-            run::execute(zygote, &job).await?
+            run::judge(zygote, &job).await?
         }
         Err(error) => Outcome::internal(format!("bad job: {error}")),
     };

@@ -11,10 +11,15 @@ use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 /// How the zygote starts a line that carries a line of the child's (zygote.py, `handle`).
 const CHILD_EVENT: &str = r#"{"cpu_ms":"#;
 
-/// One line the zygote writes: `pid`, `ev` (with `cpu_ms`), `done`, `ole`, `fatal` or `ready`.
+/// One line the zygote writes: `pid` (with `calib_ns` and `sizes`), `ev` (with `cpu_ms`),
+/// `done`, `ole`, `fatal` or `ready`.
 #[derive(Debug, Default, Deserialize)]
 pub struct Event {
     pub pid: Option<i32>,
+    /// CPU nanoseconds the calibration work took (judge/py/calibrate.py).
+    pub calib_ns: Option<u64>,
+    /// Each test's input size, as people read it.
+    pub sizes: Option<Vec<String>>,
     pub cpu_ms: Option<i64>,
     pub ev: Option<ChildEvent>,
     pub done: Option<Done>,
@@ -60,13 +65,14 @@ pub struct ChildEvent {
     pub sandbox: Option<String>,
 }
 
-/// How the child ended, from `wait4`.
+/// How the child ended, from `wait4`, and the calibration timed right after.
 #[derive(Debug, Deserialize)]
 pub struct Done {
     pub code: Option<i32>,
     pub signal: Option<i32>,
     pub cpu_ms: u32,
     pub maxrss_kb: u64,
+    pub calib_ns: Option<u64>,
 }
 
 /// The running zygote and its pipes.

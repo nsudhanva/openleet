@@ -15,6 +15,16 @@ use serde_json::value::RawValue;
 /// Where the judge listens by default: systemd's runtime directory for the judge service.
 pub const DEFAULT_SOCKET: &str = "/run/openleet-judge/judge.sock";
 
+/// The most CPU time one run of a job may use on the judge's own machine, however slow that
+/// machine is at the moment (a job runs at most twice; see [`Outcome::rerun`]).
+pub const MAX_RUN_CPU_MS: u32 = 120_000;
+
+/// The most wall-clock time one run may take: the CPU it may use, twice over, plus a margin.
+#[must_use]
+pub const fn wall_limit_ms(run_cpu_ms: u32) -> u64 {
+    run_cpu_ms as u64 * 2 + 5000
+}
+
 /// How an output is compared with the expected one.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -54,7 +64,9 @@ pub struct Job {
     /// Compare numbers with the official judge's 1e-5 tolerance.
     #[serde(default)]
     pub floats: bool,
-    /// Total CPU time for all tests together.
+    /// Total CPU time for all tests together, in reference milliseconds: what the judge's
+    /// calibration says the work would take on its reference machine, however fast or loaded
+    /// the judge's own machine is (see judge/py/calibrate.py).
     pub cpu_limit_ms: u32,
     /// Stop at the first wrong answer (submit) or run every test (run).
     pub stop_on_failure: bool,
@@ -108,7 +120,8 @@ pub struct Case {
     pub stdout: String,
     /// Whether the answer matched; `None` without expected outputs or without an answer.
     pub ok: Option<bool>,
-    /// CPU time used up to the end of this test (10 ms resolution).
+    /// CPU time used up to the end of this test, in reference milliseconds (10 ms resolution
+    /// on the judge's machine).
     pub cpu_ms: u32,
 }
 
@@ -120,10 +133,26 @@ pub struct Outcome {
     pub cases: Vec<Case>,
     /// Index of the test that decided a non-accepted verdict.
     pub failed: Option<usize>,
+    /// The size of that test's input, as "nums: 100,000 items, k = 7".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed_size: Option<String>,
+    /// CPU time in reference milliseconds (see [`Job::cpu_limit_ms`]).
     pub cpu_ms: u32,
+    /// How many times longer than the reference machine the judge's machine took to do the
+    /// same work during this job (1 when unknown).
+    #[serde(default = "same_speed")]
+    pub slowdown: f64,
+    /// Whether the job ran twice: its first run hit the time limit while the machine slowed
+    /// down, so that run's time said nothing about the solution.
+    #[serde(default)]
+    pub rerun: bool,
     pub max_rss_kb: u64,
     /// Compiler message, traceback, or what went wrong inside the judge.
     pub error: Option<String>,
+}
+
+const fn same_speed() -> f64 {
+    1.0
 }
 
 impl Outcome {
@@ -134,7 +163,10 @@ impl Outcome {
             verdict: Verdict::InternalError,
             cases: Vec::new(),
             failed: None,
+            failed_size: None,
             cpu_ms: 0,
+            slowdown: same_speed(),
+            rerun: false,
             max_rss_kb: 0,
             error: Some(error.into()),
         }
@@ -273,7 +305,7 @@ mod tests {
     fn internal_outcome_shape() {
         assert_eq!(
             serde_json::to_string(&Outcome::internal("boom")).unwrap(),
-            r#"{"verdict":"internal_error","cases":[],"failed":null,"cpu_ms":0,"max_rss_kb":0,"error":"boom"}"#
+            r#"{"verdict":"internal_error","cases":[],"failed":null,"cpu_ms":0,"slowdown":1.0,"rerun":false,"max_rss_kb":0,"error":"boom"}"#
         );
     }
 }

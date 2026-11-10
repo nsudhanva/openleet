@@ -393,5 +393,32 @@ def decode_args(values: list, types: list[str]) -> list:
     return [decode(v, t) for v, t in zip(values, types, strict=True)]
 
 
+def size(spec: dict, data: dict) -> str:
+    """How big a test input is, as people judge a complexity: "nums: 100,000 items, k = 7",
+    "grid: 300 by 300" (with a multiplication sign), "s: 50,000 characters", or "20,000 calls"
+    for a design problem."""
+    if spec["kind"] == "design":
+        return f"{max(len(data.get('ops') or []) - 1, 0):,} calls"
+    parts = []
+    for name, value in data.items():
+        if isinstance(value, bool) or not isinstance(value, (int, str, list)):
+            continue
+        if isinstance(value, int):
+            digits = len(str(abs(value)))
+            parts.append(f"{name} = {value:,}" if digits <= 12 else f"{name}: {digits:,} digits")
+        elif isinstance(value, str):
+            parts.append(f"{name}: {len(value):,} characters")
+        elif len(value) > 1 and all(isinstance(r, (list, str)) for r in value):
+            widths = {len(r) for r in value}
+            # A matrix reads as rows by columns; a list of pairs or of words as a count.
+            if len(widths) == 1 and min(widths) > 2:
+                parts.append(f"{name}: {len(value):,} \N{MULTIPLICATION SIGN} {widths.pop():,}")
+            else:
+                parts.append(f"{name}: {len(value):,} items")
+        else:
+            parts.append(f"{name}: {len(value):,} items")
+    return ", ".join(parts)
+
+
 def dumps(value: Any) -> str:
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False)

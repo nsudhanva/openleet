@@ -2,13 +2,19 @@
 child per job. Input conversion (and stress-test generation) happens here, before the fork, so
 the child's CPU time is the solution's own; the child inherits the ready objects for free.
 
+Right before each fork, and again once the child has ended, the zygote times calibrate.py's
+fixed work, so the daemon can tell how fast the machine ran the job and judge CPU time in units
+that do not depend on it.
+
 Protocol (one JSON object per line):
   in   {"spec": {...}, "code": "...", "keep_going": bool,
         "tests": [{"input": {...}} | {"gen": slug, "seed": n, "sha": hex}],
         "limits": {"cpu_s": n, "as_mb": n, "out_bytes": n, "stdout_bytes": n}}
-  out  {"pid": n}                                   child started (the daemon watches its CPU)
+  out  {"pid": n, "calib_ns": n, "sizes": [s, ...]} child started (the daemon watches its CPU),
+                                                    the calibration's CPU ns, each test's size
        {"cpu_ms": n, "ev": <child event>}           child events, with the child's CPU so far
-       {"done": {"code": n|null, "signal": n|null, "cpu_ms": n, "maxrss_kb": n}}
+       {"done": {"code": n|null, "signal": n|null, "cpu_ms": n, "maxrss_kb": n,
+                 "calib_ns": n}}                    how the child ended; calibration after it
        {"ole": true}                                child wrote more than out_bytes
        {"fatal": "..."}                             the job itself is bad (never the solution)
 Child events: {"i": n, "out": json, "stdout": s} | {"i": n, "error": s, "stdout": s}
@@ -36,6 +42,7 @@ from types import ModuleType
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import calibrate
 import harness
 import prelude
 
@@ -50,9 +57,10 @@ RECURSION_LIMIT = 1_000_000
 TICKS = os.sysconf("SC_CLK_TCK")
 
 # Generated stress inputs of the problem judged last, prepared once and reused while the same
-# problem is submitted again. Only one problem's are kept: they are big (10^5-node structures)
-# and count against the judge's memory limit. Children mutate their own copy-on-write pages.
-generated: OrderedDict[tuple[str, int], object] = OrderedDict()
+# problem is submitted again, with their sizes. Only one problem's are kept: they are big
+# (10^5-node structures) and count against the judge's memory limit. Children mutate their own
+# copy-on-write pages.
+generated: OrderedDict[tuple[str, int], tuple[object, str]] = OrderedDict()
 generators: dict[str, ModuleType] = {}
 
 
@@ -80,7 +88,7 @@ def input_sha(data: object) -> str:
     return hashlib.sha256(harness.dumps(data).encode()).hexdigest()
 
 
-def generated_input(spec: dict, test: dict):
+def generated_input(spec: dict, test: dict) -> tuple[object, str]:
     key = (test["gen"], test["seed"])
     if key in generated:
         generated.move_to_end(key)
@@ -88,17 +96,22 @@ def generated_input(spec: dict, test: dict):
     data = generator(test["gen"]).generate(Random(test["seed"]))
     if test.get("sha") and input_sha(data) != test["sha"]:
         raise ValueError(f"Generator {key} no longer makes the stored input")
-    prepared = harness.prepare(spec, data)
+    ready = harness.prepare(spec, data), harness.size(spec, data)
     for other in [k for k in generated if k[0] != key[0]]:
         del generated[other]
-    generated[key] = prepared
-    return prepared
+    generated[key] = ready
+    return ready
 
 
-def prepare_all(spec: dict, tests: list[dict]) -> list:
-    return [
-        generated_input(spec, t) if "gen" in t else harness.prepare(spec, t["input"]) for t in tests
+def prepare_all(spec: dict, tests: list[dict]) -> tuple[list, list[str]]:
+    """Every test's prepared input, and its size as people read it."""
+    ready = [
+        generated_input(spec, t)
+        if "gen" in t
+        else (harness.prepare(spec, t["input"]), harness.size(spec, t["input"]))
+        for t in tests
     ]
+    return [r[0] for r in ready], [r[1] for r in ready]
 
 
 class CappedWriter(io.TextIOBase):
@@ -232,7 +245,7 @@ def cpu_ms(pid: int) -> int:
 
 def handle(job: dict) -> None:
     try:
-        prepared = prepare_all(job["spec"], job["tests"])
+        prepared, sizes = prepare_all(job["spec"], job["tests"])
     except Exception as error:
         emit({"fatal": f"{type(error).__name__}: {error}"})
         return
@@ -241,6 +254,8 @@ def handle(job: dict) -> None:
     # never walks the inputs or the cache, so it never copies their pages (that copy cost
     # ~0.7 s of the solution's CPU time with a 160 MB cache).
     gc.freeze()
+    # Timed in the state the child starts from, the moment before it starts.
+    calib_ns = calibrate.measure()
     pid = os.fork()
     if pid == 0:
         os.close(read_fd)
@@ -252,7 +267,7 @@ def handle(job: dict) -> None:
             os._exit(0)
     os.close(write_fd)
     del prepared
-    emit({"pid": pid})
+    emit({"pid": pid, "calib_ns": calib_ns, "sizes": sizes})
     limit = int(job["limits"].get("out_bytes", 64 << 20))
     total = 0
     with os.fdopen(read_fd, "rb") as events:
@@ -269,6 +284,7 @@ def handle(job: dict) -> None:
             sys.stdout.buffer.write(b'{"cpu_ms":%d,"ev":%s}\n' % (cpu_ms(pid), line.rstrip(b"\n")))
             sys.stdout.buffer.flush()
     _, status, usage = os.wait4(pid, 0)
+    calib_ns = calibrate.measure()
     gc.unfreeze()
     emit(
         {
@@ -277,6 +293,7 @@ def handle(job: dict) -> None:
                 "signal": os.WTERMSIG(status) if os.WIFSIGNALED(status) else None,
                 "cpu_ms": round((usage.ru_utime + usage.ru_stime) * 1000),
                 "maxrss_kb": usage.ru_maxrss,
+                "calib_ns": calib_ns,
             }
         }
     )

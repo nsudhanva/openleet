@@ -1,9 +1,17 @@
 //! Runs one [`Job`] through the zygote and turns its events into an [`Outcome`].
+//!
+//! Time is judged in reference milliseconds. Right before each run, and again right after it,
+//! the zygote times a fixed piece of work (judge/py/calibrate.py); how much longer that took
+//! than on the reference machine is the machine's slowdown. The watchdog allows the job's limit
+//! times the slowdown measured before, and CPU times are reported divided by the slowdown over
+//! the run, so a busy or throttled machine neither fails a solution nor makes it look slow. A
+//! run that hits the limit while the machine slows down (the e2-micro drops to a seventh of its
+//! speed when its burst allowance runs out) runs once more, with a limit for the slower machine.
 
 use std::time::Duration;
 
 use anyhow::Result;
-use openleet_proto::{Case, Expected, Job, Outcome, Verdict};
+use openleet_proto::{Case, Expected, Job, MAX_RUN_CPU_MS, Outcome, Verdict, wall_limit_ms};
 use serde::Serialize;
 use serde_json::Value;
 use serde_json::value::RawValue;
@@ -38,9 +46,41 @@ struct Limits {
     stdout_bytes: u32,
 }
 
-/// Wall-clock allowance: generous, since the VM's CPU may be throttled, but bounded.
-fn wall_limit(cpu_limit_ms: u32) -> Duration {
-    Duration::from_millis(u64::from(cpu_limit_ms) * 4 + 3000)
+/// The calibration work's CPU time on the reference machine (an Apple M1 Pro core running the
+/// judge's container): one reference millisecond is a millisecond there.
+const REFERENCE_CALIBRATION_NS: f64 = 25_000_000.0;
+/// Slowdowns outside this range are measuring faults, not machines.
+const SLOWDOWNS: (f64, f64) = (0.2, 100.0);
+/// A run that hits the time limit runs again when the machine is this much slower after it
+/// than before.
+const SLOWER: f64 = 1.25;
+
+/// How many times longer than on the reference machine the calibration took.
+fn slowdown(calib_ns: u64) -> f64 {
+    // Calibration times are well below 2^53 ns, so the conversion is exact.
+    #[allow(clippy::cast_precision_loss)]
+    let ns = calib_ns as f64;
+    (ns / REFERENCE_CALIBRATION_NS).clamp(SLOWDOWNS.0, SLOWDOWNS.1)
+}
+
+/// CPU milliseconds on the judge's machine as reference milliseconds.
+fn reference_ms(machine_ms: f64, slowdown: f64) -> u32 {
+    // Non-negative and far below u32::MAX: at most MAX_RUN_CPU_MS / SLOWDOWNS.0.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let ms = (machine_ms.max(0.0) / slowdown).round() as u32;
+    ms
+}
+
+/// Judges `job`, running it a second time when its first run hit the time limit while the
+/// machine slowed down: that run's limit was set for a faster machine.
+pub async fn judge(zygote: &mut Zygote, job: &Job) -> Result<Outcome> {
+    let (first, slowed) = execute(zygote, job).await?;
+    if first.verdict != Verdict::TimeLimitExceeded || !slowed {
+        return Ok(first);
+    }
+    let (mut second, _) = execute(zygote, job).await?;
+    second.rerun = true;
+    Ok(second)
 }
 
 /// Longest answer sent back to the server for display; bigger ones are replaced by a note.
@@ -58,20 +98,25 @@ fn shown(output: Box<RawValue>) -> Box<RawValue> {
     RawValue::from_string(note).unwrap_or(output)
 }
 
-/// Executes `job`; judge faults come back as [`Verdict::InternalError`], never as `Err`
-/// unless the zygote itself broke (the caller then restarts it).
-pub async fn execute(zygote: &mut Zygote, job: &Job) -> Result<Outcome> {
+/// Executes `job` once, and tells whether the machine slowed down by [`SLOWER`] meanwhile;
+/// judge faults come back as [`Verdict::InternalError`], never as `Err` unless the zygote
+/// itself broke (the caller then restarts it).
+async fn execute(zygote: &mut Zygote, job: &Job) -> Result<(Outcome, bool)> {
     let expected = match job.expected.as_deref().map(parse_expected).transpose() {
         Ok(expected) => expected,
-        Err(error) => return Ok(Outcome::internal(format!("bad expected output: {error}"))),
+        Err(error) => {
+            let outcome = Outcome::internal(format!("bad expected output: {error}"));
+            return Ok((outcome, false));
+        }
     };
     let line = serde_json::to_vec(&ZygoteJob {
         spec: &job.spec,
         code: &job.code,
         tests: &job.tests,
         limits: Limits {
-            // The kernel's backstop; the watchdog enforces the real limit to 10 ms.
-            cpu_s: job.cpu_limit_ms.div_ceil(1000) + 1,
+            // The kernel's backstop, set before the machine's speed is known; the watchdog
+            // enforces the real limit to 10 ms.
+            cpu_s: MAX_RUN_CPU_MS.div_ceil(1000) + 1,
             as_mb: ADDRESS_SPACE_MB,
             out_bytes: OUTPUT_BYTES,
             stdout_bytes: if job.capture_stdout { STDOUT_BYTES } else { 0 },
@@ -86,11 +131,11 @@ pub async fn execute(zygote: &mut Zygote, job: &Job) -> Result<Outcome> {
             continue;
         };
         if let Some(pid) = event.pid {
-            run.pid = Some(pid);
+            run.start(pid, event.calib_ns.map_or(1.0, slowdown), event.sizes);
             tokio::spawn(watch(
                 pid,
-                u64::from(job.cpu_limit_ms),
-                wall_limit(job.cpu_limit_ms),
+                u64::from(run.machine_limit_ms),
+                Duration::from_millis(wall_limit_ms(run.machine_limit_ms)),
                 run.switch.clone(),
             ));
         } else if let Some(ev) = event.ev {
@@ -98,9 +143,10 @@ pub async fn execute(zygote: &mut Zygote, job: &Job) -> Result<Outcome> {
         } else if event.ole == Some(true) {
             run.settle(Verdict::OutputLimitExceeded, None, None);
         } else if let Some(done) = event.done {
-            return Ok(run.finish(&done));
+            let slowed = run.slowed(&done);
+            return Ok((run.finish(&done), slowed));
         } else if let Some(fatal) = event.fatal {
-            return Ok(Outcome::internal(fatal));
+            return Ok((Outcome::internal(fatal), false));
         }
     }
 }
@@ -133,18 +179,49 @@ struct Run<'a> {
     switch: KillSwitch,
     /// The first verdict that is not Accepted.
     settled: Option<Decision>,
+    /// How much slower than the reference machine this machine is right now.
+    slowdown: f64,
+    /// The CPU the watchdog allows on this machine: the job's limit times the slowdown, but
+    /// never more than [`MAX_RUN_CPU_MS`].
+    machine_limit_ms: u32,
+    /// Whether [`MAX_RUN_CPU_MS`] cut the job's limit (the machine is too slow to give it).
+    capped: bool,
+    sizes: Vec<String>,
 }
 
 impl<'a> Run<'a> {
     fn new(job: &'a Job, expected: Option<Vec<Want<'a>>>) -> Self {
-        Self {
+        let mut run = Self {
             job,
             expected,
             cases: Vec::new(),
             pid: None,
             switch: KillSwitch::default(),
             settled: None,
-        }
+            slowdown: 1.0,
+            machine_limit_ms: 0,
+            capped: false,
+            sizes: Vec::new(),
+        };
+        run.set_slowdown(1.0);
+        run
+    }
+
+    fn set_slowdown(&mut self, slowdown: f64) {
+        let wanted = f64::from(self.job.cpu_limit_ms) * slowdown;
+        self.slowdown = slowdown;
+        self.capped = wanted > f64::from(MAX_RUN_CPU_MS);
+        // Clamped into u32's range first, so the conversion cannot truncate or wrap.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let limit = wanted.min(f64::from(MAX_RUN_CPU_MS)).round() as u32;
+        self.machine_limit_ms = limit;
+    }
+
+    /// The child started, on a machine `slowdown` times slower than the reference.
+    fn start(&mut self, pid: i32, slowdown: f64, sizes: Option<Vec<String>>) {
+        self.pid = Some(pid);
+        self.set_slowdown(slowdown);
+        self.sizes = sizes.unwrap_or_default();
     }
 
     fn settle(&mut self, verdict: Verdict, test: Option<usize>, error: Option<String>) {
@@ -212,6 +289,7 @@ impl<'a> Run<'a> {
             let keep = !(ok == Some(true) && self.job.stop_on_failure);
             (ev.out.filter(|_| keep).map(shown), ok, failure)
         };
+        // On this machine until `finish` knows the slowdown over the whole run.
         self.cases.push(Case {
             output,
             stdout: ev.stdout,
@@ -226,14 +304,41 @@ impl<'a> Run<'a> {
         }
     }
 
-    fn finish(self, done: &Done) -> Outcome {
+    /// The machine's slowdown measured once the child had ended.
+    fn after(&self, done: &Done) -> f64 {
+        done.calib_ns.map_or(self.slowdown, slowdown)
+    }
+
+    /// Whether the machine was [`SLOWER`] after the run than before it.
+    fn slowed(&self, done: &Done) -> bool {
+        self.after(done) >= self.slowdown * SLOWER
+    }
+
+    fn finish(mut self, done: &Done) -> Outcome {
+        // The run's slowdown: the mean of before and after, but never below the slowdown its
+        // limit was set by, so an accepted run never reports more time than its limit.
+        let slowdown = f64::midpoint(self.slowdown, self.after(done)).max(self.slowdown);
+        for case in &mut self.cases {
+            case.cpu_ms = reference_ms(f64::from(case.cpu_ms), slowdown);
+        }
         let over_time = matches!(self.switch.reason(), Kill::Cpu | Kill::Wall)
             || done.signal == Some(libc::SIGXCPU)
-            || done.cpu_ms > self.job.cpu_limit_ms;
+            || done.cpu_ms > self.machine_limit_ms;
         let next_test = Some(self.cases.len());
         // The first judged event decides; then limits, then how the process ended.
         let (verdict, failed, error) = match self.settled {
             Some(settled) => settled,
+            // Stopped by the judge's own cap before the job's limit: the solution may well be
+            // fast enough, the machine is not. Not the solution's fault, so not a verdict on it.
+            None if over_time && self.capped => (
+                Verdict::InternalError,
+                None,
+                Some(
+                    "The judge's machine is running too slowly right now to give this problem \
+                     its full time. Submit again in a few minutes."
+                        .into(),
+                ),
+            ),
             None if over_time => (Verdict::TimeLimitExceeded, next_test, None),
             // Killed by the kernel without us asking: the container ran out of memory.
             None if done.signal == Some(libc::SIGKILL) => {
@@ -255,9 +360,12 @@ impl<'a> Run<'a> {
         };
         Outcome {
             verdict,
+            failed_size: failed.and_then(|i| self.sizes.get(i).cloned()),
             cases: self.cases,
             failed,
-            cpu_ms: done.cpu_ms,
+            cpu_ms: reference_ms(f64::from(done.cpu_ms), slowdown),
+            slowdown,
+            rerun: false,
             max_rss_kb: done.maxrss_kb,
             error,
         }
@@ -482,6 +590,77 @@ mod tests {
             libc::SIGKILL
         )));
         assert_eq!(outcome.verdict, Verdict::TimeLimitExceeded);
+    }
+
+    #[test]
+    fn a_slow_machine_gets_more_cpu_and_reports_reference_time() {
+        let job = job(2, Some("[1,2]"));
+        let mut run = start(&job);
+        run.start(
+            7,
+            slowdown(75_000_000),
+            Some(vec!["n = 1".into(), "n = 9".into()]),
+        );
+        assert!((run.slowdown - 3.0).abs() < 1e-9);
+        assert_eq!(run.machine_limit_ms, 3000);
+        run.child_event(event(r#"{"i":0,"out":1}"#), 600);
+        // 2.9 s on this machine is under 1 s on the reference machine.
+        let end = r#"{"code":null,"signal":9,"cpu_ms":2900,"maxrss_kb":1,"calib_ns":75000000}"#;
+        assert!(!run.slowed(&done(end)));
+        let outcome = run.finish(&done(end));
+        assert_eq!(outcome.verdict, Verdict::MemoryLimitExceeded);
+        assert_eq!((outcome.cpu_ms, outcome.cases[0].cpu_ms), (967, 200));
+        assert_eq!(outcome.failed_size.as_deref(), Some("n = 9"));
+
+        let mut run = start(&job);
+        run.start(7, slowdown(75_000_000), None);
+        let outcome = run.finish(&done(
+            r#"{"code":0,"signal":null,"cpu_ms":3100,"maxrss_kb":1}"#,
+        ));
+        assert_eq!(outcome.verdict, Verdict::TimeLimitExceeded);
+        assert_eq!(outcome.failed_size, None);
+    }
+
+    #[test]
+    fn time_is_judged_by_the_slowdown_over_the_run() {
+        let job = job(1, Some("[1]"));
+        // Slower after the run: the time is divided by the mean, and the run counts as slowed.
+        let mut run = start(&job);
+        run.start(7, 1.0, None);
+        let slower = r#"{"code":0,"signal":null,"cpu_ms":1500,"maxrss_kb":1,"calib_ns":75000000}"#;
+        assert!(run.slowed(&done(slower)));
+        assert_eq!(run.finish(&done(slower)).cpu_ms, 750);
+        // Faster after it: the slowdown the limit was set by stands.
+        let mut run = start(&job);
+        run.start(7, 2.0, None);
+        run.child_event(event(r#"{"i":0,"out":1}"#), 1500);
+        let faster = r#"{"code":0,"signal":null,"cpu_ms":1500,"maxrss_kb":1,"calib_ns":25000000}"#;
+        assert!(!run.slowed(&done(faster)));
+        let outcome = run.finish(&done(faster));
+        assert_eq!((outcome.verdict, outcome.cpu_ms), (Verdict::Accepted, 750));
+    }
+
+    #[test]
+    fn the_hard_cap_is_never_a_time_limit_verdict() {
+        let mut job = job(1, Some("[1]"));
+        job.cpu_limit_ms = MAX_RUN_CPU_MS / 2;
+        let mut run = start(&job);
+        run.start(7, 4.0, None);
+        assert!(run.capped);
+        assert_eq!(run.machine_limit_ms, MAX_RUN_CPU_MS);
+        assert!(run.switch.claim(Kill::Cpu));
+        let outcome = run.finish(&done(CLEAN));
+        assert_eq!(outcome.verdict, Verdict::InternalError);
+        assert!(outcome.error.unwrap().contains("too slowly"));
+    }
+
+    #[test]
+    fn slowdowns_are_kept_in_range() {
+        assert!((slowdown(25_000_000) - 1.0).abs() < 1e-9);
+        assert!((slowdown(0) - SLOWDOWNS.0).abs() < 1e-9);
+        assert!((slowdown(u64::MAX) - SLOWDOWNS.1).abs() < 1e-9);
+        assert_eq!(reference_ms(-5.0, 2.0), 0);
+        assert_eq!(reference_ms(1001.0, 2.0), 501);
     }
 
     #[test]
