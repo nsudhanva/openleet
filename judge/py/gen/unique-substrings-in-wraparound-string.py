@@ -1,7 +1,7 @@
 """Unique Substrings in Wraparound String at n = 10^5: the alphabet cycled over and over (runs
 of length 10^5, where enumerating substrings explodes) or random letters."""
 
-from _shapes import pick_shape
+from _shapes import pick_shape, random_string
 
 SEEDS = 3
 N = 10**5
@@ -22,5 +22,5 @@ def generate(rng):
             out.append(LETTERS[cur])
         s = "".join(out)
     else:
-        s = "".join(rng.choice(LETTERS) for _ in range(N))
+        s = random_string(rng, LETTERS, N)
     return {"s": s}

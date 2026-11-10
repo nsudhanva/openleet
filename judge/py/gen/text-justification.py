@@ -1,7 +1,7 @@
 """Text Justification at the maximum 300 words with widths that force uneven space splits,
 single-word lines, and a width equal to the longest word."""
 
-from _shapes import pick_shape
+from _shapes import pick_shape, random_string
 
 SEEDS = 3
 N = 300
@@ -19,5 +19,5 @@ def generate(rng):
     else:
         width = 20
         top = 20
-    words = ["".join(rng.choice(CHARS) for _ in range(rng.randint(1, top))) for _ in range(N)]
+    words = [random_string(rng, CHARS, rng.randint(1, top)) for _ in range(N)]
     return {"words": words, "maxWidth": width}

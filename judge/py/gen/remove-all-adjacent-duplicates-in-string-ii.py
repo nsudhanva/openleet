@@ -1,6 +1,8 @@
 """Remove Adjacent Duplicates II at length 10^5: nested runs that collapse in a cascade once
 the innermost run of k goes, the worst case for repeated rescanning."""
 
+from _shapes import random_string
+
 SEEDS = 2
 N = 10**5
 
@@ -25,5 +27,5 @@ def generate(rng):
             s.extend("".join(parts))
         s = "".join(s)
     else:
-        s = "".join(rng.choice("ab") for _ in range(N))
+        s = random_string(rng, "ab", N)
     return {"s": s, "k": k}

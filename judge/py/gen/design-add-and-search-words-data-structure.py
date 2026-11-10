@@ -1,12 +1,14 @@
 """Add and Search Words with 10^4 calls: thousands of long words over a tiny alphabet, then
 searches with two wildcards that force wide trie branching."""
 
+from _shapes import random_string
+
 SEEDS = 2
 CALLS = 10**4
 
 
 def word(rng, alphabet):
-    return "".join(rng.choice(alphabet) for _ in range(rng.randint(15, 25)))
+    return random_string(rng, alphabet, rng.randint(15, 25))
 
 
 def with_dots(rng, w):

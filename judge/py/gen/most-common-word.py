@@ -1,12 +1,14 @@
 """Most Common Word on a paragraph of up to 1000 characters with mixed case and punctuation,
 a banned word that is the most frequent overall, and one unique most frequent unbanned word."""
 
+from _shapes import random_string
+
 SEEDS = 3
 MARKS = "!?',;."
 
 
 def generate(rng):
-    vocab = {"".join(rng.choice("abcdefgh") for _ in range(rng.randint(1, 6))) for _ in range(60)}
+    vocab = {random_string(rng, "abcdefgh", rng.randint(1, 6)) for _ in range(60)}
     vocab = sorted(vocab)
     rng.shuffle(vocab)
     banned_word, winner = vocab[0], vocab[1]

@@ -1,6 +1,8 @@
 """Delete Columns to Make Sorted with 100 strings of length 1000: random letters, or mostly
 sorted columns with a few violations near the bottom."""
 
+from _shapes import random_string
+
 SEEDS = 2
 N, L = 100, 1000
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
@@ -8,7 +10,7 @@ LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 def generate(rng):
     if rng.random() < 0.5:
-        strs = ["".join(rng.choice(LETTERS) for _ in range(L)) for _ in range(N)]
+        strs = [random_string(rng, LETTERS, L) for _ in range(N)]
     else:
         cols = []
         for _ in range(L):

@@ -1,6 +1,8 @@
 """Maximize Active Section with Trade I on binary strings of length 10^5: short alternating
 blocks (many trades to try) or long random blocks."""
 
+from _shapes import random_string
+
 SEEDS = 3
 N = 10**5
 
@@ -8,7 +10,7 @@ N = 10**5
 def generate(rng):
     shape = rng.choice(["bits", "blocks", "alternating"])
     if shape == "bits":
-        s = "".join(rng.choice("01") for _ in range(N))
+        s = random_string(rng, "01", N)
     elif shape == "alternating":
         s = ("01" * N)[:N] if rng.random() < 0.5 else ("10" * N)[:N]
     else:

@@ -1,7 +1,7 @@
 """Verifying an Alien Dictionary at the maximum 100 words of up to 20 letters: sorted under a
 random order with long shared prefixes, sometimes with a prefix placed after its extension."""
 
-from _shapes import pick_shape
+from _shapes import pick_shape, random_string
 
 SEEDS = 3
 N = 100
@@ -13,11 +13,8 @@ def generate(rng):
     order = list(LETTERS)
     rng.shuffle(order)
     rank = {c: i for i, c in enumerate(order)}
-    prefix = "".join(rng.choice(LETTERS) for _ in range(rng.randint(0, 15)))
-    words = [
-        (prefix + "".join(rng.choice(LETTERS[:5]) for _ in range(rng.randint(1, 5))))[:20]
-        for _ in range(N)
-    ]
+    prefix = random_string(rng, LETTERS, rng.randint(0, 15))
+    words = [(prefix + random_string(rng, LETTERS[:5], rng.randint(1, 5)))[:20] for _ in range(N)]
     words.sort(key=lambda w: [rank[c] for c in w])
     if shape == 1:
         i = rng.randrange(N - 1)

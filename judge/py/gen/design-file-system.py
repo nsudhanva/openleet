@@ -1,13 +1,15 @@
 """Design File System with 10^4 calls building deep paths (up to 100 characters), mixing
 valid creations, duplicates, missing parents, and lookups of present and absent paths."""
 
+from _shapes import random_string
+
 SEEDS = 2
 CALLS = 10**4
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def name(rng):
-    return "".join(rng.choice(LETTERS) for _ in range(rng.randint(1, 4)))
+    return random_string(rng, LETTERS, rng.randint(1, 4))
 
 
 def generate(rng):

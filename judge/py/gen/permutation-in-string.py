@@ -1,13 +1,15 @@
 """Permutation in String with |s2| = 10^4 over two letters: a long s1 whose permutation appears
 only at the very end (or nowhere), punishing per-window sorting."""
 
+from _shapes import random_string
+
 SEEDS = 2
 N = 10**4
 
 
 def generate(rng):
     m = rng.randint(1000, 5000)
-    s1 = "".join(rng.choice("ab") for _ in range(m))
+    s1 = random_string(rng, "ab", m)
     a = s1.count("a")
     s2 = "".join("a" if rng.random() < 0.3 else "b" for _ in range(N - m))
     if rng.random() < 0.5:

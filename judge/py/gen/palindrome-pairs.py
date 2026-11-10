@@ -2,6 +2,8 @@
 palindromic extensions of each other, so pairs are plentiful and checking all n^2 pairs is
 too slow."""
 
+from _shapes import random_string
+
 SEEDS = 2
 N = 5000
 
@@ -19,7 +21,7 @@ def generate(rng):
 
     add("")
     while len(order) < N:
-        w = "".join(rng.choice(alpha) for _ in range(rng.randint(3, maxlen)))
+        w = random_string(rng, alpha, rng.randint(3, maxlen))
         add(w)
         roll = rng.random()
         if roll < 0.3 and len(order) < N:

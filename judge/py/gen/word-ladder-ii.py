@@ -1,7 +1,7 @@
 """Word Ladder II with 500 words of length 3-5 over small alphabets: dense graphs with many
 equal-length shortest paths, the total output kept under 10^5 words."""
 
-from _shapes import pick_shape
+from _shapes import pick_shape, random_string
 
 SEEDS = 3
 N = 500
@@ -33,13 +33,13 @@ def generate(rng):
     length, letters = [(4, "abcdef"), (5, "abcd"), (3, "abcdefghi")][shape]
     pool = set()
     while len(pool) < N:
-        pool.add("".join(rng.choice(letters) for _ in range(length)))
+        pool.add(random_string(rng, letters, length))
     words = sorted(pool)
     rng.shuffle(words)
     # Of a few begin/end pairs, keep the one with the most output that still fits the cap.
     best = None
     for _ in range(12):
-        begin = "".join(rng.choice(letters) for _ in range(length))
+        begin = random_string(rng, letters, length)
         end = rng.choice(words)
         if begin == end:
             continue

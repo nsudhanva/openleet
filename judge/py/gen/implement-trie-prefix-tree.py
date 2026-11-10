@@ -1,22 +1,24 @@
 """Trie with 3 * 10^4 calls over a tiny alphabet: words sharing long prefixes, a few words of the
 maximum 2000 letters, and searches/prefix checks that miss by one letter."""
 
+from _shapes import random_string
+
 SEEDS = 2
 CALLS = 3 * 10**4
 
 
 def generate(rng):
     alpha = "abcdefghijklmnopqrstuvwxyz"[: rng.choice([2, 26])]
-    stems = ["".join(rng.choice(alpha) for _ in range(rng.choice([20, 60]))) for _ in range(30)]
-    longs = ["".join(rng.choice(alpha) for _ in range(2000)) for _ in range(3)]
+    stems = [random_string(rng, alpha, rng.choice([20, 60])) for _ in range(30)]
+    longs = [random_string(rng, alpha, 2000) for _ in range(3)]
     inserted = []
     ops, args = ["Trie"], [[]]
     for c in range(CALLS):
         if c % 300 == 0:
             word = rng.choice(longs)[: rng.randint(1900, 2000)]
         else:
-            word = rng.choice(stems)[: rng.randint(1, 60)] + "".join(
-                rng.choice(alpha) for _ in range(rng.randint(0, 10))
+            word = rng.choice(stems)[: rng.randint(1, 60)] + random_string(
+                rng, alpha, rng.randint(0, 10)
             )
             if not word:
                 word = alpha[0]

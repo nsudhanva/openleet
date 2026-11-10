@@ -1,12 +1,14 @@
 """Find Words That Can Be Formed by Characters with 1000 words of up to 100 letters drawn from
 the same pool as chars, so many words fit or just miss."""
 
+from _shapes import random_string
+
 SEEDS = 2
 
 
 def generate(rng):
     alpha = "abcdefghijklmnopqrstuvwxyz"[: rng.choice([4, 26])]
-    chars = "".join(rng.choice(alpha) for _ in range(100))
+    chars = random_string(rng, alpha, 100)
     words = []
     for _ in range(1000):
         if rng.random() < 0.5:
@@ -14,5 +16,5 @@ def generate(rng):
             rng.shuffle(pool)
             words.append("".join(pool[: rng.randint(1, 100)]))
         else:
-            words.append("".join(rng.choice(alpha) for _ in range(rng.randint(1, 100))))
+            words.append(random_string(rng, alpha, rng.randint(1, 100)))
     return {"words": words, "chars": chars}

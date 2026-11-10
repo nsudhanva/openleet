@@ -1,6 +1,8 @@
 """Tag Validator near the 500-char limit: deeply nested valid tags mixing CDATA and loose
 '>' / ']' text, sometimes with one character corrupted."""
 
+from _shapes import random_string
+
 SEEDS = 3
 LIMIT = 500
 UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -9,7 +11,7 @@ ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<>/![]
 
 
 def build(rng, budget, depth):
-    name = "".join(rng.choice(UPPER) for _ in range(rng.randint(1, 9)))
+    name = random_string(rng, UPPER, rng.randint(1, 9))
     inner = budget - 2 * len(name) - 5
     parts = []
     used = 0
@@ -21,12 +23,12 @@ def build(rng, budget, depth):
         if kind == 0 and depth < 12 and room > 25:
             piece = build(rng, rng.randint(25, min(room, 200)), depth + 1)
         elif kind == 1 and room > 15:
-            body = "".join(rng.choice(ALPHABET) for _ in range(rng.randint(0, min(room - 12, 30))))
+            body = random_string(rng, ALPHABET, rng.randint(0, min(room - 12, 30)))
             while "]]>" in body:
                 body = body.replace("]]>", "]>")
             piece = "<![CDATA[" + body + "]]>"
         else:
-            piece = "".join(rng.choice(TEXT) for _ in range(rng.randint(1, min(room, 15))))
+            piece = random_string(rng, TEXT, rng.randint(1, min(room, 15)))
         if used + len(piece) > inner:
             continue
         parts.append(piece)

@@ -2,6 +2,8 @@
 directories or a few hundred directories packed with files, contents drawn from a small pool
 so duplicate groups are large."""
 
+from _shapes import random_string
+
 SEEDS = 2
 BUDGET = 490_000
 ALPHA = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -9,7 +11,7 @@ ALPHA = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 def generate(rng):
     many_dirs = rng.random() < 0.5
-    pool = ["".join(rng.choice(ALPHA) for _ in range(rng.randint(1, 30))) for _ in range(200)]
+    pool = [random_string(rng, ALPHA, rng.randint(1, 30)) for _ in range(200)]
     paths, total, d = [], 0, 0
     while len(paths) < 2 * 10**4:
         depth = rng.randint(0, 3)

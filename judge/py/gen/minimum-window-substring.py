@@ -1,6 +1,8 @@
 """Minimum Window Substring at |s| = 10^5: t of a few hundred letters with the matching
 window near the end, or t as long as s, so re-checking each window is quadratic."""
 
+from _shapes import random_string
+
 SEEDS = 3
 N = 10**5
 LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -9,8 +11,8 @@ LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 def generate(rng):
     kind = rng.choice(("short", "long", "small-alphabet"))
     if kind == "small-alphabet":
-        s = "".join(rng.choice("ab") for _ in range(N))
-        t = "".join(rng.choice("ab") for _ in range(rng.randint(1, 1000)))
+        s = random_string(rng, "ab", N)
+        t = random_string(rng, "ab", rng.randint(1, 1000))
         return {"s": s, "t": t}
     s = [rng.choice(LETTERS[:26]) for _ in range(N)]
     if kind == "short":

@@ -1,6 +1,8 @@
 """Reverse Parentheses at length 2000: ~500 levels of nesting with letters at every level (the
 quadratic worst case for repeated reversal), or a random balanced string."""
 
+from _shapes import random_string
+
 SEEDS = 2
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
@@ -10,7 +12,7 @@ def generate(rng):
         depth = 499
         left = "".join(rng.choice(LETTERS) + "(" for _ in range(depth))
         right = "".join(")" + rng.choice(LETTERS) for _ in range(depth))
-        core = "".join(rng.choice(LETTERS) for _ in range(2000 - 4 * depth))
+        core = random_string(rng, LETTERS, 2000 - 4 * depth)
         return {"s": left + core + right}
     out, open_count = [], 0
     while len(out) + open_count < 2000:

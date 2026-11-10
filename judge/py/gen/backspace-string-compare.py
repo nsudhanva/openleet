@@ -1,6 +1,8 @@
 """Backspace String Compare at length 200: heavy runs of '#' (including more '#' than letters)
 over strings that differ only before the backspaces erase them."""
 
+from _shapes import random_string
+
 SEEDS = 3
 
 
@@ -16,7 +18,7 @@ def generate(rng):
             out = ["#"] * rng.randint(1, 5) + out
         return "".join(out)[:200]
 
-    core = "".join(rng.choice("ab") for _ in range(rng.randint(20, 60)))
+    core = random_string(rng, "ab", rng.randint(20, 60))
     s = noisy(core)
     other = core if rng.random() < 0.5 else core[:-1] + ("a" if core[-1] == "b" else "b")
     t = noisy(other)

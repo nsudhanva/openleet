@@ -1,13 +1,15 @@
 """Regions Cut By Slashes on the maximum 30 x 30 grid: random slashes, or a dense diamond
 lattice with hundreds of tiny regions."""
 
+from _shapes import random_string
+
 SEEDS = 2
 N = 30
 
 
 def generate(rng):
     if rng.random() < 0.5:
-        grid = ["".join(rng.choice("/\\ ") for _ in range(N)) for _ in range(N)]
+        grid = [random_string(rng, "/\\ ", N) for _ in range(N)]
     else:
         grid = [
             "".join(

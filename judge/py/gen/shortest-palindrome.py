@@ -1,7 +1,7 @@
 """Shortest Palindrome at length 5 * 10^4: 'a...a' + 'b' + 'a...a' with the longer run first
 (the quadratic worst case for prefix checks), or random over a small alphabet."""
 
-from _shapes import pick_shape
+from _shapes import pick_shape, random_string
 
 SEEDS = 3
 N = 5 * 10**4
@@ -14,4 +14,4 @@ def generate(rng):
         return {"s": "a" * k + "b" + "a" * (N - 1 - k)}
     if shape == 1:
         return {"s": "a" * (N - 1) + "b"}
-    return {"s": "".join(rng.choice("ab") for _ in range(N))}
+    return {"s": random_string(rng, "ab", N)}

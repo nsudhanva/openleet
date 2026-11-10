@@ -1,6 +1,8 @@
 """Simplify Path at ~3000 characters: names, '.', '..', '...', and runs of slashes, with deep
 nesting and many pops."""
 
+from _shapes import random_string
+
 SEEDS = 3
 NAME = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_."
 
@@ -17,7 +19,7 @@ def generate(rng):
         elif r < pop_rate + 0.15:
             part = "..."
         else:
-            part = "".join(rng.choice(NAME) for _ in range(rng.randint(1, 6)))
+            part = random_string(rng, NAME, rng.randint(1, 6))
         piece = part + "/" * rng.randint(1, 3)
         if len(out) + len(piece) > 3000:
             break

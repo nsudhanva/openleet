@@ -1,13 +1,15 @@
 """Dota2 Senate at n = 10^4: random parties, or long blocks of each party so the voting runs
 many rounds and naive removal from the middle is quadratic."""
 
+from _shapes import random_string
+
 SEEDS = 2
 N = 10**4
 
 
 def generate(rng):
     if rng.random() < 0.5:
-        senate = "".join(rng.choice("RD") for _ in range(N))
+        senate = random_string(rng, "RD", N)
     else:
         r = N // 2 + rng.randint(-3, 3)
         senate = "R" * r + "D" * (N - r)

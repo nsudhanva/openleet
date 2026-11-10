@@ -1,6 +1,8 @@
 """MagicDictionary with 100 distinct words of up to 100 letters over a tiny alphabet and 100
 searches: one-letter edits of dictionary words, exact words, and other lengths."""
 
+from _shapes import random_string
+
 SEEDS = 3
 
 
@@ -10,7 +12,7 @@ def generate(rng):
     words = set()
     for length in lengths:
         for _ in range(50):
-            w = "".join(rng.choice(alpha) for _ in range(length))
+            w = random_string(rng, alpha, length)
             if w not in words:
                 words.add(w)
                 break

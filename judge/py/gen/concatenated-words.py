@@ -2,6 +2,8 @@
 vocabulary so most split many ways, plus long runs of 'a' ending in other letters that defeat
 backtracking without memoization."""
 
+from _shapes import random_string
+
 SEEDS = 2
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
@@ -23,9 +25,7 @@ def generate(rng):
         for d in LETTERS[1:6]:
             add("a" * 28 + c + d)
     alphabet = rng.choice(["abc", "abcdef"])
-    base = sorted(
-        {"".join(rng.choice(alphabet) for _ in range(rng.randint(2, 5))) for _ in range(300)}
-    )
+    base = sorted({random_string(rng, alphabet, rng.randint(2, 5)) for _ in range(300)})
     for w in base:
         add(w)
     while len(words) < 10**4 and total < 10**5 - 30:

@@ -1,13 +1,15 @@
 """Subdomain Visit Count at the maximum 100 entries sharing a few top-level domains, so
 counts must aggregate across many entries."""
 
+from _shapes import random_string
+
 SEEDS = 2
 N = 100
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 def word(rng, lo, hi):
-    return "".join(rng.choice(LETTERS) for _ in range(rng.randint(lo, hi)))
+    return random_string(rng, LETTERS, rng.randint(lo, hi))
 
 
 def generate(rng):

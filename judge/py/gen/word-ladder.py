@@ -1,7 +1,7 @@
 """Word Ladder with 5000 words over a tiny alphabet so the graph is dense (every word has
 many neighbours), and begin/end at opposite corners or unreachable."""
 
-from _shapes import pick_shape
+from _shapes import pick_shape, random_string
 
 SEEDS = 3
 N = 5000
@@ -20,7 +20,7 @@ def generate(rng):
     end = "z" * length if shape == 2 else letters[-1] * length
     pool = {end}
     while len(pool) < N:
-        w = "".join(rng.choice(letters) for _ in range(length))
+        w = random_string(rng, letters, length)
         if w != begin:
             pool.add(w)
     words = sorted(pool)

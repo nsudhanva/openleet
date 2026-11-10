@@ -1,13 +1,15 @@
 """Design Browser History with 5000 calls: long visit runs to build deep history, then
 back/forward jumps of up to 100 steps."""
 
+from _shapes import random_string
+
 SEEDS = 2
 CALLS = 5000
 CHARS = "abcdefghijklmnopqrstuvwxyz."
 
 
 def url(rng):
-    return "".join(rng.choice(CHARS) for _ in range(rng.randint(1, 20)))
+    return random_string(rng, CHARS, rng.randint(1, 20))
 
 
 def generate(rng):
