@@ -4,6 +4,8 @@ Description=OpenLeet
 After=network-online.target openleet-judge.service
 Wants=network-online.target openleet-judge.service
 Requires=openleet.socket
+# Never give up restarting.
+StartLimitIntervalSec=0
 
 [Service]
 User=openleet
@@ -12,6 +14,11 @@ EnvironmentFile=/etc/openleet.env
 Environment=DATA_DIR=/opt/openleet/current/data STATE_DIR=/var/lib/openleet
 Environment=JUDGE_SOCKET=/run/openleet-judge/judge.sock
 ExecStart=/opt/openleet/current/bin/openleet
+# The server reports readiness and then pings the watchdog only while it is healthy; a hung
+# server is killed and restarted like a crashed one.
+Type=notify
+NotifyAccess=main
+WatchdogSec=30
 Restart=always
 RestartSec=1
 TimeoutStopSec=10

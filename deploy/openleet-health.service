@@ -1,0 +1,8 @@
+# One health check (deploy/health.sh); openleet-health.timer runs it every minute.
+[Unit]
+Description=OpenLeet health check
+After=openleet.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/openleet/current/deploy/health.sh

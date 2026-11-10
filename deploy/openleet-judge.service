@@ -3,6 +3,8 @@
 # network, a read-only system, no view of the app's data, and bounded memory and tasks.
 [Unit]
 Description=OpenLeet judge
+# Never give up restarting.
+StartLimitIntervalSec=0
 
 [Service]
 Environment=JUDGE_SOCKET=/run/openleet-judge/judge.sock

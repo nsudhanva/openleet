@@ -10,7 +10,8 @@ UNIT_DIR=/etc/systemd/system
 HERE=$(cd "$(dirname "$0")" && pwd)
 PYTHON=3.15
 
-# Every openleet* file next to this script is a unit; the ones with an [Install] section get enabled.
+# Every openleet* file next to this script is a unit; the ones with an [Install] section get
+# enabled, and timers and path units started.
 install_units() {
 	changed=0
 	for path in "$HERE"/openleet*; do
@@ -22,6 +23,13 @@ install_units() {
 	done
 	install -m 0755 "$HERE/update.sh" "$ROOT/update.sh"
 	if [ "$changed" = 1 ]; then systemctl daemon-reload; fi
+	# Idempotent, so a release that adds a unit enables it too; timers and path units start now.
+	for path in "$HERE"/openleet*; do
+		unit=${path##*/}
+		grep -q '^\[Install\]' "$path" || continue
+		systemctl enable --quiet "$unit"
+		case "$unit" in *.timer | *.path) systemctl start "$unit" ;; esac
+	done
 }
 
 if [ "${1:-}" = "--units-only" ]; then
@@ -30,7 +38,7 @@ if [ "${1:-}" = "--units-only" ]; then
 fi
 
 apt-get update -qq
-apt-get install -y --no-install-recommends curl zstd ca-certificates >/dev/null
+apt-get install -y --no-install-recommends curl jq zstd ca-certificates >/dev/null
 id openleet >/dev/null 2>&1 || useradd --system --home-dir /var/lib/openleet --shell /usr/sbin/nologin openleet
 mkdir -p "$ROOT/releases"
 
@@ -60,8 +68,4 @@ ENV
 fi
 
 install_units
-for path in "$HERE"/openleet*; do
-	if grep -q '^\[Install\]' "$path"; then systemctl enable "${path##*/}"; fi
-done
-systemctl start openleet-update.timer openleet-update.path
 echo "Fill in $ENV_FILE, then run $ROOT/update.sh"
