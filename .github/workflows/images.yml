@@ -1,0 +1,157 @@
+# The Docker images for docker-compose.yml: ghcr.io/OWNER/openleet (server, web app and data) and
+# ghcr.io/OWNER/openleet-judge. Each architecture builds natively on its own runner (no QEMU) and
+# pushes by digest; the merge job then tags one multi-arch index per image as `latest` and as the
+# commit (12 characters, as GET /api/version reports it).
+name: images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - server/**
+      - judge/**
+      - proto/**
+      - web/**
+      - data/problems.json
+      - data/approaches.json
+      - data/judge/**
+      - Cargo.toml
+      - Cargo.lock
+      - package.json
+      - bun.lock
+      - Dockerfile
+      - .dockerignore
+      - docker-compose.yml
+      - Caddyfile
+      - .github/workflows/images.yml
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: images
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  build:
+    name: build (${{ matrix.arch }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Names
+        run: |
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          {
+            echo "APP=ghcr.io/$owner/openleet"
+            echo "JUDGE=ghcr.io/$owner/openleet-judge"
+            echo "REV=${GITHUB_SHA::12}"
+          } >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push app
+        id: app
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: app
+          platforms: linux/${{ matrix.arch }}
+          build-args: REVISION=${{ env.REV }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=OpenLeet server: API, web app and data (static binary)
+            org.opencontainers.image.licenses=MIT
+          outputs: type=image,name=${{ env.APP }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=app-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=app-${{ matrix.arch }}
+      - name: Build and push judge
+        id: judge
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: judge
+          platforms: linux/${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=OpenLeet judge: sandboxed Python runner for submissions
+            org.opencontainers.image.licenses=MIT
+          outputs: type=image,name=${{ env.JUDGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=judge-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=judge-${{ matrix.arch }}
+      - name: Record digests
+        env:
+          APP_DIGEST: ${{ steps.app.outputs.digest }}
+          JUDGE_DIGEST: ${{ steps.judge.outputs.digest }}
+        run: |
+          mkdir -p digests/app digests/judge
+          touch "digests/app/${APP_DIGEST#sha256:}" "digests/judge/${JUDGE_DIGEST#sha256:}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digests-${{ matrix.arch }}
+          path: digests
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digests-*
+          path: digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag multi-arch images
+        run: |
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          rev=${GITHUB_SHA::12}
+          for target in app judge; do
+            image=ghcr.io/$owner/openleet
+            description="OpenLeet server: API, web app and data (static binary)"
+            if [ "$target" = judge ]; then
+              image=ghcr.io/$owner/openleet-judge
+              description="OpenLeet judge: sandboxed Python runner for submissions"
+            fi
+            refs=()
+            for digest in "digests/$target"/*; do
+              refs+=("$image@sha256:$(basename "$digest")")
+            done
+            docker buildx imagetools create -t "$image:latest" -t "$image:$rev" \
+              --annotation "index:org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              --annotation "index:org.opencontainers.image.revision=$GITHUB_SHA" \
+              --annotation "index:org.opencontainers.image.description=$description" \
+              "${refs[@]}"
+            docker buildx imagetools inspect "$image:$rev"
+          done
