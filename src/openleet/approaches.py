@@ -9,9 +9,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from openleet.ingest import PROBLEMS_PATH
-
-APPROACHES_PATH = Path("data/approaches.json")
+from openleet.data import APPROACHES_PATH, PROBLEMS_PATH
 
 # ASD-STE100: procedural sentences max 20 words, descriptive sentences max 25 words.
 MAX_STEP_WORDS = 20
@@ -135,7 +133,7 @@ def technique_terms(topics: list[str], title: str) -> list[str]:
     return [t for t in terms if t not in named_by_title]
 
 
-def lint_hints(hints: Any, topics: list[str], title: str = "") -> list[str]:
+def lint_hints(hints: Any, topics: list[str], title: str) -> list[str]:
     """Hints nudge toward the idea without naming the technique the learner must guess."""
     if not isinstance(hints, list) or len(hints) not in HINT_COUNT:
         return [f"hints: need {HINT_COUNT.start}-{HINT_COUNT.stop - 1} hints"]
@@ -188,8 +186,9 @@ def lint(approaches: dict[str, Any], problems: list[dict[str, Any]]) -> dict[str
     return {slug: errors for slug, errors in report.items() if errors}
 
 
-def check() -> int:
-    problems = json.loads(PROBLEMS_PATH.read_text())["problems"]
+def check(problems_path: Path = PROBLEMS_PATH) -> int:
+    """Prints every failing entry; returns the process exit code."""
+    problems = json.loads(problems_path.read_text())["problems"]
     approaches = json.loads(APPROACHES_PATH.read_text()) if APPROACHES_PATH.exists() else {}
     report = lint(approaches, problems)
     for slug, errors in report.items():

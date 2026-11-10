@@ -1,16 +1,16 @@
 """Step 1: one work item per problem in data/.cache/judge/work/, built from the sources only."""
 
-import html
 import json
 import re
 import shutil
 from pathlib import Path
 
-from openleet.ingest import PROBLEMS_PATH
-from openleet.judging import WORK_DIR
+from openleet.data import PROBLEMS_PATH
+from openleet.judging import WORK_ITEMS_DIR, unsupported
 from openleet.judging.examples import dataset_inputs, statement_examples
 from openleet.judging.signature import design_spec, function_spec, starter_code
 from openleet.judging.sources import sources_for
+from openleet.sanitize import html_text
 
 ADAPTER_BY_SLUG = {
     "linked-list-cycle": "cycle",
@@ -37,14 +37,6 @@ UNSUPPORTED_TOPICS = {
 ANY_ORDER = re.compile(r"\bany order\b", re.I)
 
 
-def plain(description: str | None) -> str:
-    return html.unescape(re.sub(r"<[^>]+>", " ", description or ""))
-
-
-def unsupported(reason: str) -> dict:
-    return {"supported": False, "reason": reason}
-
-
 def adapter_for(slug: str, spec: dict, examples: list[dict]) -> str | None:
     if slug in ADAPTER_BY_SLUG:
         return ADAPTER_BY_SLUG[slug]
@@ -56,9 +48,9 @@ def adapter_for(slug: str, spec: dict, examples: list[dict]) -> str | None:
     return None
 
 
-def find_spec(slug: str, examples: list[dict], codes: list[str], entry: str | None) -> dict | None:
-    design = examples and all(e.get("design") for e in examples)
-    if design:
+def find_spec(examples: list[dict], codes: list[str], entry: str | None) -> dict | None:
+    """The spec read from the first of `codes` that yields one."""
+    if examples and all(e.get("design") for e in examples):
         cls = examples[0]["input"]["ops"][0]
         ops = {op for e in examples for op in e["input"]["ops"][1:]}
         return next((s for c in codes if (s := design_spec(c, cls, ops))), None)
@@ -78,7 +70,7 @@ def work_item(problem: dict) -> dict:
         return base | unsupported("No reference Python solution to check answers against.")
     examples = statement_examples(problem["description"])
     codes = [c for c in (found.starter, *found.voters.values()) if c]
-    spec = find_spec(slug, examples, codes, found.entry_point)
+    spec = find_spec(examples, codes, found.entry_point)
     if spec is None:
         return base | unsupported("Could not read the problem's Python signature.")
     if adapter := adapter_for(slug, spec, examples):
@@ -90,7 +82,6 @@ def work_item(problem: dict) -> dict:
         inputs = [i for i in dataset_inputs(found.dataset_test) if set(i) <= known]
     else:
         inputs = []
-    text = plain(problem["description"])
     return base | {
         "supported": True,
         "spec": spec,
@@ -98,18 +89,17 @@ def work_item(problem: dict) -> dict:
         "examples": examples,
         "inputs": inputs,
         "voters": found.voters,
-        "anyOrder": bool(ANY_ORDER.search(text)),
+        "anyOrder": bool(ANY_ORDER.search(html_text(problem["description"] or ""))),
     }
 
 
 def prepare(problems_path: Path = PROBLEMS_PATH) -> None:
     problems = [p for p in json.loads(problems_path.read_text())["problems"] if not p["premium"]]
-    work = WORK_DIR / "work"
-    shutil.rmtree(work, ignore_errors=True)
-    work.mkdir(parents=True)
+    shutil.rmtree(WORK_ITEMS_DIR, ignore_errors=True)
+    WORK_ITEMS_DIR.mkdir(parents=True)
     supported = 0
     for problem in problems:
         item = work_item(problem)
         supported += item["supported"]
-        (work / f"{problem['slug']}.json").write_text(json.dumps(item))
+        (WORK_ITEMS_DIR / f"{problem['slug']}.json").write_text(json.dumps(item))
     print(f"Prepared {len(problems)} problems, {supported} with a readable signature")

@@ -77,7 +77,16 @@ def function_spec(code: str, method: str | None, arg_names: set[str] | None) -> 
         "cls": "Solution",
         "method": fn.name,
         "params": params_of(fn),
-        "returns": type_text(fn.returns) if fn.returns else "Any",
+        "returns": type_text(fn.returns),
+    }
+
+
+def method_spec(fn: ast.FunctionDef) -> dict:
+    params = params_of(fn)
+    return {
+        "params": [p["type"] for p in params],
+        "names": [p["name"] for p in params],
+        "returns": type_text(fn.returns),
     }
 
 
@@ -88,13 +97,7 @@ def design_spec(code: str, class_name: str, ops: set[str]) -> dict | None:
     if cls is None:
         return None
     methods = {
-        f.name: {
-            "params": [p["type"] for p in params_of(f)],
-            "names": [p["name"] for p in params_of(f)],
-            "returns": type_text(f.returns) if f.returns else "Any",
-        }
-        for f in public_methods(cls)
-        if f.name == "__init__" or f.name in ops
+        f.name: method_spec(f) for f in public_methods(cls) if f.name == "__init__" or f.name in ops
     }
     if not ops <= set(methods):
         return None

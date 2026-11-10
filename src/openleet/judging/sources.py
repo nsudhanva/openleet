@@ -2,22 +2,24 @@
 
 import json
 import re
-import urllib.request
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
-from openleet.judging import CACHE_DIR, DATASET_DIR
+import duckdb
+
+from openleet.data import cached_download, doocs_readme_path
+from openleet.judging import DATASET_DIR, MERCURY_VOTER
 
 HF = "https://huggingface.co/datasets"
-DATASET_FILES = {
+LEETCODE_DATASET = {
     "lcd-train.jsonl": f"{HF}/newfacade/LeetCodeDataset/resolve/main/LeetCodeDataset-train.jsonl",
     "lcd-test.jsonl": f"{HF}/newfacade/LeetCodeDataset/resolve/main/LeetCodeDataset-test.jsonl",
+}
+MERCURY = {
     "mercury-train.parquet": f"{HF}/Elfsong/Mercury/resolve/main/data/train-00000-of-00001.parquet",
     "mercury-eval.parquet": f"{HF}/Elfsong/Mercury/resolve/main/data/eval-00000-of-00001.parquet",
 }
-# Accepted submissions taken from Mercury per problem, as extra voters.
-MERCURY_VOTERS = 3
 PYTHON_BLOCK = re.compile(r"#### Python3\s*\n```python\n(.*?)\n```", re.S)
 
 
@@ -32,21 +34,17 @@ class Sources:
     voters: dict[str, str] = field(default_factory=dict)
 
 
-def download(name: str) -> Path:
-    path = DATASET_DIR / name
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".part")
-        urllib.request.urlretrieve(DATASET_FILES[name], tmp)
-        tmp.rename(path)
-    return path
+def dataset_files(files: dict[str, str]) -> list[Path]:
+    """Local copies of a dataset's files (local name -> URL), downloaded on first use."""
+    return [cached_download(url, DATASET_DIR / name) for name, url in files.items()]
 
 
 @cache
 def leetcode_dataset() -> dict[str, dict]:
+    """LeetCodeDataset rows by slug."""
     rows = {}
-    for name in ("lcd-train.jsonl", "lcd-test.jsonl"):
-        with download(name).open() as lines:
+    for path in dataset_files(LEETCODE_DATASET):
+        with path.open() as lines:
             for line in lines:
                 row = json.loads(line)
                 rows[row["task_id"]] = row
@@ -55,22 +53,22 @@ def leetcode_dataset() -> dict[str, dict]:
 
 @cache
 def mercury() -> dict[str, list[str]]:
-    """Accepted LeetCode submissions per slug, fastest first."""
-    import duckdb
-
-    paths = [str(download(n)) for n in ("mercury-train.parquet", "mercury-eval.parquet")]
-    rows = duckdb.sql(f"SELECT slug_name, solutions FROM read_parquet({paths!r})").fetchall()
+    """Accepted LeetCode submissions per slug: the fastest, median and slowest."""
+    paths = [str(path) for path in dataset_files(MERCURY)]
+    with duckdb.connect() as con:
+        query = f"SELECT slug_name, solutions FROM read_parquet({paths!r})"
+        rows = con.execute(query).fetchall()
     out: dict[str, list[str]] = {}
     for slug, solutions in rows:
         ranked = sorted(solutions, key=lambda s: int(re.sub(r"\D", "", s["runtime"]) or 0))
-        # Spread the picks across the runtime range: fastest, median, slowest.
+        # Spread across the runtime range, so the voters are less alike.
         picks = {0, len(ranked) // 2, len(ranked) - 1} if ranked else set()
-        out[slug] = [ranked[i]["solution"] for i in sorted(picks)][:MERCURY_VOTERS]
+        out[slug] = [ranked[i]["solution"] for i in sorted(picks)]
     return out
 
 
 def doocs_solutions(problem_id: int) -> list[str]:
-    path = CACHE_DIR / "doocs" / f"{problem_id:04d}.md"
+    path = doocs_readme_path(problem_id)
     return PYTHON_BLOCK.findall(path.read_text()) if path.exists() else []
 
 
@@ -84,5 +82,5 @@ def sources_for(problem_id: int, slug: str) -> Sources:
     for i, code in enumerate(doocs_solutions(problem_id), 1):
         found.voters[f"doocs{i}"] = code
     for i, code in enumerate(mercury().get(slug, []), 1):
-        found.voters[f"mercury{i}"] = code
+        found.voters[f"{MERCURY_VOTER}{i}"] = code
     return found

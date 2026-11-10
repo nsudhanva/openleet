@@ -15,43 +15,44 @@ import io
 import json
 import re
 import urllib.parse
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from openleet.data import CACHE_DIR, PROBLEMS_PATH, cached_download, doocs_readme_path
 from openleet.sanitize import sanitize_html
 
-LISTS = "https://raw.githubusercontent.com/liquidslr/leetcode-company-wise-problems/main"
-# (slug used in the app, folder name in the lists repo, display name), most asked first in
-# the UI's company picker.
-COMPANIES = [
-    ("google", "Google", "Google"),
-    ("meta", "Meta", "Meta"),
-    ("amazon", "Amazon", "Amazon"),
-    ("microsoft", "Microsoft", "Microsoft"),
-    ("apple", "Apple", "Apple"),
-    ("netflix", "Netflix", "Netflix"),
-    ("nvidia", "Nvidia", "Nvidia"),
-    ("openai", "OpenAI", "OpenAI"),
-    ("bloomberg", "Bloomberg", "Bloomberg"),
-    ("uber", "Uber", "Uber"),
-    ("tiktok", "TikTok", "TikTok"),
-    ("oracle", "Oracle", "Oracle"),
-    ("salesforce", "Salesforce", "Salesforce"),
-    ("linkedin", "LinkedIn", "LinkedIn"),
-    ("adobe", "Adobe", "Adobe"),
-    ("snowflake", "Snowflake", "Snowflake"),
-    ("doordash", "DoorDash", "DoorDash"),
-    ("airbnb", "Airbnb", "Airbnb"),
-    ("atlassian", "Atlassian", "Atlassian"),
-    ("x", "X", "X"),
-    ("tesla", "Tesla", "Tesla"),
-    ("databricks", "Databricks", "Databricks"),
-    ("stripe", "Stripe", "Stripe"),
-    ("coinbase", "Coinbase", "Coinbase"),
-]
+LISTS_REPO = "liquidslr/leetcode-company-wise-problems"
+LISTS_RAW = f"https://raw.githubusercontent.com/{LISTS_REPO}/main"
+# Company slug used in the app -> display name, which is also its folder in the lists repo.
+# Most asked first, the order of the UI's company picker.
+COMPANIES = {
+    "google": "Google",
+    "meta": "Meta",
+    "amazon": "Amazon",
+    "microsoft": "Microsoft",
+    "apple": "Apple",
+    "netflix": "Netflix",
+    "nvidia": "Nvidia",
+    "openai": "OpenAI",
+    "bloomberg": "Bloomberg",
+    "uber": "Uber",
+    "tiktok": "TikTok",
+    "oracle": "Oracle",
+    "salesforce": "Salesforce",
+    "linkedin": "LinkedIn",
+    "adobe": "Adobe",
+    "snowflake": "Snowflake",
+    "doordash": "DoorDash",
+    "airbnb": "Airbnb",
+    "atlassian": "Atlassian",
+    "x": "X",
+    "tesla": "Tesla",
+    "databricks": "Databricks",
+    "stripe": "Stripe",
+    "coinbase": "Coinbase",
+}
 # Period key -> CSV file in each company folder.
 PERIODS = {
     "30d": "1. Thirty Days.csv",
@@ -63,10 +64,7 @@ CLASSIC_MAX = 1000
 
 DOOCS_RAW = "https://raw.githubusercontent.com/doocs/leetcode/main"
 DOOCS_INDEX = f"{DOOCS_RAW}/solution/README_EN.md"
-
-DATA_DIR = Path("data")
-CACHE_DIR = DATA_DIR / ".cache"
-PROBLEMS_PATH = DATA_DIR / "problems.json"
+FETCH_WORKERS = 16
 
 DESCRIPTION = re.compile(r"<!-- description:start -->(.*?)<!-- description:end -->", re.S)
 INDEX_LINK = re.compile(r"\[(.+)\]\((/solution/.+)\)")
@@ -116,16 +114,8 @@ def title_key(title: str) -> str:
     return re.sub(r"[^a-z0-9]", "", title.lower())
 
 
-def fetch(url: str, cache_name: str) -> str:
-    """GET a URL once; later runs read the cached copy."""
-    path = CACHE_DIR / cache_name
-    if path.exists():
-        return path.read_text()
-    with urllib.request.urlopen(url, timeout=60) as response:
-        text = response.read().decode()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return text
+def fetch(url: str, path: Path) -> str:
+    return cached_download(url, path).read_text()
 
 
 def parse_doocs_index(markdown: str) -> dict[str, DoocsEntry]:
@@ -141,13 +131,11 @@ def parse_doocs_index(markdown: str) -> dict[str, DoocsEntry]:
 
 
 def readme(entry: DoocsEntry) -> str:
-    return fetch(f"{DOOCS_RAW}{entry.path}", f"doocs/{entry.id:04d}.md")
+    return fetch(f"{DOOCS_RAW}{entry.path}", doocs_readme_path(entry.id))
 
 
-def description(entry: DoocsEntry) -> str | None:
-    if entry.premium:
-        return None
-    match = DESCRIPTION.search(readme(entry))
+def statement(markdown: str) -> str | None:
+    match = DESCRIPTION.search(markdown)
     return sanitize_html(match.group(1)) if match else None
 
 
@@ -172,14 +160,14 @@ def slug_from_url(url: str) -> str:
 
 def company_rows(folder: str, period: str) -> list[dict[str, str]]:
     path = urllib.parse.quote(f"{folder}/{PERIODS[period]}")
-    text = fetch(f"{LISTS}/{path}", f"companies/{folder}/{period}.csv")
+    text = fetch(f"{LISTS_RAW}/{path}", CACHE_DIR / "companies" / folder / f"{period}.csv")
     return list(csv.DictReader(io.StringIO(text)))
 
 
 def listings() -> dict[str, dict[str, Listing]]:
     """Problem slug -> company slug -> what that company's lists say."""
     found: dict[str, dict[str, Listing]] = {}
-    for company, folder, _ in COMPANIES:
+    for company, folder in COMPANIES.items():
         for period in PERIODS:
             for rank, row in enumerate(company_rows(folder, period), 1):
                 slug = slug_from_url(row["Link"])
@@ -212,12 +200,12 @@ def build_problem(entry: DoocsEntry, listed: dict[str, Listing] | None) -> Probl
         url=url,
         topics=tags,
         premium=entry.premium,
-        description=description(entry),
+        description=None if entry.premium else statement(markdown),
     )
 
 
 def build_problems() -> list[Problem]:
-    index = parse_doocs_index(fetch(DOOCS_INDEX, "doocs-index.md"))
+    index = parse_doocs_index(fetch(DOOCS_INDEX, CACHE_DIR / "doocs-index.md"))
     by_title: dict[str, dict[str, Listing]] = {}
     for listed in listings().values():
         by_title[title_key(next(iter(listed.values())).title)] = listed
@@ -229,28 +217,28 @@ def build_problems() -> list[Problem]:
         for key, entry in index.items()
         if key in by_title or (entry.id <= CLASSIC_MAX and not entry.premium)
     ]
-    with ThreadPoolExecutor(max_workers=16) as pool:
+    with ThreadPoolExecutor(max_workers=FETCH_WORKERS) as pool:
         problems = list(pool.map(lambda pair: build_problem(*pair), wanted))
     return sorted(problems, key=lambda p: p.id)
 
 
-def ingest(path: Path = PROBLEMS_PATH) -> None:
+def ingest(problems_path: Path = PROBLEMS_PATH) -> None:
     problems = build_problems()
-    counts = {c: sum(c in p.companies for p in problems) for c, _, _ in COMPANIES}
+    counts = {c: sum(c in p.companies for p in problems) for c in COMPANIES}
     document = {
         "sources": {
-            "lists": LISTS.replace("raw.githubusercontent.com", "github.com").replace("/main", ""),
+            "lists": f"https://github.com/{LISTS_REPO}",
             "statements": "https://github.com/doocs/leetcode (CC BY-SA 4.0)",
             "classic": f"free problems 1 to {CLASSIC_MAX} from the doocs index",
             "fetchedAt": datetime.now(UTC).date().isoformat(),
         },
         "companies": [
             {"slug": slug, "name": name, "problems": counts[slug]}
-            for slug, _, name in COMPANIES
+            for slug, name in COMPANIES.items()
             if counts[slug]
         ],
         "problems": [asdict(problem) for problem in problems],
     }
-    path.write_text(json.dumps(document, ensure_ascii=False, separators=(",", ":")) + "\n")
+    problems_path.write_text(json.dumps(document, ensure_ascii=False, separators=(",", ":")) + "\n")
     premium = sum(problem.premium for problem in problems)
-    print(f"Wrote {len(problems)} problems ({premium} premium) to {path}")
+    print(f"Wrote {len(problems)} problems ({premium} premium) to {problems_path}")

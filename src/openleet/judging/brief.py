@@ -2,20 +2,16 @@
 (signature, constraints, one example), compact enough to read hundreds at once. Without slugs
 it lists every judged problem that has no generator yet."""
 
-import html
 import json
 import re
+from pathlib import Path
 
-from openleet.ingest import PROBLEMS_PATH
-from openleet.judging import HARNESS_DIR, SPECS_PATH, WORK_DIR
+from openleet.judging import HARNESS_DIR, SPECS_PATH, WORK_ITEMS_DIR
+from openleet.sanitize import html_text
 
 SUP = re.compile(r"<sup>(.*?)</sup>")
-TAG = re.compile(r"<[^>]+>")
-SECTION = re.compile(r"Constraints:(.*?)(?=Follow[- ]up|Note:|$)", re.S)
-
-
-def text(description: str) -> str:
-    return html.unescape(TAG.sub("", SUP.sub(r"^\1", description))).replace("\xa0", " ")
+CONSTRAINTS = re.compile(r"Constraints:(.*?)(?=Follow[- ]up|Note:|$)", re.S)
+FOLLOW_UP = re.compile(r"Follow[- ]up:?(.*?)(?:\n\n|$)", re.S)
 
 
 def signature(spec: dict) -> str:
@@ -31,18 +27,19 @@ def signature(spec: dict) -> str:
     return f"{spec['method']}({params}) -> {spec['returns']}{adapter}"
 
 
-def brief(slugs: list[str]) -> None:
-    problems = {p["slug"]: p for p in json.loads(PROBLEMS_PATH.read_text())["problems"]}
+def brief(slugs: list[str], problems_path: Path) -> None:
+    problems = {p["slug"]: p for p in json.loads(problems_path.read_text())["problems"]}
     specs = json.loads(SPECS_PATH.read_text())
     if not slugs:
         done = {p.stem for p in (HARNESS_DIR / "gen").glob("*.py")}
         slugs = sorted(s for s, e in specs.items() if e["supported"] and s not in done)
     for slug in slugs:
         entry, problem = specs[slug], problems[slug]
-        body = text(problem["description"] or "")
-        constraints = SECTION.search(body)
-        follow = re.search(r"Follow[- ]up:?(.*?)(?:\n\n|$)", body, re.S)
-        work = json.loads((WORK_DIR / "work" / f"{slug}.json").read_text())
+        # 10<sup>4</sup> reads as 10^4; tags vanish so `<code>n</code>` keeps its spacing.
+        body = html_text(SUP.sub(r"^\1", problem["description"] or ""), tag_sep="")
+        constraints = CONSTRAINTS.search(body)
+        follow = FOLLOW_UP.search(body)
+        work = json.loads((WORK_ITEMS_DIR / f"{slug}.json").read_text())
         example = work["examples"][0]["input"] if work["examples"] else None
         print(f"### {slug}  (#{problem['id']} {problem['title']}, {problem['difficulty']})")
         print(f"signature: {signature(entry['spec'])}")
