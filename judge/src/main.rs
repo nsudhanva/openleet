@@ -1,5 +1,5 @@
 //! The judge daemon: runs Python submissions in a sandboxed zygote, one job at a time, for the
-//! web server, over a Unix socket (protocol in the `judge-proto` crate).
+//! web server, over a Unix socket (protocol in the `openleet-proto` crate).
 
 mod checker;
 mod run;
@@ -34,24 +34,28 @@ impl Config {
             script: var("JUDGE_ZYGOTE", "/opt/openleet/current/judge/py/zygote.py"),
         }
     }
+
+    async fn zygote(&self) -> Result<Zygote> {
+        Zygote::spawn(&self.python, &self.script).await
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let config = Config::from_env();
     let endpoint: Endpoint = config.socket.parse()?;
-    let listener = Listener::bind(&endpoint)?;
-    let mut zygote = Zygote::spawn(&config.python, &config.script).await?;
+    let listener = Listener::bind(&endpoint).await?;
+    let mut zygote = config.zygote().await?;
     eprintln!("judge: listening on {endpoint}");
     // One job at a time: the VM has one core's worth of CPU to give, and timing must be fair.
     loop {
         let (read, write) = listener.accept().await?;
         if !zygote.alive() {
-            zygote = Zygote::spawn(&config.python, &config.script).await?;
+            zygote = config.zygote().await?;
         }
         if let Err(error) = serve(read, write, &mut zygote).await {
             eprintln!("judge: {error:#}");
-            zygote = Zygote::spawn(&config.python, &config.script).await?;
+            zygote = config.zygote().await?;
         }
     }
 }
@@ -65,7 +69,7 @@ enum Listener {
 }
 
 impl Listener {
-    fn bind(endpoint: &Endpoint) -> Result<Self> {
+    async fn bind(endpoint: &Endpoint) -> Result<Self> {
         Ok(match endpoint {
             Endpoint::Unix(path) => {
                 if path.exists() {
@@ -77,11 +81,11 @@ impl Listener {
                 std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o666))?;
                 Self::Unix(listener)
             }
-            Endpoint::Tcp(address) => {
-                let listener = std::net::TcpListener::bind(address)?;
-                listener.set_nonblocking(true)?;
-                Self::Tcp(TcpListener::from_std(listener)?)
-            }
+            Endpoint::Tcp(address) => Self::Tcp(
+                TcpListener::bind(address)
+                    .await
+                    .with_context(|| format!("binding {address}"))?,
+            ),
         })
     }
 

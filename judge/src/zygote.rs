@@ -8,8 +8,8 @@ use serde_json::value::RawValue;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 
-/// One line the zygote writes; exactly one field is set.
-#[derive(Debug, Default, Deserialize)]
+/// One line the zygote writes: `pid`, `ev` (with `cpu_ms`), `done`, `ole`, `fatal` or `ready`.
+#[derive(Debug, Deserialize)]
 pub struct Event {
     pub pid: Option<i32>,
     pub cpu_ms: Option<i64>,
@@ -21,7 +21,7 @@ pub struct Event {
 }
 
 /// One line the sandboxed child writes, forwarded by the zygote.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ChildEvent {
     pub i: Option<usize>,
     #[serde(default, deserialize_with = "openleet_proto::present")]
@@ -34,6 +34,7 @@ pub struct ChildEvent {
     pub sandbox: Option<String>,
 }
 
+/// How the child ended, from `wait4`.
 #[derive(Debug, Deserialize)]
 pub struct Done {
     pub code: Option<i32>,
@@ -42,6 +43,7 @@ pub struct Done {
     pub maxrss_kb: u64,
 }
 
+/// The running zygote and its pipes.
 pub struct Zygote {
     child: Child,
     stdin: ChildStdin,
@@ -49,7 +51,7 @@ pub struct Zygote {
 }
 
 impl Zygote {
-    /// Starts the zygote and waits until it has imported LeetCode's environment.
+    /// Starts the zygote and waits until it has imported the solutions' environment.
     pub async fn spawn(python: &str, script: &str) -> Result<Self> {
         let mut child = Command::new(python)
             .arg(script)
@@ -79,11 +81,13 @@ impl Zygote {
         Ok(())
     }
 
+    /// Waits for the zygote's next event.
     pub async fn next(&mut self) -> Result<Event> {
         let line = self.lines.next_line().await?.context("zygote exited")?;
         serde_json::from_str(&line).with_context(|| format!("bad zygote event: {line:.200}"))
     }
 
+    /// Whether the zygote process is still running.
     pub fn alive(&mut self) -> bool {
         matches!(self.child.try_wait(), Ok(None))
     }
