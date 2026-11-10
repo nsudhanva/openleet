@@ -3,15 +3,14 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use openleet_proto::{Checker, Endpoint, Expected, Job, Outcome, Verdict};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_json::value::RawValue;
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{TcpStream, UnixStream};
 use tokio::sync::Semaphore;
 
@@ -20,10 +19,17 @@ use crate::error::{ApiError, ApiResult};
 
 /// Most jobs that may wait for the judge; more get "busy".
 const MAX_WAITING: usize = 4;
-const MAX_CODE_BYTES: usize = 64 << 10;
+/// Largest code accepted anywhere (run, submit, drafts).
+pub const MAX_CODE_BYTES: usize = 64 << 10;
+/// Largest reply read from the judge daemon.
+const MAX_REPLY_BYTES: usize = 16 << 20;
 const MAX_CUSTOM_CASES: usize = 10;
 /// Longest input or output shown back; bigger ones are cut (stress tests are huge).
 const SHOWN_CHARS: usize = 4000;
+/// How long a health probe waits to connect to the daemon.
+const PROBE_TIMEOUT: Duration = Duration::from_millis(500);
+/// How long a probe's answer is reused.
+const PROBE_TTL: Duration = Duration::from_secs(5);
 
 /// One problem's entry in specs.json.
 #[derive(Deserialize)]
@@ -112,8 +118,13 @@ impl TimePolicy {
 pub struct Judge {
     entries: HashMap<String, Entry>,
     endpoint: Endpoint,
+    /// One job runs at a time.
     permits: Semaphore,
-    waiting: AtomicUsize,
+    /// The running job and the ones waiting: a permit is held for a whole call, so a request
+    /// dropped while queued (client gone, HTTP/2 reset, timeout) frees its place.
+    queue: Semaphore,
+    /// The last health probe: when, and whether the daemon accepted a connection.
+    probe: parking_lot::Mutex<Option<(Instant, bool)>>,
     pub time: TimePolicy,
 }
 
@@ -139,9 +150,32 @@ impl Judge {
             entries,
             endpoint,
             permits: Semaphore::new(1),
-            waiting: AtomicUsize::new(0),
+            queue: Semaphore::new(1 + MAX_WAITING),
+            probe: parking_lot::Mutex::new(None),
             time: TimePolicy { scale },
         })
+    }
+
+    /// Whether the daemon accepts a connection (no job is sent; the daemon ignores a
+    /// connection that closes without one). Answers are reused for [`PROBE_TTL`].
+    pub async fn reachable(&self) -> bool {
+        if let Some((at, up)) = *self.probe.lock()
+            && at.elapsed() < PROBE_TTL
+        {
+            return up;
+        }
+        let connect = async {
+            match &self.endpoint {
+                Endpoint::Unix(path) => UnixStream::connect(path).await.map(drop),
+                Endpoint::Tcp(address) => TcpStream::connect(address).await.map(drop),
+            }
+        };
+        let up = matches!(
+            tokio::time::timeout(PROBE_TIMEOUT, connect).await,
+            Ok(Ok(()))
+        );
+        *self.probe.lock() = Some((Instant::now(), up));
+        up
     }
 
     /// A problem's catalog entry.
@@ -151,13 +185,12 @@ impl Judge {
 
     /// Sends a job to the daemon and waits for its outcome, one job at a time.
     async fn execute(&self, job: &Job) -> ApiResult<Outcome> {
-        if self.waiting.fetch_add(1, Ordering::AcqRel) >= MAX_WAITING {
-            self.waiting.fetch_sub(1, Ordering::AcqRel);
-            return Err(ApiError::Busy);
-        }
-        let permit = self.permits.acquire().await;
-        self.waiting.fetch_sub(1, Ordering::AcqRel);
-        let _permit = permit.map_err(|_| ApiError::JudgeDown)?;
+        let _place = self.queue.try_acquire().map_err(|_| ApiError::Busy)?;
+        let _turn = self
+            .permits
+            .acquire()
+            .await
+            .map_err(|_| ApiError::JudgeDown)?;
         let wall = Duration::from_millis(u64::from(job.cpu_limit_ms) * 6 + 30_000);
         tokio::time::timeout(wall, self.round_trip(job))
             .await
@@ -179,7 +212,7 @@ impl Judge {
     }
 }
 
-/// Writes one request line and reads one reply line.
+/// Writes one request line and reads one reply line (at most [`MAX_REPLY_BYTES`]).
 async fn exchange(stream: impl AsyncRead + AsyncWrite + Unpin, line: &[u8]) -> Result<Vec<u8>> {
     let (read, mut write) = tokio::io::split(stream);
     write
@@ -187,7 +220,12 @@ async fn exchange(stream: impl AsyncRead + AsyncWrite + Unpin, line: &[u8]) -> R
         .await
         .context("sending the job to the judge")?;
     let mut reply = Vec::new();
-    BufReader::new(read).read_until(b'\n', &mut reply).await?;
+    BufReader::new(read.take(MAX_REPLY_BYTES as u64 + 1))
+        .read_until(b'\n', &mut reply)
+        .await?;
+    if reply.len() > MAX_REPLY_BYTES {
+        anyhow::bail!("the judge's reply is over {} MiB", MAX_REPLY_BYTES >> 20);
+    }
     Ok(reply)
 }
 
@@ -372,8 +410,16 @@ fn checked_code(code: &str) -> ApiResult<()> {
     if code.trim().is_empty() {
         return Err(ApiError::BadRequest("Write some code first".into()));
     }
+    check_code_size(code)
+}
+
+/// Rejects code over [`MAX_CODE_BYTES`].
+pub fn check_code_size(code: &str) -> ApiResult<()> {
     if code.len() > MAX_CODE_BYTES {
-        return Err(ApiError::BadRequest("Code is longer than 64 KB".into()));
+        return Err(ApiError::BadRequest(format!(
+            "Code is longer than {} KB",
+            MAX_CODE_BYTES >> 10
+        )));
     }
     Ok(())
 }
@@ -548,5 +594,71 @@ pub fn submit_result(
         limit_ms,
         error: outcome.error.clone(),
         failing,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn job() -> Job {
+        serde_json::from_str(
+            r#"{"spec":{"kind":"function"},"code":"x","tests":[{"input":{}}],"expected":null,"cpu_limit_ms":1000,"stop_on_failure":true}"#,
+        )
+        .unwrap()
+    }
+
+    /// A judge whose daemon accepts connections but never answers.
+    async fn silent_judge() -> (Judge, tokio::net::TcpListener) {
+        let daemon = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("tcp://{}", daemon.local_addr().unwrap());
+        let judge = Judge::load(Path::new("missing.json"), endpoint.parse().unwrap(), 1.0).unwrap();
+        (judge, daemon)
+    }
+
+    #[tokio::test]
+    async fn requests_dropped_while_queued_free_their_place() {
+        let (judge, _daemon) = silent_judge().await;
+        let job = job();
+        let short = Duration::from_millis(50);
+        // One job runs (the daemon never answers it).
+        let mut running = Box::pin(judge.execute(&job));
+        assert!(tokio::time::timeout(short, &mut running).await.is_err());
+        // Many more requests than places queue behind it and are given up after a moment, as
+        // when a client disconnects: none may leave its place taken.
+        for _ in 0..3 * (1 + MAX_WAITING) {
+            let outcome = tokio::time::timeout(short, judge.execute(&job)).await;
+            assert!(outcome.is_err(), "still waiting, not busy");
+        }
+        // With every place held, the next request is turned away at once.
+        let mut queued: Vec<_> = (0..MAX_WAITING)
+            .map(|_| Box::pin(judge.execute(&job)))
+            .collect();
+        for future in &mut queued {
+            assert!(tokio::time::timeout(short, future).await.is_err());
+        }
+        assert!(matches!(judge.execute(&job).await, Err(ApiError::Busy)));
+        drop((queued, running));
+        assert!(
+            tokio::time::timeout(short, judge.execute(&job))
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn refuses_a_reply_over_the_cap() {
+        let (client, mut server) = tokio::io::duplex(1 << 16);
+        let writer = tokio::spawn(async move {
+            let chunk = vec![b'x'; 1 << 16];
+            for _ in 0..=(MAX_REPLY_BYTES >> 16) {
+                if server.write_all(&chunk).await.is_err() {
+                    break;
+                }
+            }
+        });
+        let error = exchange(client, b"{}\n").await.unwrap_err();
+        assert!(error.to_string().contains("MiB"), "{error:#}");
+        writer.abort();
     }
 }

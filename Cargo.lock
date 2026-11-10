@@ -1665,27 +1665,34 @@ name = "openleet"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "axum-server",
+ "base64 0.22.1",
  "brotli",
  "duckdb",
  "hmac",
+ "hyper-util",
  "jiff",
  "mimalloc",
  "openleet-proto",
  "parking_lot",
+ "pem",
  "rusqlite",
  "rustls-acme",
+ "sd-notify",
  "serde",
  "serde_json",
  "sha2",
  "thiserror",
  "tokio",
  "tokio-stream",
+ "tower",
  "tower-http",
  "tracing",
  "tracing-subscriber",
  "unicode-normalization",
+ "x509-parser",
  "zstd",
 ]
 
@@ -2037,6 +2044,15 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "sd-notify"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e4ef7359e694bfaf1dd27a30f9d760b54c00dfae9f19bd0c05a39bc9128fe76"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "serde"
@@ -2403,6 +2419,7 @@ dependencies = [
  "pin-project-lite",
  "sync_wrapper",
  "tokio",
+ "tokio-util",
  "tower-layer",
  "tower-service",
  "tracing",

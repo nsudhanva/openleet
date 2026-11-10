@@ -12,6 +12,7 @@ use openleet::scheduler::{CardStates, card_states, record_attempt};
 use openleet::scorer::{ScoreReport, day_key, score_report};
 use openleet::service;
 
+use crate::acme::CertificateSlot;
 use crate::db::{DailyScore, Store};
 use crate::error::{ApiError, ApiResult};
 use crate::judge::Judge;
@@ -89,6 +90,8 @@ pub struct AppState {
     pub store: Store,
     pub judge: Judge,
     pub progress: RwLock<Progress>,
+    /// The HTTPS certificate in use, for `GET /api/health`.
+    pub certificate: CertificateSlot,
 }
 
 /// The state handed to every handler.
@@ -148,4 +151,24 @@ impl AppState {
         }
         Ok(())
     }
+}
+
+/// A state over empty content, a new database in `dir` and a judge at `judge`, for tests.
+#[cfg(test)]
+pub fn test_state(dir: &std::path::Path, judge: &str) -> Shared {
+    let none = dir.join("none.json");
+    let content = Content::load(&none, &none).expect("content");
+    let (store, _) =
+        Store::open(&dir.join("openleet.duckdb"), &dir.join("none.duckdb")).expect("database");
+    let judge = Judge::load(&none, judge.parse().expect("endpoint"), 1.0).expect("judge");
+    Arc::new(AppState {
+        companies: crate::api::companies_response(&content),
+        content,
+        revision: "test".to_owned(),
+        deploy: None,
+        store,
+        judge,
+        progress: RwLock::new(Progress::new(Vec::new(), HashMap::new(), HashSet::new())),
+        certificate: CertificateSlot::default(),
+    })
 }

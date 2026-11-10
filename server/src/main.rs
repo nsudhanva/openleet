@@ -1,14 +1,19 @@
 //! The OpenLeet server: flashcards and coding practice. JSON API, embedded web app, and
 //! automatic HTTPS.
 
+mod acme;
 mod api;
 mod assets;
+#[cfg(test)]
+mod csp;
 mod db;
 mod deploy;
 mod error;
 mod fingerprint;
+mod health;
 mod judge;
 mod listen;
+mod security;
 mod state;
 
 use std::net::{Ipv6Addr, SocketAddr};
@@ -25,14 +30,14 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
 use parking_lot::RwLock;
 use rustls_acme::AcmeConfig;
-use rustls_acme::caches::DirCache;
-use tokio_stream::StreamExt;
+
 use tower_http::CompressionLevel;
 use tower_http::compression::CompressionLayer;
 
 use openleet::content::Content;
 
-use crate::db::Store;
+use crate::acme::{CertificateSlot, ObservedCache};
+use crate::db::{Opening, Store};
 use crate::deploy::Deploy;
 use crate::judge::Judge;
 use crate::listen::Sockets;
@@ -43,6 +48,9 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 /// How often today's scores are saved even without new attempts (memory decays over time).
 const SCORE_REFRESH: Duration = Duration::from_mins(15);
+/// How often the server checks that the current UTC day has a backup (taken at startup, then
+/// once a day; a failed one is retried at the next check).
+const BACKUP_CHECK: Duration = Duration::from_hours(1);
 /// How long a stopping server waits for in-flight HTTPS requests (a submission can take
 /// several seconds to judge).
 const DRAIN: Duration = Duration::from_secs(30);
@@ -127,13 +135,33 @@ fn database_path(state_dir: &Path) -> Result<PathBuf> {
 
 fn load_state(config: &Config) -> Result<Shared> {
     let content = Content::load(&config.problems, &config.data_dir.join("approaches.json"))?;
-    let store = Store::open(
+    let (store, opening) = Store::open(
         &database_path(&config.state_dir)?,
         &config.data_dir.join("judge/tests.duckdb"),
     )?;
-    let imported = store.import_sqlite(&config.state_dir.join("progress.db"))?;
-    if imported > 0 {
-        tracing::info!("imported {imported} attempts from the old SQLite database");
+    match &opening {
+        Opening::Existing(migrated) => {
+            tracing::info!("progress database at schema version {}", migrated.to);
+        }
+        Opening::Created => tracing::info!("created the progress database"),
+        Opening::Recovered {
+            quarantined,
+            backup,
+        } => tracing::error!(
+            "progress database recovered from {}; the unusable files are in {}",
+            backup.as_deref().map_or_else(
+                || "nothing (it starts empty)".into(),
+                |b| b.display().to_string()
+            ),
+            quarantined.display()
+        ),
+    }
+    // The SQLite database of older servers is imported once, into a database that starts out
+    // empty; never again after that (clearing your progress must not bring it back).
+    if opening.started_empty()
+        && let Some(imported) = store.import_sqlite(&config.state_dir.join("progress.db"))?
+    {
+        tracing::info!("imported the old SQLite database: {imported:?}");
     }
     let judge = Judge::load(
         &config.data_dir.join("judge/specs.json"),
@@ -150,6 +178,7 @@ fn load_state(config: &Config) -> Result<Shared> {
         store,
         judge,
         progress: RwLock::new(progress),
+        certificate: CertificateSlot::default(),
     }))
 }
 
@@ -164,6 +193,10 @@ fn app(state: Shared) -> Router {
     Router::new()
         .nest("/api", api)
         .fallback(assets::serve)
+        .layer(axum::middleware::map_response(security::headers))
+        .layer(tower::limit::GlobalConcurrencyLimitLayer::new(
+            security::MAX_IN_FLIGHT,
+        ))
         .with_state(state)
 }
 
@@ -199,19 +232,50 @@ async fn main() -> Result<()> {
         }
     });
 
+    tokio::spawn(back_up_daily(Arc::clone(&state)));
+    tokio::spawn(health::watchdog(Arc::clone(&state)));
+
+    let certificate = Arc::clone(&state.certificate);
     let router = app(state);
     let http = SocketAddr::from((Ipv6Addr::UNSPECIFIED, config.http_port));
     match config.tls_domains() {
         None => {
             tracing::info!("serving {} on {http}", config.site);
             let listener = tokio::net::TcpListener::from_std(sockets.take("http", http)?)?;
+            health::ready();
             axum::serve(listener, router)
                 .with_graceful_shutdown(shutdown())
                 .await?;
         }
-        Some(domains) => serve_tls(&config, domains, router, &mut sockets, http).await?,
+        Some(domains) => {
+            serve_tls(&config, domains, router, &mut sockets, http, certificate).await?;
+        }
     }
     Ok(())
+}
+
+/// Takes the day's backup of the progress database when there is none yet (see
+/// `db::backup`). The copy runs on the blocking pool and holds the database for the few
+/// milliseconds a small database takes.
+async fn back_up_daily(state: Shared) {
+    let mut tick = tokio::time::interval(BACKUP_CHECK);
+    loop {
+        tick.tick().await;
+        let day = jiff::Timestamp::now()
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .date();
+        let started = std::time::Instant::now();
+        match state.db(move |store| store.backup(day)).await {
+            Ok(Some(backup)) => tracing::info!(
+                "backup: {} ({} KiB) in {} ms",
+                backup.file.display(),
+                backup.bytes.div_ceil(1024),
+                started.elapsed().as_millis()
+            ),
+            Ok(None) => {}
+            Err(error) => tracing::error!("backup failed: {error}"),
+        }
+    }
 }
 
 /// The primary domain and the aliases that redirect to it.
@@ -266,6 +330,7 @@ async fn serve_tls(
     router: Router,
     sockets: &mut Sockets,
     http: SocketAddr,
+    certificate: CertificateSlot,
 ) -> Result<()> {
     let Some((primary, aliases)) = domains.split_first() else {
         anyhow::bail!("SITE_ADDRESS names no domain");
@@ -274,21 +339,17 @@ async fn serve_tls(
         primary: primary.as_str().into(),
         aliases: aliases.into(),
     };
-    let mut acme = AcmeConfig::new(domains.iter().cloned())
-        .cache(DirCache::new(config.state_dir.join("acme")))
+    let acme_state = AcmeConfig::new(domains.iter().cloned())
+        .cache(ObservedCache::new(
+            config.state_dir.join("acme"),
+            Arc::clone(&certificate),
+        ))
         .directory_lets_encrypt(true)
         .state();
-    let mut rustls = (*acme.default_rustls_config()).clone();
+    let mut rustls = (*acme_state.default_rustls_config()).clone();
     rustls.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    let acceptor = acme.axum_acceptor(Arc::new(rustls));
-    tokio::spawn(async move {
-        while let Some(event) = acme.next().await {
-            match event {
-                Ok(ok) => tracing::info!("acme: {ok:?}"),
-                Err(error) => tracing::error!("acme: {error:?}"),
-            }
-        }
-    });
+    let acceptor = acme_state.axum_acceptor(Arc::new(rustls));
+    tokio::spawn(acme::drive(acme_state, certificate));
 
     let host = Arc::clone(&canonical.primary);
     let redirect = Router::new().fallback(move |uri: Uri| {
@@ -321,7 +382,15 @@ async fn serve_tls(
         shutdown().await;
         stopper.graceful_shutdown(Some(DRAIN));
     });
-    axum_server::from_tcp(https_listener)?
+    let mut server = axum_server::from_tcp(https_listener)?;
+    // Slow clients may not hold a connection open by trickling in their headers.
+    server
+        .http_builder()
+        .http1()
+        .timer(hyper_util::rt::TokioTimer::new())
+        .header_read_timeout(security::HEADER_READ_TIMEOUT);
+    health::ready();
+    server
         .acceptor(acceptor)
         .handle(handle)
         .serve(
@@ -360,6 +429,7 @@ async fn shutdown() {
         () = term => {},
     }
     tracing::info!("shutting down");
+    health::stopping();
 }
 
 #[cfg(test)]

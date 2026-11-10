@@ -14,14 +14,19 @@ use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::Serialize;
 
-use crate::deploy;
 use crate::error::ApiError;
 use crate::state::Shared;
+use crate::{deploy, security};
 
 pub use study::companies_response;
 
-/// Every endpoint, relative to /api.
+/// Every endpoint, relative to /api. Run and Submit may take up to
+/// [`security::JUDGE_TIMEOUT`]; everything else [`security::REQUEST_TIMEOUT`].
 pub fn routes() -> Router<Shared> {
+    let judged = Router::new()
+        .route("/run", post(code::run))
+        .route("/submit", post(code::submit))
+        .layer(security::timeout(security::JUDGE_TIMEOUT));
     Router::new()
         .route("/companies", get(study::companies))
         .route("/deck", get(study::deck))
@@ -37,15 +42,16 @@ pub fn routes() -> Router<Shared> {
         .route("/drafts", put(code::save_draft))
         .route("/drafts/reset", post(code::reset_draft))
         .route("/drafts/restore", post(code::restore_draft))
-        .route("/run", post(code::run))
-        .route("/submit", post(code::submit))
         .route("/submissions", get(code::submissions))
         .route("/submissions/{id}", get(code::submission))
         .route("/version", get(version))
+        .route("/health", get(crate::health::health))
         .route(
             "/deploy",
             post(deploy::deploy).layer(DefaultBodyLimit::max(deploy::MAX_BODY)),
         )
+        .layer(security::timeout(security::REQUEST_TIMEOUT))
+        .merge(judged)
         .fallback(|| async { ApiError::no_endpoint() })
 }
 

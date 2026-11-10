@@ -121,9 +121,17 @@ impl Listener {
 async fn serve(read: Reader, mut write: Writer, zygote: &mut Zygote) -> Result<()> {
     let mut line = Vec::new();
     let mut reader = BufReader::new(read).take(MAX_JOB_BYTES as u64);
-    tokio::time::timeout(READ_TIMEOUT, reader.read_until(b'\n', &mut line))
-        .await
-        .context("the client sent no job in time")??;
+    match tokio::time::timeout(READ_TIMEOUT, reader.read_until(b'\n', &mut line)).await {
+        Ok(read) => read?,
+        Err(_) => {
+            eprintln!("judge: a client sent no job in time");
+            return Ok(());
+        }
+    };
+    if line.is_empty() {
+        // A health probe: connected and closed without a job.
+        return Ok(());
+    }
     let outcome = match serde_json::from_slice::<Job>(&line) {
         Ok(mut job) => {
             job.cpu_limit_ms = job.cpu_limit_ms.min(MAX_CPU_LIMIT_MS);
