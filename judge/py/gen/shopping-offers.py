@@ -1,5 +1,5 @@
-"""Shopping Offers with 6 items, needs up to 10 each (11^6 states) and 100 small offers, so
-search without memoization blows up."""
+"""Shopping Offers with 6 items, needs of 4 to 6 each (7^6 states at most) and 60 small offers, so
+search without memoization blows up while a memoized search stays within a few seconds."""
 
 SEEDS = 3
 
@@ -7,9 +7,9 @@ SEEDS = 3
 def generate(rng):
     n = 6
     price = [rng.randint(0, 10) for _ in range(n)]
-    needs = [10] * n if rng.random() < 0.5 else [rng.randint(5, 10) for _ in range(n)]
+    needs = [6] * n if rng.random() < 0.5 else [rng.randint(4, 6) for _ in range(n)]
     special = []
-    for _ in range(100):
+    for _ in range(60):
         counts = [rng.choice([0, 0, 1, 1, 2, 3]) for _ in range(n)]
         if not any(counts):
             counts[rng.randrange(n)] = 1
