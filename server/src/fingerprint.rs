@@ -1,4 +1,5 @@
-//! Content fingerprints for strong `ETag`s. Shared with build.rs, which embeds the web app.
+//! Content fingerprints: strong `ETag`s, and the seed of a plan's shuffle. Shared with
+//! build.rs, which embeds the web app.
 
 /// FNV-1a: fast, and enough to tell build outputs and data versions apart.
 #[must_use]

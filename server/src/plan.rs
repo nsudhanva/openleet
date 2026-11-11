@@ -11,6 +11,7 @@ use serde::Serialize;
 use crate::coding::CodingLog;
 
 use crate::content::{ANY_COMPANY, Content};
+use crate::fingerprint::fnv1a;
 use crate::lists::{ListEntry, ListId, ProblemFilter};
 use crate::model::{CompanyFilter, Difficulty, Period, Problem, TopicId, wire_enum};
 
@@ -117,13 +118,6 @@ const fn harder(difficulty: Difficulty) -> Option<Difficulty> {
     }
 }
 
-/// 64-bit FNV-1a: a hash that is the same on every build and platform.
-fn fnv1a(text: &str) -> u64 {
-    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
-    })
-}
-
 /// SplitMix64's finalizer: spreads a seed mixed with a problem number over 64 bits.
 const fn mix(mut x: u64) -> u64 {
     x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
@@ -170,13 +164,17 @@ impl Plan {
     /// The shuffle's seed: the list and filter, so changing the status keeps the order.
     fn seed(&self, content: &Content) -> u64 {
         let view = self.view(content);
-        fnv1a(&format!(
-            "{}|{}|{}|{}",
-            view.company,
-            view.period,
-            view.topic.unwrap_or_default(),
-            view.difficulty.map_or("", Difficulty::as_str),
-        ))
+        // FNV-1a is the same on every build and platform, so the order is too.
+        fnv1a(
+            format!(
+                "{}|{}|{}|{}",
+                view.company,
+                view.period,
+                view.topic.unwrap_or_default(),
+                view.difficulty.map_or("", Difficulty::as_str),
+            )
+            .as_bytes(),
+        )
     }
 
     /// "Google · 6 months · Two Pointers · Unsolved": what the plan holds, defaults left out.

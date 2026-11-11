@@ -9,7 +9,9 @@ use axum::body::Body;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 
-use crate::{fingerprint, preload};
+use openleet::fingerprint;
+
+use crate::preload;
 
 /// One embedded file with its precompressed variants.
 pub struct Asset {

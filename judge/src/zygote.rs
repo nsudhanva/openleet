@@ -99,7 +99,11 @@ impl Zygote {
             stdin,
             lines: BufReader::with_capacity(1 << 16, stdout).lines(),
         };
-        if zygote.next().await?.ready != Some(true) {
+        if !zygote
+            .next_event()
+            .await?
+            .is_some_and(|event| event.ready == Some(true))
+        {
             bail!("zygote did not report ready");
         }
         Ok(zygote)
@@ -111,12 +115,6 @@ impl Zygote {
         self.stdin.write_all(b"\n").await?;
         self.stdin.flush().await?;
         Ok(())
-    }
-
-    /// Waits for the zygote's next event.
-    pub async fn next(&mut self) -> Result<Event> {
-        let line = self.lines.next_line().await?.context("zygote exited")?;
-        serde_json::from_str(&line).with_context(|| format!("bad zygote event: {line:.200}"))
     }
 
     /// Waits for the zygote's next event; `None` for a child event that is not one. The zygote

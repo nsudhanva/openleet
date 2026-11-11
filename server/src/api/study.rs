@@ -8,6 +8,7 @@ use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 
 use openleet::content::Content;
+use openleet::fingerprint;
 use openleet::insights::{Insights, Learner, insights};
 use openleet::scorer::{ScoreReport, local_zone};
 use openleet::service::{self, AttemptInput, DeckParams, DeckQuery, ProblemParams, ProblemQuery};
@@ -15,7 +16,6 @@ use openleet::service::{self, AttemptInput, DeckParams, DeckQuery, ProblemParams
 use super::{Params, param};
 use crate::db::DailyScore;
 use crate::error::{ApiError, ApiResult};
-use crate::fingerprint;
 use crate::state::{Shared, now_ms};
 
 const MAX_NOTE_CHARS: usize = 4000;
@@ -282,36 +282,11 @@ pub async fn readiness(State(state): State<Shared>, Query(params): Params) -> Re
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::path::Path;
     use std::sync::Arc;
 
     use super::*;
+    use crate::api::testing::{json, query, state};
     use crate::db::testing::TempDir;
-    use crate::state::test_state_with;
-
-    fn state(dir: &TempDir) -> Shared {
-        let data = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
-        let content = Content::load(&data.join("problems.json"), &data.join("approaches.json"))
-            .expect("load the problems file");
-        test_state_with(dir.root(), "tcp://127.0.0.1:1", content)
-    }
-
-    fn query(pairs: &[(&str, &str)]) -> Params {
-        Query(
-            pairs
-                .iter()
-                .map(|&(k, v)| (k.to_owned(), v.to_owned()))
-                .collect::<HashMap<_, _>>(),
-        )
-    }
-
-    async fn json(response: Response) -> serde_json::Value {
-        let body = axum::body::to_bytes(response.into_body(), 1 << 24)
-            .await
-            .expect("body");
-        serde_json::from_slice(&body).expect("json")
-    }
 
     async fn topic_list(state: &Shared, pairs: &[(&str, &str)]) -> Vec<(String, u64)> {
         let response = topics(State(Arc::clone(state)), HeaderMap::new(), query(pairs))

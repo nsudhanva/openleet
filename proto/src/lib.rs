@@ -173,16 +173,18 @@ impl Outcome {
     }
 }
 
-/// Deserializes a field that may hold JSON `null` as `Some(null)`, so "returned None" and
-/// "never answered" (field absent, `None` via `#[serde(default)]`) stay different.
+/// Deserializes a field that is there as `Some`, even when it holds JSON `null`; with
+/// `#[serde(default)]`, `None` then means left out. So a child's answer `null` ("returned
+/// None") stays different from no answer, and a plan's name `null` from no change.
 ///
 /// # Errors
-/// Fails when the field is not valid JSON.
-pub fn present<'de, D>(deserializer: D) -> Result<Option<Box<RawValue>>, D::Error>
+/// Fails when the field's value is not a `T`.
+pub fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
 {
-    Box::<RawValue>::deserialize(deserializer).map(Some)
+    T::deserialize(deserializer).map(Some)
 }
 
 /// Where the judge listens: a Unix socket path (production), or `tcp://host:port` for

@@ -3,6 +3,7 @@
 
 pub mod coding;
 pub mod content;
+pub mod fingerprint;
 pub mod insights;
 pub mod lists;
 pub mod model;

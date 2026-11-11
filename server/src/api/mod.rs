@@ -83,3 +83,41 @@ async fn version(State(state): State<Shared>) -> Response {
     })
     .into_response()
 }
+
+/// The handler tests' fixtures.
+#[cfg(test)]
+mod testing {
+    use std::path::Path;
+
+    use axum::extract::Query;
+    use axum::response::Response;
+    use openleet::content::Content;
+
+    use super::Params;
+    use crate::db::testing::TempDir;
+    use crate::state::{Shared, test_state_with};
+
+    /// A state over the real problems, a new database in `dir` and no judge.
+    pub fn state(dir: &TempDir) -> Shared {
+        let data = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
+        let content = Content::load(&data.join("problems.json"), &data.join("approaches.json"))
+            .expect("load the problems file");
+        test_state_with(dir.root(), "tcp://127.0.0.1:1", content)
+    }
+
+    pub fn query(pairs: &[(&str, &str)]) -> Params {
+        Query(
+            pairs
+                .iter()
+                .map(|&(k, v)| (k.to_owned(), v.to_owned()))
+                .collect(),
+        )
+    }
+
+    pub async fn json(response: Response) -> serde_json::Value {
+        let body = axum::body::to_bytes(response.into_body(), 1 << 24)
+            .await
+            .expect("body");
+        serde_json::from_slice(&body).expect("json")
+    }
+}

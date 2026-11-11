@@ -5,7 +5,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use openleet::content::Content;
 use openleet::plan::{self, Marks, NextProblem, Plan, PlanProgress, PlanView};
@@ -169,18 +169,11 @@ pub async fn use_plan(
     plan_response(&state, id)
 }
 
-/// `Some(value)` for a field that is there, even as `null`, so `None` means left out.
-fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
-    deserializer: D,
-) -> Result<Option<T>, D::Error> {
-    T::deserialize(deserializer).map(Some)
-}
-
 /// Body of `PATCH /api/plans/{id}`: a new name (`null` for none, so the label shows), a pin,
 /// or both.
 #[derive(Deserialize)]
 pub struct PlanEdit {
-    #[serde(default, deserialize_with = "present")]
+    #[serde(default, deserialize_with = "openleet_proto::present")]
     name: Option<Option<String>>,
     pinned: Option<bool>,
 }
@@ -264,36 +257,11 @@ pub async fn delete_plan(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::path::Path as FsPath;
     use std::sync::Arc;
 
     use super::*;
+    use crate::api::testing::{json, query, state};
     use crate::db::testing::TempDir;
-    use crate::state::test_state_with;
-
-    fn state(dir: &TempDir) -> Shared {
-        let data = FsPath::new(env!("CARGO_MANIFEST_DIR")).join("../data");
-        let content = Content::load(&data.join("problems.json"), &data.join("approaches.json"))
-            .expect("load the problems file");
-        test_state_with(dir.root(), "tcp://127.0.0.1:1", content)
-    }
-
-    fn query(pairs: &[(&str, &str)]) -> Params {
-        Query(
-            pairs
-                .iter()
-                .map(|&(k, v)| (k.to_owned(), v.to_owned()))
-                .collect::<HashMap<_, _>>(),
-        )
-    }
-
-    async fn json(response: Response) -> serde_json::Value {
-        let body = axum::body::to_bytes(response.into_body(), 1 << 24)
-            .await
-            .expect("body");
-        serde_json::from_slice(&body).expect("json")
-    }
 
     async fn next_of(state: &Shared, pairs: &[(&str, &str)]) -> serde_json::Value {
         json(

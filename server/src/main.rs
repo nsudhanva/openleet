@@ -9,7 +9,6 @@ mod csp;
 mod db;
 mod deploy;
 mod error;
-mod fingerprint;
 mod health;
 mod judge;
 mod listen;
