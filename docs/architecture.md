@@ -35,7 +35,7 @@ sequenceDiagram
     participant Z as zygote
     participant C as child
     W->>S: POST /api/submit {slug, code}
-    S->>S: load tests (one row group)
+    S->>S: load the problem's tests
     S->>J: code + inputs + expected outputs
     J->>Z: code + inputs (never the answers)
     Z->>Z: build inputs, generate stress tests

@@ -31,7 +31,7 @@ use openleet::model::{Attempt, Grade};
 
 pub use backup::Backup;
 use corpus::Corpus;
-pub use corpus::TestRow;
+pub use corpus::{TestRow, Tests};
 use migrate::{Migrated, Shape};
 pub use plans::{Changed, MAX_PINNED_PLANS, PlanChange, PlanKey, SavedPlan};
 
@@ -509,9 +509,9 @@ impl Store {
     }
 
     /// A problem's tests in order; none without a corpus.
-    pub fn tests(&self, slug: &str) -> Result<Vec<TestRow>> {
+    pub fn tests(&self, slug: &str, which: Tests) -> Result<Vec<TestRow>> {
         match &self.corpus {
-            Some(corpus) => corpus.tests(&self.conn.lock(), slug),
+            Some(corpus) => corpus.tests(&self.conn.lock(), slug, which),
             None => Ok(Vec::new()),
         }
     }
@@ -876,15 +876,16 @@ mod tests {
         let corpus = dir.path("tests.duckdb");
         Connection::open(&corpus)
             .unwrap()
-            .execute_batch(
-                "CREATE TABLE tests (slug VARCHAR, idx USMALLINT, kind VARCHAR, test VARCHAR,
-                    expected VARCHAR, expected_sha256 VARCHAR);
-                 INSERT INTO tests VALUES ('a', 0, 'example', '{\"input\":{}}', '[1, 2]', NULL);",
-            )
+            .execute_batch(&format!("{}{}", corpus::SAMPLE, corpus::SAMPLE_META))
             .unwrap();
         let (store, _) = Store::open(&dir.path("openleet.duckdb"), &corpus).unwrap();
-        let tests = store.tests("a").unwrap();
-        assert!(matches!(&tests[0].expected, Expected::Value(v) if v.get() == "[1, 2]"));
+        assert_eq!(store.tests("a", Tests::All).unwrap().len(), 3);
+        let examples = store.tests("a", Tests::Examples).unwrap();
+        assert_eq!(examples.len(), 1);
+        assert!(matches!(&examples[0].expected, Expected::Value(v) if v.get() == "[1, 2]"));
+        // Without a corpus there are no tests.
+        let (bare, _) = Store::open(&dir.path("other.duckdb"), &dir.path("none")).unwrap();
+        assert!(bare.tests("a", Tests::All).unwrap().is_empty());
     }
 
     #[test]

@@ -1,10 +1,9 @@
 //! The judge's test corpus (`data/judge/tests.duckdb`, built by
 //! `src/openleet/judging/assemble.py`), attached read-only to the progress database as `corpus`.
 //!
-//! Schema 1 has a one-row `meta` table naming its version; corpora built before it (schema 0,
-//! still the published one until the next rebuild) have only `tests`, with the old column
-//! names. Any other version is refused: the server then runs without tests rather than
-//! misreading them.
+//! A one-row `meta` table names the corpus's schema version. A corpus of any other version than
+//! [`SCHEMA_VERSION`] is refused: the server then runs without tests rather than misreading
+//! them.
 
 use std::path::Path;
 
@@ -15,15 +14,14 @@ use serde_json::value::RawValue;
 
 use super::sql_string;
 
-/// The corpus schema this build reads (besides schema 0).
+/// The corpus schema this build reads.
 pub const SCHEMA_VERSION: u16 = 1;
 
-/// A problem's tests, in order: kind, test, expected value (JSON text), expected digest.
+/// A problem's tests (all of them, or only the examples when `$2`), in order: kind, test,
+/// expected value (JSON text), expected digest.
 const TESTS_QUERY: &str =
     "SELECT kind::VARCHAR, test_case::VARCHAR, expected::VARCHAR, expected_sha256
-    FROM corpus.tests WHERE slug = ? ORDER BY idx";
-const TESTS_QUERY_V0: &str = "SELECT kind, test, expected, expected_sha256
-    FROM corpus.tests WHERE slug = ? ORDER BY idx";
+    FROM corpus.tests WHERE slug = $1 AND (NOT $2 OR kind = 'example') ORDER BY idx";
 
 /// One stored test of the judge's corpus.
 pub struct TestRow {
@@ -33,17 +31,16 @@ pub struct TestRow {
     pub expected: Expected,
 }
 
-impl TestRow {
-    /// Whether the test is one of the problem's examples (shown and used by Run).
-    pub fn is_example(&self) -> bool {
-        self.kind == "example"
-    }
+/// Which of a problem's tests to read.
+#[derive(Clone, Copy)]
+pub enum Tests {
+    All,
+    /// The examples, shown above the editor and used by Run.
+    Examples,
 }
 
 /// An attached corpus that passed its checks.
-pub struct Corpus {
-    query: &'static str,
-}
+pub struct Corpus;
 
 /// Attaches the corpus at `path` read-only and checks it. `None` when there is no file or the
 /// corpus is refused (logged); an error only when attaching itself fails.
@@ -61,9 +58,9 @@ pub fn attach(conn: &Connection, path: &Path) -> Result<Option<Corpus>> {
     ))
     .with_context(|| format!("attaching {}", path.display()))?;
     match check(conn) {
-        Ok((query, summary)) => {
+        Ok(summary) => {
             tracing::info!("test corpus {}: {summary}", path.display());
-            Ok(Some(Corpus { query }))
+            Ok(Some(Corpus))
         }
         Err(error) => {
             tracing::error!(
@@ -76,26 +73,16 @@ pub fn attach(conn: &Connection, path: &Path) -> Result<Option<Corpus>> {
     }
 }
 
-/// The tests query for the attached corpus's schema, and a summary to log.
-fn check(conn: &Connection) -> Result<(&'static str, String)> {
-    let has = |table: &str, column: &str| -> duckdb::Result<bool> {
-        conn.query_row(
-            "SELECT count(*) > 0 FROM duckdb_columns()
-             WHERE database_name = 'corpus' AND table_name = ? AND column_name = ?",
-            [table, column],
-            |r| r.get(0),
-        )
-    };
-    if !has("meta", "schema_version")? {
-        if has("tests", "expected_sha256")? {
-            let tests: i64 =
-                conn.query_row("SELECT count(*) FROM corpus.tests", [], |r| r.get(0))?;
-            return Ok((
-                TESTS_QUERY_V0,
-                format!("schema 0 (no meta table), {tests} tests"),
-            ));
-        }
-        bail!("no meta table and not the schema 0 layout");
+/// Checks the attached corpus's schema version and counts; a summary to log.
+fn check(conn: &Connection) -> Result<String> {
+    let has_meta: bool = conn.query_row(
+        "SELECT count(*) > 0 FROM duckdb_columns()
+         WHERE database_name = 'corpus' AND table_name = 'meta' AND column_name = 'schema_version'",
+        [],
+        |r| r.get(0),
+    )?;
+    if !has_meta {
+        bail!("no meta table");
     }
     let (rows, version, built_ms, problems, tests, actual): (i64, u16, i64, i64, i64, i64) = conn
         .query_row(
@@ -119,25 +106,26 @@ fn check(conn: &Connection) -> Result<(&'static str, String)> {
         bail!("meta has {rows} rows, expected 1");
     }
     if version != SCHEMA_VERSION {
-        bail!("schema version {version}, this build reads {SCHEMA_VERSION} (and 0)");
+        bail!("schema version {version}, this build reads {SCHEMA_VERSION}");
     }
     if tests != actual {
         bail!("meta counts {tests} tests but the table holds {actual}");
     }
     let built_at = jiff::Timestamp::from_millisecond(built_ms)?;
-    Ok((
-        TESTS_QUERY,
-        format!("schema {version}, built {built_at}, {tests} tests of {problems} problems"),
+    Ok(format!(
+        "schema {version}, built {built_at}, {tests} tests of {problems} problems"
     ))
 }
 
 impl Corpus {
-    /// A problem's tests in order. The corpus is sorted by slug, so zone maps skip every row
-    /// group but the one or two that hold it.
-    pub fn tests(&self, conn: &Connection, slug: &str) -> Result<Vec<TestRow>> {
-        let mut stmt = conn.prepare_cached(self.query)?;
+    /// A problem's tests in order. The corpus is sorted by slug, so zone maps skip the row
+    /// groups whose slug range does not hold it; the corpus has two, so a lookup scans about
+    /// half of the slug column.
+    pub fn tests(&self, conn: &Connection, slug: &str, which: Tests) -> Result<Vec<TestRow>> {
+        let examples_only = matches!(which, Tests::Examples);
+        let mut stmt = conn.prepare_cached(TESTS_QUERY)?;
         let rows = stmt
-            .query_map([slug], |r| {
+            .query_map(duckdb::params![slug, examples_only], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, String>(1)?,
@@ -167,29 +155,30 @@ impl Corpus {
     }
 }
 
+/// A schema 1 corpus with tests of "a" (stored out of order, to check the ordering), for
+/// tests; [`SAMPLE_META`] completes it.
+#[cfg(test)]
+pub const SAMPLE: &str = r#"
+    CREATE TYPE test_kind AS ENUM ('example', 'hidden', 'stress');
+    CREATE TABLE tests (slug VARCHAR NOT NULL, idx USMALLINT NOT NULL,
+        kind test_kind NOT NULL, test_case JSON NOT NULL, expected JSON,
+        expected_sha256 VARCHAR, PRIMARY KEY (slug, idx));
+    INSERT INTO tests VALUES ('a', 2, 'stress', '{"gen":"a"}', NULL, 'ab12'),
+        ('a', 0, 'example', '{"input":{}}', '[1, 2]', NULL),
+        ('a', 1, 'hidden', '{"input":{"n":3}}', '3', NULL);
+    CREATE TABLE meta (schema_version USMALLINT NOT NULL, built_at TIMESTAMPTZ NOT NULL,
+        built_by VARCHAR NOT NULL, problem_count UINTEGER NOT NULL,
+        test_count UINTEGER NOT NULL);
+"#;
+
+/// The meta row that makes [`SAMPLE`] a valid corpus.
+#[cfg(test)]
+pub const SAMPLE_META: &str = "INSERT INTO meta VALUES (1, now(), 'test', 1, 3);";
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::testing::TempDir;
-
-    /// A corpus with tests of "a" (a stress test stored first, to check the ordering).
-    const V1: &str = r#"
-        CREATE TYPE test_kind AS ENUM ('example', 'hidden', 'stress');
-        CREATE TABLE tests (slug VARCHAR NOT NULL, idx USMALLINT NOT NULL,
-            kind test_kind NOT NULL, test_case JSON NOT NULL, expected JSON,
-            expected_sha256 VARCHAR, PRIMARY KEY (slug, idx));
-        INSERT INTO tests VALUES ('a', 1, 'stress', '{"gen":"a"}', NULL, 'ab12'),
-            ('a', 0, 'example', '{"input":{}}', '[1, 2]', NULL);
-        CREATE TABLE meta (schema_version USMALLINT NOT NULL, built_at TIMESTAMPTZ NOT NULL,
-            built_by VARCHAR NOT NULL, problem_count UINTEGER NOT NULL,
-            test_count UINTEGER NOT NULL);
-    "#;
-    const V0: &str = r#"
-        CREATE TABLE tests (slug VARCHAR, idx USMALLINT, kind VARCHAR, test VARCHAR,
-            expected VARCHAR, expected_sha256 VARCHAR);
-        INSERT INTO tests VALUES ('a', 1, 'stress', '{"gen":"a"}', NULL, 'ab12'),
-            ('a', 0, 'example', '{"input":{}}', '[1, 2]', NULL);
-    "#;
 
     fn attached(dir: &TempDir, ddl: &str) -> (Connection, Option<Corpus>) {
         let path = dir.path("tests.duckdb");
@@ -199,41 +188,37 @@ mod tests {
         (conn, corpus)
     }
 
-    fn assert_reads_both_kinds(conn: &Connection, corpus: &Corpus) {
-        let tests = corpus.tests(conn, "a").unwrap();
-        assert_eq!(tests.len(), 2);
-        assert!(tests[0].is_example());
+    #[test]
+    fn reads_all_tests_or_only_the_examples() {
+        let dir = TempDir::new("corpus-v1");
+        let (conn, corpus) = attached(&dir, &format!("{SAMPLE}{SAMPLE_META}"));
+        let corpus = corpus.expect("accepted");
+        let tests = corpus.tests(&conn, "a", Tests::All).unwrap();
+        assert_eq!(
+            tests.iter().map(|t| t.kind.as_str()).collect::<Vec<_>>(),
+            ["example", "hidden", "stress"]
+        );
         assert_eq!(tests[0].test, r#"{"input":{}}"#);
         assert!(matches!(&tests[0].expected, Expected::Value(v) if v.get() == "[1, 2]"));
-        assert!(matches!(&tests[1].expected, Expected::Sha256(d) if d == "ab12"));
-        assert!(corpus.tests(conn, "b").unwrap().is_empty());
+        assert!(matches!(&tests[2].expected, Expected::Sha256(d) if d == "ab12"));
+        let examples = corpus.tests(&conn, "a", Tests::Examples).unwrap();
+        assert_eq!(examples.len(), 1);
+        assert_eq!(examples[0].test, tests[0].test);
+        assert!(corpus.tests(&conn, "b", Tests::All).unwrap().is_empty());
     }
 
     #[test]
-    fn reads_schema_1() {
-        let dir = TempDir::new("corpus-v1");
-        let meta = "INSERT INTO meta VALUES (1, now(), 'test', 1, 2);";
-        let (conn, corpus) = attached(&dir, &format!("{V1}{meta}"));
-        assert_reads_both_kinds(&conn, &corpus.expect("accepted"));
-    }
-
-    #[test]
-    fn reads_schema_0() {
-        let dir = TempDir::new("corpus-v0");
-        let (conn, corpus) = attached(&dir, V0);
-        assert_reads_both_kinds(&conn, &corpus.expect("accepted"));
-    }
-
-    #[test]
-    fn refuses_unknown_versions_and_bad_counts() {
-        for meta in [
-            "INSERT INTO meta VALUES (2, now(), 'test', 1, 2);",
-            "INSERT INTO meta VALUES (1, now(), 'test', 1, 3);",
-            "",
+    fn refuses_unknown_versions_bad_counts_and_no_meta() {
+        let no_meta = SAMPLE.replace("CREATE TABLE meta", "CREATE TABLE other");
+        for ddl in [
+            format!("{SAMPLE}INSERT INTO meta VALUES (2, now(), 'test', 1, 3);"),
+            format!("{SAMPLE}INSERT INTO meta VALUES (1, now(), 'test', 1, 4);"),
+            SAMPLE.to_owned(),
+            no_meta,
         ] {
             let dir = TempDir::new("corpus-refused");
-            let (conn, corpus) = attached(&dir, &format!("{V1}{meta}"));
-            assert!(corpus.is_none(), "{meta}");
+            let (conn, corpus) = attached(&dir, &ddl);
+            assert!(corpus.is_none(), "{ddl}");
             // Refused corpora are detached again.
             assert!(conn.execute_batch("SELECT 1 FROM corpus.tests").is_err());
         }

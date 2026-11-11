@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use openleet_proto::Verdict;
 
 use super::{Params, param};
-use crate::db::{NewSubmission, Store, TestRow};
+use crate::db::{NewSubmission, Store, TestRow, Tests};
 use crate::error::{ApiError, ApiResult};
 use crate::judge::{self, Entry};
 use crate::state::{Shared, now_ms};
@@ -17,8 +17,10 @@ use crate::state::{Shared, now_ms};
 const SUBMISSIONS_SHOWN: usize = 50;
 
 /// A problem's tests, in order (404 for an unknown problem).
-async fn tests(state: &Shared, slug: &str) -> ApiResult<Vec<TestRow>> {
-    state.db_for(slug, Store::tests).await
+async fn tests(state: &Shared, slug: &str, which: Tests) -> ApiResult<Vec<TestRow>> {
+    state
+        .db_for(slug, move |store, slug| store.tests(slug, which))
+        .await
 }
 
 /// The judge entry of a problem that can be judged, else a 400 (or 404 if unknown).
@@ -59,9 +61,9 @@ pub async fn code_info(
     State(state): State<Shared>,
     Path(slug): Path<String>,
 ) -> ApiResult<Response> {
-    let mut examples = tests(&state, &slug).await?;
+    let examples = tests(&state, &slug, Tests::Examples).await?;
+    // Every problem in the corpus has examples.
     let tested = !examples.is_empty();
-    examples.retain(TestRow::is_example);
     let draft = state.db_for(&slug, Store::draft).await?;
     let entry = state.judge.entry(&slug);
     let supported = entry.is_some_and(|e| e.supported) && tested;
@@ -155,8 +157,7 @@ pub async fn run(
     Json(input): Json<RunInput>,
 ) -> ApiResult<impl IntoResponse> {
     let entry = judged(&state, &input.slug)?;
-    let mut examples = tests(&state, &input.slug).await?;
-    examples.retain(TestRow::is_example);
+    let examples = tests(&state, &input.slug, Tests::Examples).await?;
     let custom = input
         .input
         .as_deref()
@@ -182,7 +183,7 @@ pub async fn submit(
     Json(input): Json<SubmitInput>,
 ) -> ApiResult<impl IntoResponse> {
     let entry = judged(&state, &input.slug)?;
-    let tests = tests(&state, &input.slug).await?;
+    let tests = tests(&state, &input.slug, Tests::All).await?;
     let (outcome, limit_ms) = state.judge.submit(entry, &tests, &input.code).await?;
     if outcome.rerun {
         tracing::info!(
