@@ -1,8 +1,7 @@
 import { PracticeButton } from "@/components/plan/practice-button";
 import { EmptyNote, Panel, Stat } from "@/components/progress/panel";
 import { ProgressBar } from "@/components/progress-bar";
-import { percent } from "@/lib/format";
-import { FAILURE_KINDS, failureTotal } from "@/lib/insights";
+import { FAILURE_KINDS, failureTotal, firstTryText } from "@/lib/insights";
 import type { Plan } from "@/lib/plan";
 import type { Coding, Failures } from "@/lib/types";
 
@@ -20,7 +19,11 @@ const FAILURE_COLOR: Record<keyof Failures, string> = {
 function FailureMix({ failures }: { failures: Failures }) {
 	const total = failureTotal(failures);
 	if (!total)
-		return <EmptyNote>No failed submissions here: every try passed.</EmptyNote>;
+		return (
+			<EmptyNote>
+				No failed submissions before a solve: every try passed.
+			</EmptyNote>
+		);
 	const kinds = FAILURE_KINDS.filter((k) => failures[k.key] > 0);
 	return (
 		<div className="space-y-2">
@@ -52,8 +55,9 @@ function FailureMix({ failures }: { failures: Failures }) {
 }
 
 /**
- * Coding over the list: solved per difficulty, how often the first submission passed, and
- * what the failed ones were. About understanding, not speed: no CPU times.
+ * Coding over the list: solved per difficulty, how many solves came before any wrong answer,
+ * limit or crash, and what failed on the way to each solve. About understanding, not speed:
+ * no CPU times.
  */
 export function CodingPanel({
 	coding,
@@ -67,6 +71,8 @@ export function CodingPanel({
 }) {
 	const solved = coding.byDifficulty.reduce((sum, d) => sum + d.solved, 0);
 	const total = coding.byDifficulty.reduce((sum, d) => sum + d.total, 0);
+	const firstTry = firstTryText(coding.firstTry, solved);
+	const failed = failureTotal(coding.failures);
 	return (
 		<Panel
 			id="coding"
@@ -88,13 +94,20 @@ export function CodingPanel({
 			</ul>
 			<dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-3">
 				<Stat label="Solved" value={`${solved} of ${total}`} />
-				<Stat
-					label="First try accepted"
-					value={solved ? percent(coding.firstTry / solved) : "—"}
-					detail={solved ? `${coding.firstTry} of ${solved}` : undefined}
-				/>
+				<Stat label="Solved on the first try" {...firstTry} />
 			</dl>
-			<h3 className="mt-4 mb-2 text-sm font-semibold">What failed</h3>
+			<p className="mt-1 text-xs text-muted-foreground">
+				First try: no wrong answer, limit or crash before Accepted. Compile
+				errors do not count.
+			</p>
+			<h3 className="mt-4 mb-2 text-sm font-semibold">
+				Failed submissions before a solve
+				{failed > 0 && (
+					<span className="ml-1.5 font-normal text-muted-foreground tabular-nums">
+						({failed})
+					</span>
+				)}
+			</h3>
 			{coding.tried ? (
 				<FailureMix failures={coding.failures} />
 			) : (

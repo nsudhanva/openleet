@@ -10,6 +10,7 @@ import type {
 	NextPage,
 	Period,
 	ProblemRow,
+	Readiness,
 	Report,
 	RunResult,
 	SavedPlan,
@@ -165,15 +166,11 @@ export const api = {
 		json<StudyCard>("GET", problemPath("/api/problems", slug)),
 	search: (q: string, limit: number, signal?: AbortSignal) =>
 		json<SearchHit[]>("GET", "/api/search", { query: { q, limit }, signal }),
-	/** Readiness, coverage and difficulty for one company's list; the rest is global. */
+	/** The progress page: each figure says which list it covers. */
 	report: (company: string) =>
 		json<Report>("GET", "/api/report", { query: { company } }),
-	readiness: async (company: string) =>
-		(
-			await json<{ readiness: number }>("GET", "/api/readiness", {
-				query: { company },
-			})
-		).readiness,
+	readiness: (company: string) =>
+		json<Readiness>("GET", "/api/readiness", { query: { company } }),
 
 	code: (slug: string) => json<CodeInfo>("GET", problemPath("/api/code", slug)),
 	/** Empty code deletes the draft. */

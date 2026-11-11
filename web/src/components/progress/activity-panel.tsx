@@ -27,7 +27,14 @@ const LEVEL_FILL = [
  * day's flashcard reviews and submissions together. Each day names its counts; the summary
  * and the day list say the same in words, for keyboards and screen readers.
  */
-export function ActivityPanel({ activity }: { activity: Activity }) {
+export function ActivityPanel({
+	activity,
+	streakDays,
+}: {
+	activity: Activity;
+	/** Consecutive days with practice, the calendar's days, ending today or yesterday. */
+	streakDays: number;
+}) {
 	const { weeks, months } = useMemo(() => calendarWeeks(activity), [activity]);
 	const columns = {
 		gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))`,
@@ -36,7 +43,15 @@ export function ActivityPanel({ activity }: { activity: Activity }) {
 		<Panel
 			id="activity"
 			title="Activity"
-			note="Flashcard reviews and submissions per day, in the server's time zone."
+			note="Graded cards and submissions per day on any list, in the server's time zone."
+			action={
+				<p className="shrink-0 text-right text-sm">
+					<span className="text-muted-foreground">Streak</span>{" "}
+					<span className="font-semibold tabular-nums">
+						{count(streakDays, "day")}
+					</span>
+				</p>
+			}
 			className="md:max-lg:col-span-2"
 		>
 			{/* Cells grow with the panel, up to a size that still reads as one calendar. */}

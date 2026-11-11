@@ -8,7 +8,7 @@ export const STUDY_SETS = {
 	new: "Not seen yet",
 	again: "Visit again",
 	less: "Visit less often",
-	missed: "Missed topics",
+	missed: "Missed last time",
 	skipped: "Skipped",
 	all: "All problems",
 } as const;

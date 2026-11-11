@@ -121,11 +121,17 @@ function About() {
 					</Section>
 					<Section title="Scoring">
 						<p>
-							Each graded card scores half its topic guess (F1 against the tags,
-							less a quarter per hint) and half your grade. Mastery fades with
-							time since the last review. <strong>Readiness</strong> weights
-							mastery by how often the selected company asked each problem in
-							the last 6 months.
+							<strong>Readiness</strong> covers the selected company's 100
+							most-asked problems of the last 6 months (of all time when its
+							6-month list has fewer than 25), each weighted by how often the
+							company asks it. A problem earns 60% for a clean solve in the
+							judge (half for a shaky one) and 40% for a card graded Got it or
+							Visit less often that is not overdue (half while it is overdue by
+							less than its interval).
+						</p>
+						<p>
+							A topic guess scores F1 against the card's tags. The Progress page
+							rates a topic once 5 graded cards carried it.
 						</p>
 					</Section>
 					<Section title="The judge">

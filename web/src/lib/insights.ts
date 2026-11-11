@@ -148,5 +148,88 @@ export function activitySummary(activity: Activity): string {
 	const busiest = activity.days.reduce((best, d) =>
 		d.reviews + d.submissions > best.reviews + best.submissions ? d : best,
 	);
-	return `${count(reviews, "review")} and ${count(submissions, "submission")} on ${count(activity.days.length, "day")} in the last 26 weeks. Busiest: ${dayLabel(busiest.day)} (${busiest.reviews + busiest.submissions}).`;
+	return `${count(reviews, "review")} and ${count(submissions, "submission")} on ${count(activity.days.length, "day")} in the last 26 weeks. Busiest: ${dayLabel(busiest.day)}, with ${count(busiest.reviews, "review")} and ${count(busiest.submissions, "submission")}.`;
+}
+
+/** "10 Nov": a day as the trend's axis names it. */
+export function shortDay(day: string): string {
+	const date = new Date(dayMs(day));
+	return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
+}
+
+/** First-try solves are a share only from this many solves; fewer show as counts. */
+export const FIRST_TRY_MIN = 10;
+
+/** "3 of 10", with "30%" once there are enough solves for a share to mean something. */
+export function firstTryText(
+	firstTry: number,
+	solved: number,
+): { value: string; detail?: string } {
+	if (!solved) return { value: "—" };
+	const value = `${firstTry} of ${solved}`;
+	return solved < FIRST_TRY_MIN
+		? { value }
+		: { value, detail: `${Math.round((firstTry / solved) * 100)}%` };
+}
+
+/** A topic is rated on cards from this many graded cards with it (the server's rule). */
+export const MIN_TOPIC_CARDS = 5;
+
+/** The topic map leaves topics with fewer problems than this for "Show all". */
+export const TOPIC_MIN_PROBLEMS = 3;
+/** And lists at most this many until then. */
+export const TOPICS_SHOWN = 10;
+
+/** The topic map's rows: all of them, or the first few with enough problems to matter. */
+export function shownTopics<T extends { problems: number }>(
+	topics: T[],
+	all: boolean,
+): T[] {
+	return all
+		? topics
+		: topics
+				.filter((t) => t.problems >= TOPIC_MIN_PROBLEMS)
+				.slice(0, TOPICS_SHOWN);
+}
+
+/** A trend chart's value axis: its range and its ticks, all whole percents. */
+export interface TrendScale {
+	lo: number;
+	hi: number;
+	ticks: number[];
+}
+
+/** Tick steps tried, smallest first, as shares. */
+const TICK_STEPS = [0.01, 0.02, 0.05, 0.1, 0.2, 0.25];
+/** Most gaps between ticks. */
+const MAX_TICK_GAPS = 4;
+
+/**
+ * The value axis for a readiness trend: the smallest even step that spans the values in at
+ * most four gaps, from a multiple of it below the lowest value to one above the highest,
+ * within 0 to 100%. A flat line still gets one step of range.
+ */
+export function trendScale(values: number[]): TrendScale {
+	const min = Math.min(...values);
+	const max = Math.max(...values);
+	const step =
+		TICK_STEPS.find(
+			(s) =>
+				Math.ceil(max / s - 1e-9) - Math.floor(min / s + 1e-9) <= MAX_TICK_GAPS,
+		) ?? 0.25;
+	let lo = Math.floor(min / step + 1e-9) * step;
+	let hi = Math.ceil(max / step - 1e-9) * step;
+	if (hi - lo < step / 2) {
+		if (hi + step <= 1 + 1e-9) hi += step;
+		else lo -= step;
+	}
+	const ticks: number[] = [];
+	for (let t = lo; t <= hi + 1e-9; t += step)
+		ticks.push(Math.round(t * 100) / 100);
+	return { lo: ticks[0], hi: ticks.at(-1) ?? hi, ticks };
+}
+
+/** Days between two "2026-11-10" days. */
+export function daysBetween(from: string, to: string): number {
+	return Math.round((dayMs(to) - dayMs(from)) / DAY_MS);
 }

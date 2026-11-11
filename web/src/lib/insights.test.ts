@@ -4,8 +4,13 @@ import {
 	activitySummary,
 	calendarWeeks,
 	dayLabel,
+	daysBetween,
 	failureSummary,
 	failureTotal,
+	firstTryText,
+	shortDay,
+	shownTopics,
+	trendScale,
 } from "@/lib/insights";
 import type { Activity, Failures } from "@/lib/types";
 
@@ -77,11 +82,74 @@ describe("the activity calendar", () => {
 			0, 1, 1, 2, 2, 3, 3, 4, 4,
 		]);
 		expect(activitySummary(activity)).toBe(
-			"4 reviews and 7 submissions on 2 days in the last 26 weeks. Busiest: Tue 10 Nov 2026 (10).",
+			"4 reviews and 7 submissions on 2 days in the last 26 weeks. Busiest: Tue 10 Nov 2026, with 3 reviews and 7 submissions.",
 		);
 		expect(activitySummary({ ...activity, days: [] })).toBe(
 			"No practice in the last 26 weeks yet.",
 		);
 		expect(dayLabel("2026-03-01")).toBe("Sun 1 Mar 2026");
+	});
+});
+
+describe("first-try solves", () => {
+	it("are counts until ten solves, then also a share", () => {
+		expect(firstTryText(0, 0)).toEqual({ value: "—" });
+		// 1 of 1 is no 100%.
+		expect(firstTryText(1, 1)).toEqual({ value: "1 of 1" });
+		expect(firstTryText(3, 9)).toEqual({ value: "3 of 9" });
+		expect(firstTryText(3, 10)).toEqual({ value: "3 of 10", detail: "30%" });
+	});
+});
+
+describe("the topic map", () => {
+	const topic = (problems: number) => ({ topic: `t${problems}`, problems });
+
+	it("leaves topics with fewer than three problems for Show all", () => {
+		const topics = [5, 4, 3, 2, 1].map(topic);
+		expect(shownTopics(topics, false).map((t) => t.problems)).toEqual([
+			5, 4, 3,
+		]);
+		expect(shownTopics(topics, true)).toEqual(topics);
+		// A tiny list may have none to show until Show all.
+		expect(shownTopics([topic(1)], false)).toEqual([]);
+	});
+
+	it("shows at most ten until Show all", () => {
+		const topics = Array.from({ length: 14 }, () => topic(9));
+		expect(shownTopics(topics, false)).toHaveLength(10);
+	});
+});
+
+describe("the trend's axes", () => {
+	it("scale to the values in even steps of whole percents", () => {
+		// Steps of 1, 2 or 5 points would need more than four gaps from 12% to 31%.
+		expect(trendScale([0.12, 0.31])).toEqual({
+			lo: 0.1,
+			hi: 0.4,
+			ticks: [0.1, 0.2, 0.3, 0.4],
+		});
+		expect(trendScale([0.421, 0.437])).toEqual({
+			lo: 0.42,
+			hi: 0.44,
+			ticks: [0.42, 0.43, 0.44],
+		});
+		// The full range takes the widest step.
+		expect(trendScale([0, 1]).ticks).toEqual([0, 0.25, 0.5, 0.75, 1]);
+	});
+
+	it("give a flat line a step of range, inside 0 to 100%", () => {
+		expect(trendScale([0.3, 0.3])).toEqual({
+			lo: 0.3,
+			hi: 0.31,
+			ticks: [0.3, 0.31],
+		});
+		expect(trendScale([0, 0]).ticks).toEqual([0, 0.01]);
+		expect(trendScale([1, 1]).ticks).toEqual([0.99, 1]);
+	});
+
+	it("name days and count between them across months", () => {
+		expect(shortDay("2026-11-10")).toBe("10 Nov");
+		expect(daysBetween("2026-10-30", "2026-11-02")).toBe(3);
+		expect(daysBetween("2026-03-07", "2026-03-09")).toBe(2);
 	});
 });

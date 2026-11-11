@@ -171,39 +171,61 @@ export interface SearchHit {
 	snippet: string | null;
 }
 
-/** How often you named a topic when it applied, over the cards that carry it. */
+/** A topic you name least: rated on 5 or more graded cards, scoring under 60%. */
 export interface TopicRecall {
 	topic: string;
-	recall: number;
+	/** Named over named plus half the misses and false alarms, 0..1. */
+	score: number;
+	/** Graded cards with the topic that named it. */
+	named: number;
+	/** Graded cards with the topic. */
 	seen: number;
+}
+
+/** Readiness for a company's most-asked problems (`GET /api/readiness`). */
+export interface Readiness {
+	/** 0..1; null before any card of these problems was graded or any of them submitted. */
+	score: number | null;
+	/** The list the problems come from: "all" when the 6-month list is too short. */
+	period: "6m" | "all";
+	/** How many problems it covers (at most 100). */
+	problems: number;
+	/** How many problems the 6-month list has. */
+	recent: number;
+	/** Solved cleanly in the judge. */
+	solved: number;
+	/** Solved, but shaky. */
+	shaky: number;
+	/** Cards graded "Got it" or "Visit less often" and not overdue. */
+	cards: number;
+	/** Such cards overdue by less than their interval. */
+	fading: number;
+}
+
+/** Readiness at the end of each recent day. */
+export interface Trend {
+	/** Distinct days with practice, ever. */
+	practiceDays: number;
+	/** Empty until 7 days with practice. */
+	points: { day: string; readiness: number }[];
 }
 
 interface ScoreReport {
 	computedAt: number;
-	/** Mastery weighted by the company's 6-month frequency, 0..1. */
-	readiness: number;
-	/** Share of the company's 6-month problems graded at least once. */
-	coverage: number;
-	/** Mean topic score over the last 50 graded attempts. */
+	readiness: Readiness;
+	trend: Trend;
+	/** Mean topic score (F1) of the last 50 graded cards, on any list. */
 	accuracy: number | null;
+	/** Grades given, on any list. */
 	graded: number;
+	/** Consecutive days with a graded card or a submission. */
 	streakDays: number;
+	/** Over the 6-month list. */
 	counts: { due: number; new: number; again: number; less: number };
-	byDifficulty: {
-		difficulty: Difficulty;
-		mastery: number;
-		seen: number;
-		total: number;
-	}[];
-	/** Recall per topic: how often you named it when it applied. Weakest first. */
+	/** Cards graded per difficulty, over the 6-month list. */
+	byDifficulty: { difficulty: Difficulty; seen: number; total: number }[];
+	/** The topics you name least, weakest first, over every graded card. */
 	topics: TopicRecall[];
-}
-
-export interface DailyScore {
-	day: string;
-	readiness: number;
-	coverage: number;
-	accuracy: number | null;
 }
 
 /** The failed verdicts of some submissions, by kind. */
@@ -221,13 +243,17 @@ export interface Coding {
 	byDifficulty: { difficulty: Difficulty; solved: number; total: number }[];
 	/** Problems with any submission. */
 	tried: number;
-	/** Solved problems whose first submission was Accepted. */
+	/** Solved with no wrong answer, limit or crash first (compile errors do not count). */
 	firstTry: number;
 	submissions: number;
+	/** The failed submissions before each problem's first Accepted. */
 	failures: Failures;
 }
 
-/** A problem Accepted only after two or more failures, or a time limit. */
+/**
+ * A problem Accepted only after two or more failures, or a time limit, and not solved cleanly
+ * again on a later day.
+ */
 export interface ShakySolve
 	extends Pick<Problem, "id" | "slug" | "title" | "difficulty"> {
 	/** The failures before the first Accepted. */
@@ -239,14 +265,14 @@ export interface ShakySolve
 /** One topic of the report's list and how much of it you covered. */
 export interface TopicRow {
 	topic: string;
-	/** How much the company asks it: its frequency summed over the topic's problems. */
-	weight: number;
 	problems: number;
 	/** Graded on a card or solved. */
 	covered: number;
 	solved: number;
-	/** Flashcard topic accuracy; null before any card with it was graded. */
-	recall: number | null;
+	/** Graded cards of the list's problems with the topic. */
+	graded: number;
+	/** How many of those named it; null below 5 graded. */
+	named: number | null;
 }
 
 /** A day with practice, in the server's time zone. */
@@ -267,7 +293,6 @@ export interface Activity {
 
 export interface Report {
 	report: ScoreReport;
-	history: DailyScore[];
 	coding: Coding;
 	/** The list's shaky solves, newest first. */
 	shaky: ShakySolve[];

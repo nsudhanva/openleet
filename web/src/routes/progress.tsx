@@ -8,15 +8,18 @@ import { CodingPanel } from "@/components/progress/coding-panel";
 import { EmptyNote, Panel, Stat } from "@/components/progress/panel";
 import { ShakyPanel } from "@/components/progress/shaky-panel";
 import { TopicMap } from "@/components/progress/topic-map";
+import { TrendChart } from "@/components/progress/trend-chart";
 import { ProgressBar } from "@/components/progress-bar";
 import { Button } from "@/components/ui/button";
 import { useCompanies } from "@/hooks/use-companies";
 import { api } from "@/lib/api";
 import { ANY_COMPANY, companyName } from "@/lib/companies";
-import { count, pageTitle, percent } from "@/lib/format";
+import { pageTitle, percent } from "@/lib/format";
+import { MIN_TOPIC_CARDS } from "@/lib/insights";
 import type { Plan } from "@/lib/plan";
-import type { StudySet } from "@/lib/scheduler";
-import type { DailyScore, Difficulty, TopicRecall } from "@/lib/types";
+import { readinessLabel, readinessText } from "@/lib/readiness";
+import { STUDY_SETS, type StudySet } from "@/lib/scheduler";
+import type { Difficulty, TopicRecall } from "@/lib/types";
 
 export const Route = createFileRoute("/progress")({
 	head: () => ({ meta: [{ title: pageTitle("Progress") }] }),
@@ -26,13 +29,16 @@ export const Route = createFileRoute("/progress")({
 });
 
 function Progress() {
-	const { report, history, coding, shaky, shakyElsewhere, topicMap, activity } =
+	const { report, coding, shaky, shakyElsewhere, topicMap, activity } =
 		Route.useLoaderData();
 	const { company } = Route.useSearch();
 	const navigate = Route.useNavigate();
 	const name = companyName(useCompanies(), company);
+	const owner = company === ANY_COMPANY ? null : name;
+	const { readiness } = report;
 	const total = report.byDifficulty.reduce((sum, d) => sum + d.total, 0);
-	// The list readiness covers, as a plan: what Practice opens from here.
+	const seen = report.byDifficulty.reduce((sum, d) => sum + d.seen, 0);
+	// The 6-month list as a plan: what Practice opens from here.
 	const list: Plan = {
 		company,
 		period: "6m",
@@ -40,9 +46,8 @@ function Progress() {
 		order: "rank",
 	};
 	const listName =
-		company === ANY_COMPANY
-			? "every company's 6-month list"
-			: `${name}'s 6-month list`;
+		owner === null ? "every company's 6-month list" : `${owner}'s 6-month list`;
+	const asker = owner ?? "any company";
 
 	return (
 		<div className="flex flex-col">
@@ -60,8 +65,8 @@ function Progress() {
 					</div>
 				}
 			>
-				A background scorer recomputes this after every card and every 15
-				minutes, so mastery fades when reviews get old.
+				Each panel says which problems it counts: the most-asked ones for
+				readiness, the 6-month list, or every card and submission.
 			</PageHeader>
 
 			{/* Three to a row from lg, two from md; on a phone they stack. The page scrolls. */}
@@ -69,34 +74,46 @@ function Progress() {
 				<Panel
 					id="readiness"
 					title="Readiness"
-					note={
-						company === ANY_COMPANY
-							? "Mastery of each problem, weighted by how often the companies ask it, over the last 6 months."
-							: `Mastery of each problem ${name} asked in the last 6 months, weighted by how often it asks it.`
-					}
+					note={readinessLabel(owner, readiness)}
 				>
 					<p className="text-6xl leading-none font-bold tracking-tighter tabular-nums">
-						{percent(report.readiness, 1)}
+						{readinessText(readiness)}
 					</p>
-					<Trend history={history} />
+					{readiness.score === null && readiness.problems > 0 && (
+						<p className="mt-2 text-sm">
+							Grade a card or submit a solution for one of these problems to
+							start.
+						</p>
+					)}
+					<p className="mt-2 text-xs text-muted-foreground">
+						Each problem counts by how often {asker} asks it: 60% for solving it
+						cleanly in the judge (half for a shaky solve), 40% for a card graded
+						“Got it” or “Visit less often” that is not overdue (half when
+						overdue by less than its interval).
+					</p>
+					<div className="my-3">
+						<TrendChart trend={report.trend} />
+					</div>
 					<dl className="mt-auto grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-3">
 						<Stat
-							label="Graded at least once"
-							value={`${Math.round(report.coverage * total)} of ${total}`}
+							label="Solved cleanly"
+							value={`${readiness.solved} of ${readiness.problems}`}
+							detail={readiness.shaky ? `${readiness.shaky} shaky` : undefined}
 						/>
 						<Stat
-							label="Topic accuracy, last 50"
-							value={report.accuracy === null ? "—" : percent(report.accuracy)}
+							label="Cards up to date"
+							value={`${readiness.cards} of ${readiness.problems}`}
+							detail={
+								readiness.fading ? `${readiness.fading} overdue` : undefined
+							}
 						/>
-						<Stat label="Cards graded" value={String(report.graded)} />
-						<Stat label="Day streak" value={count(report.streakDays, "day")} />
 					</dl>
 				</Panel>
 
 				<Panel
 					id="sets"
 					title="Study sets"
-					note="Open a set to study only those cards."
+					note={`Cards of ${listName}. Open a set to study only those cards.`}
 				>
 					<div className="flex flex-wrap gap-2">
 						<SetLink
@@ -115,38 +132,50 @@ function Progress() {
 							label="Visit less often"
 							count={report.counts.less}
 						/>
-						<SetLink set="missed" label="Missed topics" />
+						<SetLink set="missed" label={STUDY_SETS.missed} />
 						<SetLink set="skipped" label="Skipped" />
 					</div>
 					<h3 className="mt-5 mb-2 font-semibold tracking-tight">
-						By difficulty
+						Cards by difficulty
 					</h3>
 					<ul>
 						{report.byDifficulty.map((d) => (
 							<Meter
 								key={d.difficulty}
 								label={d.difficulty}
-								value={d.mastery}
-								detail={`${d.seen} of ${d.total} graded`}
+								value={d.total ? d.seen / d.total : 0}
+								text={`${d.seen} of ${d.total} reviewed`}
 								to={{ set: "all", difficulty: d.difficulty }}
 							/>
 						))}
 					</ul>
+					<dl className="mt-auto border-t pt-3">
+						<Stat label="Graded at least once" value={`${seen} of ${total}`} />
+					</dl>
 				</Panel>
 
 				<Panel
 					id="topics"
-					title="Topics you miss most"
-					note="How often you named a topic when it applied. Select one to drill it."
+					title="Topics you name least"
+					note="On every card you graded, on any list: how often you named a topic when it applied, less half for each wrong guess of it. Rated from 5 graded cards; listed under 60%. Select one to drill it."
 					className="md:max-lg:col-span-2"
 				>
 					{report.topics.length ? (
 						<TopicMeters topics={report.topics} />
 					) : (
 						<EmptyNote>
-							Grade a few cards to see which topics you miss.
+							{report.graded < MIN_TOPIC_CARDS
+								? `Grade ${MIN_TOPIC_CARDS}+ cards on a topic to rate it.`
+								: `No topic with ${MIN_TOPIC_CARDS} or more graded cards scores under 60%.`}
 						</EmptyNote>
 					)}
+					<dl className="mt-auto grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-3">
+						<Stat
+							label="Topic guess score, last 50 cards"
+							value={report.accuracy === null ? "—" : percent(report.accuracy)}
+						/>
+						<Stat label="Grades given" value={String(report.graded)} />
+					</dl>
 				</Panel>
 
 				<CodingPanel coding={coding} list={list} listName={listName} />
@@ -155,7 +184,7 @@ function Progress() {
 					elsewhere={shakyElsewhere}
 					plan={{ ...list, status: "shaky" }}
 				/>
-				<ActivityPanel activity={activity} />
+				<ActivityPanel activity={activity} streakDays={report.streakDays} />
 				<TopicMap topics={topicMap} list={list} listName={listName} />
 			</div>
 		</div>
@@ -175,8 +204,8 @@ function TopicMeters({ topics }: { topics: TopicRecall[] }) {
 					<Meter
 						key={t.topic}
 						label={t.topic}
-						value={t.recall}
-						detail={count(t.seen, "card")}
+						value={t.score}
+						text={`${percent(t.score)} (named ${t.named} of ${t.seen})`}
 						to={{ set: "all", topic: t.topic }}
 					/>
 				))}
@@ -185,7 +214,7 @@ function TopicMeters({ topics }: { topics: TopicRecall[] }) {
 				<Button
 					variant="outline"
 					size="sm"
-					className="self-start"
+					className="mb-3 self-start"
 					onClick={() => setAll(true)}
 				>
 					Show all {topics.length} topics
@@ -218,15 +247,16 @@ function SetLink({
 	);
 }
 
+/** A labelled bar that opens its cards; `text` says what the bar shows. */
 function Meter({
 	label,
 	value,
-	detail,
+	text,
 	to,
 }: {
 	label: string;
 	value: number;
-	detail: string;
+	text: string;
 	to: { set: StudySet; topic?: string; difficulty?: Difficulty };
 }) {
 	return (
@@ -236,47 +266,11 @@ function Meter({
 					<span className="font-medium group-hover:text-primary group-hover:underline">
 						{label}
 					</span>
-					<span className="text-muted-foreground tabular-nums">
-						{percent(value)} <span className="text-xs">({detail})</span>
-					</span>
+					<span className="text-muted-foreground tabular-nums">{text}</span>
 				</div>
 				<ProgressBar value={value} />
 			</Link>
 		</li>
-	);
-}
-
-/** Daily readiness as a small line; needs two days of history. */
-function Trend({ history }: { history: DailyScore[] }) {
-	if (history.length < 2) {
-		return (
-			<p className="my-3 text-sm text-muted-foreground">
-				A trend line appears after two days of practice.
-			</p>
-		);
-	}
-	const width = 320;
-	const height = 56;
-	const step = width / (history.length - 1);
-	const points = history
-		.map((d, i) => `${i * step},${height - d.readiness * height}`)
-		.join(" ");
-	return (
-		<svg
-			viewBox={`0 -2 ${width} ${height + 4}`}
-			className="my-3 h-14 w-full text-primary"
-			role="img"
-			aria-label={`Readiness over ${history.length} days, from ${percent(history[0].readiness)} to ${percent(history.at(-1)?.readiness ?? 0)}`}
-		>
-			<polyline
-				points={points}
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinejoin="round"
-				vectorEffect="non-scaling-stroke"
-			/>
-		</svg>
 	);
 }
 
@@ -286,7 +280,7 @@ function ResetAll() {
 		<ConfirmClear
 			trigger={<Button variant="destructive" />}
 			title="Clear all progress?"
-			description="This deletes every graded card, both lists and the score history. Your own answers stay."
+			description="This deletes every graded card and both lists. Your own answers, code and submissions stay."
 			onClear={async () => {
 				await api.clearProgress({ all: true });
 				await router.invalidate();

@@ -11,7 +11,7 @@ describe("percent", () => {
 	});
 
 	it("never shows a little progress as none", () => {
-		// Easy mastery with 1 of 252 graded; readiness 0.02%.
+		// A share like 2 of 2600.
 		expect(percent(0.00077)).toBe("<1%");
 		expect(percent(0.0002, 1)).toBe("<0.1%");
 		expect(percent(0.0049)).toBe("<1%");

@@ -13,8 +13,9 @@ import type { ShakySolve } from "@/lib/types";
 const SHOWN = 5;
 
 /**
- * The problems Accepted only after failing (two or more real failures, or a time limit),
- * newest first, each opening its code page with the shaky plan, so Next goes on to the rest.
+ * The problems Accepted only after failing (two or more real failures, or a time limit) and
+ * not solved cleanly again on a later day, newest first, each opening its code page with the
+ * shaky plan, so Next goes on to the rest.
  */
 export function ShakyPanel({
 	shaky,
@@ -32,7 +33,7 @@ export function ShakyPanel({
 		<Panel
 			id="shaky"
 			title="Shaky solves"
-			note="Accepted only after two or more failed tries, or a time limit: worth solving again."
+			note="Accepted only after two or more failed tries, or a time limit. One leaves the list once you solve it again on a later day with no failed try since your last Accepted."
 			action={
 				shaky.length > 0 && (
 					<PracticeButton plan={plan} size="sm" variant="outline">

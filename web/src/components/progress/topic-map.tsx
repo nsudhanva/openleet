@@ -12,18 +12,15 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { percent } from "@/lib/format";
+import { MIN_TOPIC_CARDS, shownTopics } from "@/lib/insights";
 import type { Plan } from "@/lib/plan";
 import type { TopicRow } from "@/lib/types";
 
-/** Topics listed before "Show all". */
-const SHOWN = 10;
-
 /**
- * Every topic of the list, most asked first: how much the company asks it (relative to the
- * most asked), how much of it you covered on cards or in the judge, your flashcard accuracy
- * on it, and what you solved. Practice opens its unsolved problems. Topics only, never which
- * problem has which.
+ * The list's topics, most problems first: how many problems each has, how much of it you
+ * covered on cards or in the judge, how often you named it on this list's cards, and what you
+ * solved. Topics with fewer than three problems wait for "Show all". Practice opens a topic's
+ * unsolved problems. Topics only, never which problem has which.
  */
 export function TopicMap({
 	topics,
@@ -36,25 +33,32 @@ export function TopicMap({
 	listName: string;
 }) {
 	const [all, setAll] = useState(false);
-	const shown = all ? topics : topics.slice(0, SHOWN);
-	const most = topics[0]?.weight || 1;
+	const shown = shownTopics(topics, all);
 	return (
 		<Panel
 			id="topic-map"
 			title="Topic map"
-			note={`Every topic of ${listName}, most asked first, and how much of it you covered with cards or in the judge.`}
+			note={`Every topic of ${listName}, most problems first, and how much of it you covered with cards or in the judge.`}
 			className="md:col-span-2 lg:col-span-3"
 		>
 			<Table className="table-fixed">
 				<TableHeader>
 					<TableRow>
 						<TableHead className="w-auto">Topic</TableHead>
-						<TableHead className="hidden w-[18%] md:table-cell">
-							Asked
+						<TableHead className="hidden w-20 text-right md:table-cell">
+							Problems
 						</TableHead>
-						<TableHead className="w-[38%] sm:w-[24%]">Covered</TableHead>
-						<TableHead className="hidden w-24 text-right sm:table-cell">
-							Cards
+						<TableHead
+							className="w-[38%] sm:w-[24%]"
+							title="Problems graded on a card or solved in the judge"
+						>
+							Covered
+						</TableHead>
+						<TableHead
+							className="hidden w-32 text-right sm:table-cell"
+							title={`Graded cards of this list with the topic that named it; shown from ${MIN_TOPIC_CARDS} cards`}
+						>
+							Named on cards
 						</TableHead>
 						<TableHead className="hidden w-20 text-right sm:table-cell">
 							Solved
@@ -66,7 +70,7 @@ export function TopicMap({
 				</TableHeader>
 				<TableBody>
 					{shown.map((t) => {
-						const cards = t.recall === null ? "—" : percent(t.recall);
+						const named = t.named === null ? "—" : `${t.named}/${t.graded}`;
 						return (
 							<TableRow key={t.topic}>
 								<TableCell className="whitespace-normal">
@@ -79,17 +83,19 @@ export function TopicMap({
 										{t.topic}
 									</Link>
 									<p className="text-xs text-muted-foreground sm:hidden">
-										{cards} on cards · {t.solved} solved
+										{t.named === null
+											? `${t.solved} solved`
+											: `named ${named} on cards · ${t.solved} solved`}
 									</p>
 								</TableCell>
-								<TableCell className="hidden md:table-cell">
-									<ProgressBar value={t.weight / most} className="h-1.5" />
-									<span className="sr-only">
-										{percent(t.weight / most)} of the most asked topic
-									</span>
+								<TableCell className="hidden text-right tabular-nums md:table-cell">
+									{t.problems}
 								</TableCell>
 								<TableCell>
-									<div className="flex items-center gap-2">
+									<div
+										className="flex items-center gap-2"
+										title={`${t.covered} of ${t.problems} graded or solved`}
+									>
 										<ProgressBar
 											value={t.covered / t.problems}
 											className="h-1.5 flex-1"
@@ -100,7 +106,7 @@ export function TopicMap({
 									</div>
 								</TableCell>
 								<TableCell className="hidden text-right tabular-nums sm:table-cell">
-									{cards}
+									{named}
 								</TableCell>
 								<TableCell className="hidden text-right tabular-nums sm:table-cell">
 									{t.solved}
@@ -119,7 +125,7 @@ export function TopicMap({
 					})}
 				</TableBody>
 			</Table>
-			{topics.length > SHOWN && (
+			{(all || shown.length < topics.length) && (
 				<Button
 					variant="link"
 					size="xs"

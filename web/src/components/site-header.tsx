@@ -4,8 +4,9 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { SearchDialog } from "@/components/search-dialog";
 import { buttonVariants } from "@/components/ui/button";
 import { useCompanies, useCompany } from "@/hooks/use-companies";
-import { companyName } from "@/lib/companies";
-import { percent } from "@/lib/format";
+import { ANY_COMPANY, companyName } from "@/lib/companies";
+import { readinessLabel, readinessText } from "@/lib/readiness";
+import type { Readiness } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const NAV: { to: LinkProps["to"]; label: string; exact?: boolean }[] = [
@@ -16,8 +17,9 @@ const NAV: { to: LinkProps["to"]; label: string; exact?: boolean }[] = [
 ];
 
 /** `readiness` is null while the server cannot say; the header then leaves it out. */
-export function SiteHeader({ readiness }: { readiness: number | null }) {
-	const company = companyName(useCompanies(), useCompany());
+export function SiteHeader({ readiness }: { readiness: Readiness | null }) {
+	const company = useCompany();
+	const name = companyName(useCompanies(), company);
 	return (
 		<header className="sticky top-0 z-40 h-12 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
 			<div className="mx-auto flex h-full max-w-7xl items-center gap-1 px-2 sm:gap-2 sm:px-5">
@@ -54,11 +56,14 @@ export function SiteHeader({ readiness }: { readiness: number | null }) {
 						<Link
 							to="/progress"
 							className="hidden items-center gap-2 rounded-md px-2 py-1 text-sm text-muted-foreground hover:text-foreground lg:flex"
-							title={`Readiness for ${company}, updated by the background scorer`}
+							title={readinessLabel(
+								company === ANY_COMPANY ? null : name,
+								readiness,
+							)}
 						>
-							Readiness
+							Ready
 							<span className="font-semibold text-foreground tabular-nums">
-								{percent(readiness, 1)}
+								{readinessText(readiness)}
 							</span>
 						</Link>
 					)}
