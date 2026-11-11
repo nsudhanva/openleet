@@ -42,7 +42,7 @@ import { ANY_COMPANY, type CompanySearch, companyName } from "@/lib/companies";
 import { pageTitle, percent, timeFrom } from "@/lib/format";
 import { tablePlan } from "@/lib/plan";
 import {
-	MAX_QUERY,
+	cleanQuery,
 	PROBLEMS_DEFAULTS,
 	type ProblemsSearch,
 	parseProblemsSearch,
@@ -403,7 +403,7 @@ function SearchBox({
 	});
 	useEffect(() => {
 		const timer = setTimeout(
-			() => commit(draft.trim().slice(0, MAX_QUERY).trim()),
+			() => commit(cleanQuery(draft)),
 			SEARCH_DEBOUNCE_MS,
 		);
 		return () => clearTimeout(timer);
@@ -420,8 +420,7 @@ function SearchBox({
 				value={draft}
 				onChange={(e) => setDraft(e.target.value)}
 				onKeyDown={(e) => {
-					if (e.key === "Enter")
-						commit(draft.trim().slice(0, MAX_QUERY).trim());
+					if (e.key === "Enter") commit(cleanQuery(draft));
 				}}
 				placeholder="Number, title, topic, or problem text"
 				aria-label="Search problems"

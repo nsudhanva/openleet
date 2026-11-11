@@ -91,6 +91,11 @@ function text(value: unknown, max = Number.POSITIVE_INFINITY) {
 	return trimmed || undefined;
 }
 
+/** A search query as the table keeps it: trimmed, cut to {@link MAX_QUERY}, trimmed again. */
+export function cleanQuery(query: string): string {
+	return text(query, MAX_QUERY) ?? "";
+}
+
 /** Drops undefined keys, so the URL carries only what was chosen. */
 function compact<T extends object>(parsed: T): T {
 	for (const key of Object.keys(parsed) as (keyof T)[]) {

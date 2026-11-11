@@ -88,8 +88,10 @@ const EXACT_TITLE_BONUS: u32 = 500;
 /// Bonus when the title starts with the whole query.
 const TITLE_PREFIX_BONUS: u32 = 200;
 
-/// Whitespace as JavaScript's `\s` and `String.prototype.trim` define it.
-const fn is_js_space(c: char) -> bool {
+/// White space as JavaScript's `\s` and `String.prototype.trim` define it: Rust's, but with
+/// U+FEFF and without U+0085.
+#[must_use]
+pub const fn is_js_space(c: char) -> bool {
     matches!(
         c,
         '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{A0}' | '\u{1680}' | '\u{2000}'

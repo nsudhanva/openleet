@@ -10,21 +10,15 @@
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
+use std::str::FromStr;
+
+use openleet::model::{Difficulty, Period};
+use openleet::plan::{PlanOrder, PlanStatus};
+use openleet::scheduler::StudySet;
+use openleet::search::is_js_space;
 
 /// The router's default company (web/src/lib/companies.ts).
 const DEFAULT_COMPANY: &str = "google";
-/// The study sets, periods and difficulties the app accepts (web/src/lib/scheduler.ts, types.ts).
-const SETS: &[&str] = &[
-    "smart", "due", "new", "again", "less", "missed", "skipped", "all",
-];
-const PERIODS: &[&str] = &["30d", "3m", "6m", "all", "lc1000"];
-const DIFFICULTIES: &[&str] = &["Easy", "Medium", "Hard"];
-/// The plan statuses and orders the problem table sends, all but their defaults (lib/plan.ts):
-/// the table shows every problem in list order when they are left out.
-const STATUSES: &[&str] = &["unsolved", "untried", "shaky"];
-const ORDERS: &[&str] = &["number", "easy-first", "random"];
-const DEFAULT_SET: &str = "smart";
-const DEFAULT_PERIOD: &str = "6m";
 /// Longest topic and search query the app keeps (web/src/lib/schemas.ts).
 const MAX_TOPIC: usize = 100;
 const MAX_QUERY: usize = 200;
@@ -123,7 +117,7 @@ enum Value {
     Number(Option<String>),
     /// An array (a repeated param), boolean, null or object.
     Other,
-    /// JSON that JavaScript and serde_json might read differently.
+    /// JSON that JavaScript and `serde_json` might read differently.
     Unsure,
 }
 
@@ -189,10 +183,10 @@ impl Value {
         Ok((!text.is_empty()).then(|| text.to_owned()))
     }
 
-    /// The value when it is one of `allowed` (`oneOf()` in schemas.ts).
-    fn one_of(&self, allowed: &[&'static str]) -> Option<&'static str> {
+    /// The variant the value spells (`oneOf()` in schemas.ts).
+    fn one_of<T: FromStr>(&self) -> Option<T> {
         match self {
-            Self::Text(text) => allowed.iter().copied().find(|a| a == text),
+            Self::Text(text) => text.parse().ok(),
             _ => None,
         }
     }
@@ -215,12 +209,6 @@ fn looks_numeric(text: &str) -> bool {
             .trim_end()
             .bytes()
             .all(|b| b.is_ascii_digit() || b"+-.eE".contains(&b))
-}
-
-/// JavaScript's white space and line terminators (`\s`, what `trim()` removes): they include
-/// U+FEFF and leave out U+0085, unlike Rust's.
-fn is_js_space(c: char) -> bool {
-    (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}'
 }
 
 fn js_trim(text: &str) -> &str {
@@ -247,8 +235,8 @@ impl Params {
         self.0.get(key)
     }
 
-    fn one_of(&self, key: &str, allowed: &[&'static str]) -> Option<&'static str> {
-        self.get(key).and_then(|v| v.one_of(allowed))
+    fn one_of<T: FromStr>(&self, key: &str) -> Option<T> {
+        self.get(key).and_then(Value::one_of)
     }
 
     fn text(&self, key: &str, max: usize) -> Result<Option<String>, ()> {
@@ -265,14 +253,13 @@ impl Params {
 
     /// The study page's `deckQuery`.
     fn deck(&self, company: String) -> Option<String> {
-        let set = self.one_of("set", SETS).unwrap_or(DEFAULT_SET);
-        let period = self.one_of("period", PERIODS).unwrap_or(DEFAULT_PERIOD);
+        let set: StudySet = self.one_of("set").unwrap_or_default();
         Some(api(
             "/api/deck",
             &[
                 ("company", Some(company)),
-                ("set", Some(set.to_owned())),
-                ("period", Some(period.to_owned())),
+                ("set", Some(set.to_string())),
+                ("period", Some(self.period())),
                 ("topic", self.text("topic", MAX_TOPIC).ok()?),
                 ("difficulty", self.difficulty()),
                 ("slug", self.text("slug", usize::MAX).ok()?),
@@ -282,23 +269,37 @@ impl Params {
 
     /// The problem table's `problemsQuery`.
     fn problems(&self, company: String) -> Option<String> {
-        let period = self.one_of("period", PERIODS).unwrap_or(DEFAULT_PERIOD);
+        // The table leaves out the plan's "all" status and "rank" order: every problem, in
+        // list order (lib/plan.ts).
+        let status = self
+            .one_of::<PlanStatus>("status")
+            .filter(|&s| s != PlanStatus::All);
+        let order = self
+            .one_of::<PlanOrder>("order")
+            .filter(|&o| o != PlanOrder::Rank);
         Some(api(
             "/api/problems",
             &[
                 ("company", Some(company)),
-                ("period", Some(period.to_owned())),
+                ("period", Some(self.period())),
                 ("topic", self.text("topic", MAX_TOPIC).ok()?),
                 ("difficulty", self.difficulty()),
-                ("status", self.one_of("status", STATUSES).map(str::to_owned)),
-                ("order", self.one_of("order", ORDERS).map(str::to_owned)),
+                ("status", status.map(|s| s.to_string())),
+                ("order", order.map(|o| o.to_string())),
                 ("q", self.text("q", MAX_QUERY).ok()?),
             ],
         ))
     }
 
+    fn period(&self) -> String {
+        self.one_of::<Period>("period")
+            .unwrap_or_default()
+            .to_string()
+    }
+
     fn difficulty(&self) -> Option<String> {
-        self.one_of("difficulty", DIFFICULTIES).map(str::to_owned)
+        self.one_of::<Difficulty>("difficulty")
+            .map(|d| d.to_string())
     }
 }
 
