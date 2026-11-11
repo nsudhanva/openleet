@@ -27,8 +27,13 @@ docker compose --profile dev up -d judge-dev   # judge on 127.0.0.1:7777
 JUDGE_SOCKET=tcp://127.0.0.1:7777 cargo run --release -p openleet
 ```
 
-The app is at <http://localhost:8080>. `bun run dev` serves the web app with hot reload on
-<http://localhost:3000>.
+The first `cargo run --release` compiles DuckDB and takes a few minutes. The app is then at
+<http://localhost:8080>. `bun run dev` serves the web app with hot reload on
+<http://localhost:3000> and sends `/api` to the server on port 8080 (`API_URL` changes that).
+
+Local progress goes to `data/openleet.duckdb`, with daily copies in `data/backups/`; both are
+ignored by git. Stop the server and delete them to start over. Stop the judge with
+`docker compose --profile dev down judge-dev`.
 
 ## Checks
 
