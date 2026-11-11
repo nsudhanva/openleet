@@ -1,6 +1,9 @@
 #!/bin/sh
-# Sets up a fresh Ubuntu server for openleet (run once as root):
-#   sudo deploy/install.sh    then fill in /etc/openleet.env and run /opt/openleet/update.sh
+# Sets up an Ubuntu server for openleet and starts it, from a clone of the repository:
+#   sudo SITE_ADDRESS=openleet.example.com deploy/install.sh
+# Optional: TZ (day boundaries for streaks, default UTC) and DEPLOY_SECRET (CI's deploy
+# requests). The values go to /etc/openleet.env; running it again keeps that file's values
+# unless new ones are given. Releases come from the GitHub repository the clone came from.
 # With --units-only (update.sh runs it from each release), it only refreshes the systemd units,
 # the update script and the judge's Python packages.
 set -eu
@@ -61,6 +64,19 @@ if [ "${1:-}" = "--units-only" ]; then
 	exit 0
 fi
 
+[ "$(id -u)" = 0 ] || {
+	echo "run as root: sudo SITE_ADDRESS=openleet.example.com $0" >&2
+	exit 1
+}
+if [ -z "${SITE_ADDRESS:-}" ] && ! grep -q '^SITE_ADDRESS=.' "$ENV_FILE" 2>/dev/null; then
+	echo "set the site's domain: sudo SITE_ADDRESS=openleet.example.com $0" >&2
+	echo "(or SITE_ADDRESS=http://HOST for plain HTTP without a certificate)" >&2
+	exit 1
+fi
+# The GitHub repository whose releases this server installs: the clone's origin.
+repository=$(git -c safe.directory='*' -C "$HERE" remote get-url origin 2>/dev/null |
+	sed -n 's#^.*github\.com[:/]\([^/]*/[^/]*\)$#\1#p' | sed 's/\.git$//')
+
 apt-get update -qq
 apt-get install -y --no-install-recommends curl jq zstd ca-certificates >/dev/null
 id openleet >/dev/null 2>&1 || useradd --system --home-dir /var/lib/openleet --shell /usr/sbin/nologin openleet
@@ -71,7 +87,7 @@ if ! command -v uv >/dev/null; then
 	curl -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
 fi
 export UV_PYTHON_INSTALL_DIR="$ROOT/python"
-uv python install "$PYTHON"
+uv python install --no-bin "$PYTHON"
 uv venv --allow-existing --python "$PYTHON" "$ROOT/venv"
 chmod -R a+rX "$ROOT/python" "$ROOT/venv"
 install_judge_packages
@@ -79,15 +95,29 @@ install_judge_packages
 if [ ! -f "$ENV_FILE" ]; then
 	cat >"$ENV_FILE" <<'ENV'
 # The site's domain (HTTPS certificate is automatic), or http://host for plain HTTP.
-SITE_ADDRESS=openleet.example.com
+SITE_ADDRESS=
 # Day boundaries for streaks, such as America/Los_Angeles.
 TZ=UTC
 # Shared with the GitHub secret DEPLOY_SECRET; CI signs its deploy requests with it.
 DEPLOY_SECRET=
+# The GitHub repository (owner/name) whose "edge" release update.sh installs.
+OPENLEET_REPO=nsudhanva/openleet
 ENV
-	chmod 0640 "$ENV_FILE"
-	chgrp openleet "$ENV_FILE"
 fi
+chmod 0640 "$ENV_FILE"
+chgrp openleet "$ENV_FILE"
+# Sets KEY=VALUE in the env file, replacing the line or adding it.
+set_env() {
+	grep -v "^$1=" "$ENV_FILE" >"$ENV_FILE.new" || true
+	printf '%s=%s\n' "$1" "$2" >>"$ENV_FILE.new"
+	chmod 0640 "$ENV_FILE.new"
+	chgrp openleet "$ENV_FILE.new"
+	mv "$ENV_FILE.new" "$ENV_FILE"
+}
+if [ -n "${SITE_ADDRESS:-}" ]; then set_env SITE_ADDRESS "$SITE_ADDRESS"; fi
+if [ -n "${TZ:-}" ]; then set_env TZ "$TZ"; fi
+if [ -n "${DEPLOY_SECRET:-}" ]; then set_env DEPLOY_SECRET "$DEPLOY_SECRET"; fi
+if [ -n "$repository" ]; then set_env OPENLEET_REPO "$repository"; fi
 
 # Submissions have no use for io_uring, a common kernel attack surface.
 echo "kernel.io_uring_disabled = 2" >/etc/sysctl.d/90-openleet.conf
@@ -113,5 +143,15 @@ Unattended-Upgrade::Automatic-Reboot "true";
 Unattended-Upgrade::Automatic-Reboot-Time "10:00";
 APT
 
-install_units
-echo "Fill in $ENV_FILE, then run $ROOT/update.sh"
+# The update script installs the newest release, its units (which start the timers) and starts
+# the services; the units come from the release, so none run before the env file is complete.
+install -m 0755 "$HERE/update.sh" "$ROOT/update.sh"
+before=$(readlink -f "$ROOT/current" 2>/dev/null || true)
+"$ROOT/update.sh"
+# Already up to date: restart anyway, so changed settings take effect.
+if [ "$(readlink -f "$ROOT/current")" = "$before" ]; then
+	systemctl restart openleet-judge.service openleet.service
+fi
+site=$(sed -n 's/^SITE_ADDRESS=//p' "$ENV_FILE")
+case $site in http://*) ;; *) site=https://$site ;; esac
+echo "OpenLeet is running: $site (status: $site/api/health, logs: journalctl -u openleet)"

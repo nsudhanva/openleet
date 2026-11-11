@@ -1,6 +1,7 @@
 # One command for OpenLeet in Docker: docker compose up -d, then http://openleet.localhost
 # (HTTP_PORT=8088 docker compose up -d when port 80 is taken: http://openleet.localhost:8088).
 # Production runs natively under systemd instead; see deploy/ and the README.
+# Images come from ghcr.io/nsudhanva; a fork's CI publishes its own: IMAGES=ghcr.io/OWNER.
 name: openleet
 
 x-hardened: &hardened
@@ -28,7 +29,7 @@ services:
 
   app:
     <<: *hardened
-    image: ghcr.io/nsudhanva/openleet:latest
+    image: ${IMAGES:-ghcr.io/nsudhanva}/openleet:latest
     build:
       context: .
       target: app
@@ -48,7 +49,7 @@ services:
 
   judge: &judge
     <<: *hardened
-    image: ghcr.io/nsudhanva/openleet-judge:latest
+    image: ${IMAGES:-ghcr.io/nsudhanva}/openleet-judge:latest
     build:
       context: .
       target: judge

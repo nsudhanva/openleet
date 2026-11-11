@@ -1,11 +1,13 @@
 #!/bin/sh
-# Installs the release CI published (github.com/nsudhanva/openleet, release "edge") if it is new:
-# unpack next to the others, switch the `current` link, restart.
+# Installs the release CI published (release "edge" of the GitHub repository OPENLEET_REPO in
+# /etc/openleet.env) if it is new: unpack next to the others, switch the `current` link, restart.
 # Run as root by openleet-update.service (on CI's signed deploy request, and every 5 minutes as
 # a fallback); safe to run by hand.
 set -eu
 ROOT=/opt/openleet
-BASE=https://github.com/nsudhanva/openleet/releases/download/edge
+ENV_FILE=/etc/openleet.env
+repository=$(sed -n 's/^OPENLEET_REPO=//p' "$ENV_FILE" 2>/dev/null || true)
+BASE=https://github.com/${repository:-nsudhanva/openleet}/releases/download/edge
 # Written by the server after it checks the HMAC of CI's deploy request.
 REQUEST=/var/lib/openleet/deploy-request
 # Every revision this server has installed, oldest first.
