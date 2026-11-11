@@ -4,8 +4,15 @@ import unittest
 
 import calibrate
 import harness
+import prelude
 
 FUNCTION = {"kind": "function"}
+
+
+class PreludeTests(unittest.TestCase):
+    def test_pow_keeps_its_modular_form(self):
+        self.assertEqual(prelude.pow(3, 4, 5), 1)
+        self.assertEqual(prelude.abs(-2), 2)
 
 
 class SizeTests(unittest.TestCase):

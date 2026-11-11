@@ -5,6 +5,7 @@ User code runs with this module's globals (copied), so `List`, `deque`, `heappus
 """
 
 import bisect
+import builtins
 import collections
 import functools
 import heapq
@@ -27,6 +28,11 @@ from typing import *  # noqa: F403
 
 import sortedcontainers
 from sortedcontainers import SortedDict, SortedList, SortedSet
+
+# The math and operator star imports bind `pow` (two arguments only) and `abs` over the builtins:
+# `pow(base, exp, mod)` must keep working.
+pow = builtins.pow
+abs = builtins.abs
 
 __all__ = [
     "ListNode",
