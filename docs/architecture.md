@@ -74,13 +74,12 @@ its full limit within that, the submission is not judged and the page asks for i
 Each problem's limit comes from its trusted reference solutions (LeetCodeDataset's and
 doocs'), timed through the judge on exactly the tests a submission gets: 50× the fastest (but
 no more than 10 s for that), at least 2× the slowest and at least 1 s, at most 30 s
-(`src/openleet/judging/limits.py`). Mercury's accepted submissions still vote on the expected
-outputs but set no limits, since the slowest of them is often a worse complexity class that
-LeetCode let through. The same complexity written clumsily (memoized recursion, a sorted
-container searched by hand) took up to 41× the fastest reference, while the next complexity
-class does about n / log n times the work, 180× or more on stress inputs of 2,000 elements and
-up, and thousands of times on the usual 10^4 to 10^5. Problems whose tests are small cannot
-tell the classes apart.
+(`src/openleet/judging/limits.py`). Mercury's accepted submissions vote on the expected outputs
+but set no limits: the slowest of them are often a worse complexity class that LeetCode accepts.
+The same complexity written clumsily (memoized recursion, a sorted container searched by hand)
+takes up to 41× the fastest reference, while the next complexity class does about n / log n
+times the work: 180× or more on stress inputs of 2,000 elements and up, and thousands of times
+on the usual 10^4 to 10^5. Problems whose tests are small cannot tell the classes apart.
 
 ```bash
 uv run openleet judge time     # time every reference on the judges in JUDGE_SOCKETS, set limits
