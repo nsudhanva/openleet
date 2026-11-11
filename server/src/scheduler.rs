@@ -168,7 +168,7 @@ pub fn card_states(attempts: &[Attempt]) -> CardStates {
 /// Where a card stands at `now`. A skipped card that was never graded goes back to "new"
 /// once its skip delay ends.
 #[must_use]
-pub fn card_status(state: Option<&CardState>, now: i64) -> CardStatus {
+pub const fn card_status(state: Option<&CardState>, now: i64) -> CardStatus {
     match state {
         Some(s) if s.due > now => CardStatus::Later,
         Some(s) if s.reviews > 0 => CardStatus::Due,

@@ -229,7 +229,7 @@ impl Plan {
         }
     }
 
-    fn with_filter(self, topic: Option<TopicId>, difficulty: Option<Difficulty>) -> Self {
+    const fn with_filter(self, topic: Option<TopicId>, difficulty: Option<Difficulty>) -> Self {
         Self {
             filter: ProblemFilter { topic, difficulty },
             ..self

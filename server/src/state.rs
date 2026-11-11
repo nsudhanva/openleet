@@ -55,7 +55,7 @@ impl Progress {
     }
 
     /// What the learner did in the judge, for plans.
-    pub fn marks(&self) -> Marks<'_> {
+    pub const fn marks(&self) -> Marks<'_> {
         &self.coding
     }
 

@@ -34,7 +34,7 @@ pub struct Certificate {
 
 impl Certificate {
     /// When rustls-acme orders the next one: two thirds into the validity period.
-    pub fn renews_at(&self) -> i64 {
+    pub const fn renews_at(&self) -> i64 {
         self.expires_at - (self.expires_at - self.issued_at) / 3
     }
 }

@@ -273,7 +273,7 @@ fn topic_map<'a>(
 /// A non-negative sum of frequencies (0 to 100 each, a few thousand problems) as a whole
 /// number.
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn whole(weight: f32) -> u32 {
+const fn whole(weight: f32) -> u32 {
     weight.max(0.0).round() as u32
 }
 

@@ -124,7 +124,7 @@ pub enum Opening {
 
 impl Opening {
     /// Whether the database started out empty (so older data may be imported into it).
-    pub fn started_empty(&self) -> bool {
+    pub const fn started_empty(&self) -> bool {
         matches!(self, Self::Created | Self::Recovered { backup: None, .. })
     }
 }

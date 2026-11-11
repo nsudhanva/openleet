@@ -28,7 +28,7 @@ struct Health<'a> {
     certificate: Option<Certificate>,
 }
 
-fn status(up: bool) -> &'static str {
+const fn status(up: bool) -> &'static str {
     if up { "ok" } else { "down" }
 }
 

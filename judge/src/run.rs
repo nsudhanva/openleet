@@ -22,7 +22,7 @@ use crate::watchdog::{Kill, KillSwitch, watch};
 use crate::zygote::{ChildEvent, Done, Zygote};
 
 /// Virtual memory per solution: the 256 MB recursion stack plus about 400 MB of heap. It sits
-/// below the service's 450 MB memory limit, so a memory hog gets a clean MemoryError (Memory
+/// below the service's 450 MB memory limit, so a memory hog gets a clean `MemoryError` (Memory
 /// Limit Exceeded) before the kernel starts reclaiming memory system-wide, which on a 1 GB
 /// machine burns enough CPU to end in a time limit instead.
 const ADDRESS_SPACE_MB: u32 = 704;
