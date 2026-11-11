@@ -88,12 +88,14 @@ jobs:
         # Before the Rust checks: the server embeds web/dist.
         run: bun run build
       - name: Test corpus
-        # tests.duckdb is too big for git; corpus.json names its asset on the "corpus" release.
+        # tests.duckdb is too big for git; corpus.json names the repository whose "corpus"
+        # release holds it, the asset and its sha256.
         run: |
+          repository=$(jq -r .repository data/judge/corpus.json)
           asset=$(jq -r .asset data/judge/corpus.json)
           sha256=$(jq -r .sha256 data/judge/corpus.json)
           curl -fsSL --retry 3 -o data/judge/tests.duckdb \
-            "https://github.com/$GITHUB_REPOSITORY/releases/download/corpus/$asset"
+            "https://github.com/$repository/releases/download/corpus/$asset"
           echo "$sha256  data/judge/tests.duckdb" | sha256sum -c -
       - name: Checks and tests
         # Exactly the git hooks (.pre-commit-config.yaml): linters, type checks, clippy, tests.
@@ -155,9 +157,12 @@ jobs:
               gh release delete-asset edge "$name.sha256" -y || true
             done
       - name: Deploy and wait until live
+        # The repository variable SITE_URL names the server; without it, releases are only
+        # published, and servers pick them up with their 5-minute update timer.
+        if: vars.SITE_URL != ''
         env:
           DEPLOY_SECRET: ${{ secrets.DEPLOY_SECRET }}
-          SITE: https://openleet.sudhanva.me
+          SITE: ${{ vars.SITE_URL }}
         run: |
           if [ -z "$DEPLOY_SECRET" ]; then echo "::error::the DEPLOY_SECRET secret is not set"; exit 1; fi
           body="{\"revision\":\"$REV\"}"
