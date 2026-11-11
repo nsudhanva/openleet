@@ -1,9 +1,9 @@
-"""Robot Collisions at n = 2 * 10^4: every robot left of the middle moves right and every robot
+"""Robot Collisions at n = 10^5: every robot left of the middle moves right and every robot
 right of it moves left, so ~n collisions happen at one meeting point and rescanning for the next
-colliding pair after each one is O(n^2)."""
+colliding pair after each one is O(n^2), as is deleting each destroyed robot from a list."""
 
 SEEDS = 2
-N = 2 * 10**4
+N = 10**5
 LIMIT = 10**9
 
 

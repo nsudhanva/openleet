@@ -1,15 +1,15 @@
 """Array Statistics Tracker with ~5 * 10^4 calls: 2.5 * 10^4 numbers then adds, removals and
-queries, or 2.8 * 10^4 distinct ascending numbers (all tied, so the first added is the mode) then
-removals of that mode each followed by getMode, so sorting for each median or rescanning the counts
-for each mode costs ~10^8 to 5 * 10^8 steps."""
+queries, or 4.4 * 10^4 distinct ascending numbers (all tied, so the first added is the mode) then
+1.7 * 10^4 removals of that mode each followed by two getMode calls (~10^5 calls), so sorting for
+each median or scanning the tied numbers for each mode costs ~10^9 steps."""
 
 from _shapes import pick_shape
 
 SEEDS = 3
 CALLS = 5 * 10**4
 FILL = 25000
-TIED = 28000
-ROUNDS = 7000
+TIED = 44000
+ROUNDS = 17000
 
 
 def generate(rng):

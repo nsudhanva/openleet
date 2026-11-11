@@ -1,20 +1,20 @@
-"""Equalize Strings by Adding or Removing Characters at Ends with two 1000-letter runs of one
-letter, each broken by a private letter and sharing one more letter that the answer (~450 to 600
-long) runs through, placed so that growing or shrinking a candidate length and searching for
-each substring fails late many times: extending a match from every pair of positions is ~10^8
-steps."""
+"""Equalize Strings by Adding or Removing Characters at Ends with six pairs of 1000-letter strings,
+each a long run of one letter broken by a private letter and sharing one more letter that the
+answer runs through, placed so that both growing and shrinking a candidate length and
+searching for each substring fail late many times: ~10^8 steps of substring comparison, 2 to 3
+seconds per seed."""
 
 from string import ascii_lowercase
 
 from _shapes import pick_shape
 
-SEEDS = 3
+SEEDS = 6
 N = 1000
 
 # (first, second) layouts: (initial, target) as (u-run before the private letter, u-run between
-# it and the shared letter); found by searching for the slowest growing (shapes 0 and 2) and
-# shrinking (shape 1) substring searches.
-LAYOUTS = [((14, 115), (259, 278)), ((394, 383), (530, 15)), ((14, 115), (259, 278))]
+# it and the shared letter); found by searching for the slowest growing and shrinking substring
+# searches together.
+LAYOUTS = [((900, 38), (262, 294)), ((900, 83), (238, 317)), ((879, 91), (255, 306))]
 
 
 def generate(rng):

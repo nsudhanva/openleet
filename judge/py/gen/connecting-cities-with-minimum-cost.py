@@ -1,14 +1,15 @@
 """Connecting Cities With Minimum Cost with 10^4 connections: a spanning tree of 10^4 cities
-(path-like or random) plus one extra edge, or a star on 6667 cities whose edges, cheapest first,
-grow a union-find chain when roots are never balanced, plus extra edges between the first leaves
-just before the last star edge; Prim's O(n) minimum scan per step costs ~10^8 steps."""
+(a path whose edges get ascending costs, or a random tree) plus one extra edge, or a star on
+10^4 cities whose edges, cheapest first, grow a union-find chain when roots are never balanced.
+Cheapest-first merging into the largest component makes relabel-all unions ~5 * 10^7 steps and
+Prim's O(n) minimum scan per step ~10^8."""
 
 from _shapes import pick_shape
 
 SEEDS = 3
 N = 10**4
 E = 10**4
-STAR = 6667
+STAR = N
 
 
 def tree(rng):
@@ -22,8 +23,13 @@ def tree(rng):
     while len(pairs) < E:
         a, b = rng.sample(labels, 2)
         pairs.append((a, b))
-    rng.shuffle(pairs)
-    return {"n": N, "connections": [[a, b, rng.randint(0, 10**5)] for a, b in pairs]}
+    if chain > 0.5:
+        costs = sorted(rng.sample(range(10**5 + 1), E))
+        edges = [[a, b, c] for (a, b), c in zip(pairs, costs, strict=True)]
+    else:
+        edges = [[a, b, rng.randint(0, 10**5)] for a, b in pairs]
+    rng.shuffle(edges)
+    return {"n": N, "connections": edges}
 
 
 def star(rng, center_first):

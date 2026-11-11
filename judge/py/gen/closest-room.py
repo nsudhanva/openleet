@@ -1,14 +1,23 @@
-"""Closest Room with 2 * 10^4 rooms and the maximum 10^4 queries: small rooms hold one end of the
-ids and big ones the other, and most queries prefer the small end but need a big room, so scanning
-rooms per query (all of them, the big ones, or outward from the preferred id) costs ~10^8 steps."""
+"""Closest Room. Seed 0 has 2 * 10^4 rooms and the maximum 10^4 queries: small rooms hold one end
+of the ids and big ones the other, and most queries prefer the small end but need a big room, so
+scanning rooms per query (all of them, the big ones, or outward from the preferred id) costs
+~10^8 steps. Most other seeds have 10^5 rooms whose size grows with the id and queries that need
+at most 1,000 (so the reference removes few rooms): adding rooms to a sorted list with
+bisect.insort in descending size order inserts every id at the front, ~2.7 s a seed against
+~0.15 s for the reference."""
 
-SEEDS = 2
+from _shapes import pick_shape
+
+SEEDS = 10
 N = 2 * 10**4
 K = 10**4
 LIMIT = 10**7
+BIG = 10**5
 
 
 def generate(rng):
+    if pick_shape(rng) != 0:
+        return heavy(rng)
     ids = sorted(rng.sample(range(1, LIMIT + 1), N))
     half = LIMIT // 2
     sizes = [rng.randint(1, half) for _ in range(N // 2)]
@@ -29,4 +38,14 @@ def generate(rng):
             queries.append([rng.randint(1, LIMIT), rng.randint(1, biggest)])
         else:
             queries.append([rng.randint(*near), rng.randint(half + 1, biggest)])
+    return {"rooms": rooms, "queries": queries}
+
+
+def heavy(rng):
+    ids = sorted(rng.sample(range(1, LIMIT + 1), BIG))
+    sizes = sorted(rng.sample(range(1, LIMIT + 1), BIG))
+    rooms = [[i, s] for i, s in zip(ids, sizes, strict=True)]
+    rng.shuffle(rooms)
+    queries = [[rng.randint(1, LIMIT), rng.randint(1, 1000)] for _ in range(K)]
+    queries[rng.randrange(K)][1] = 1
     return {"rooms": rooms, "queries": queries}

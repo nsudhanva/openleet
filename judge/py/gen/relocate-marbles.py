@@ -1,8 +1,8 @@
-"""Relocate Marbles at 10^4 marbles and 10^4 moves, so rewriting the marble list on each move costs
-~10^8 steps."""
+"""Relocate Marbles at 10^5 marbles and 10^5 moves, so rewriting the marble list on each move costs
+~10^10 steps and keeping the positions in a sorted list moves ~2 * 10^10 bytes."""
 
 SEEDS = 2
-N = 10**4
+N = 10**5
 LIMIT = 10**9
 
 

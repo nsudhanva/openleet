@@ -1,9 +1,9 @@
-"""Minimum Number of Flips to Make the Binary String Alternating at odd n = 20,001: an
+"""Minimum Number of Flips to Make the Binary String Alternating at odd n = 99,999: an
 alternating string with one rotation seam and noise, so counting mismatches for every rotation
-is ~4 * 10^8 steps."""
+is ~10^10 steps, and even re-parsing every rotated string as a binary number is ~10^10 digits."""
 
 SEEDS = 2
-N = 20001
+N = 99999
 
 
 def generate(rng):

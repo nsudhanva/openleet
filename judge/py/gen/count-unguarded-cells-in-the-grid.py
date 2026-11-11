@@ -1,21 +1,21 @@
 """Count Unguarded Cells at m * n ~ 10^5: one row (or column) holding 5 * 10^4 guards and a
 guard-free stretch between two walls, so guards that look past other guards walk ~10^9 cells, or
-a 316 x 316 grid with two guards and walls, so scanning outward from every cell costs ~6 * 10^7
-steps."""
+a 100 x 1000 grid with two guards and two walls, so scanning outward from every cell walks a whole
+row and column, ~10^8 steps."""
 
 from _shapes import pick_shape
 
 SEEDS = 3
 CELLS = 10**5
 GUARDS = 5 * 10**4
-SIDE = 316
+ROWS, COLS = 100, 1000
 GAP = 300  # unguarded cells walled off from the guards in the line shapes
 
 
 def generate(rng):
     shape = pick_shape(rng)
     if shape == 2:
-        m = n = SIDE
+        m, n = ROWS, COLS
         cells = rng.sample(range(m * n), 4)
         guards, walls = cells[:2], cells[2:]
     else:

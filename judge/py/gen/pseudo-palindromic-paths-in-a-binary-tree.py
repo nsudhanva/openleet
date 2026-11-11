@@ -1,10 +1,10 @@
-"""Pseudo-Palindromic Paths at 5 * 10^4 nodes shaped as a caterpillar: a 2.5 * 10^4-node spine
-with a leaf hanging off each node, so recounting each root-to-leaf path does ~3 * 10^8 steps."""
+"""Pseudo-Palindromic Paths at 10^5 nodes shaped as a caterpillar: a 5 * 10^4-node spine
+with a leaf hanging off each node, so recounting each root-to-leaf path does ~10^9 steps."""
 
 from _shapes import level_order
 
 SEEDS = 2
-N = 5 * 10**4
+N = 10**5
 
 
 def generate(rng):

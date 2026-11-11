@@ -1,10 +1,10 @@
-"""Minimize the Maximum Edge Weight of Graph with 10^4 nodes and 2 * 10^4 distinct-weight edges,
-one node leaving only by the median-weight edge, so a search per candidate weight is quadratic
-from either end."""
+"""Minimize the Maximum Edge Weight of Graph with 2 * 10^4 nodes and 6 * 10^4 distinct-weight
+edges, one node leaving only by the median-weight edge, so a search per candidate weight is
+quadratic from either end."""
 
 SEEDS = 2
-N = 10**4
-M = 2 * 10**4
+N = 2 * 10**4
+M = 6 * 10**4
 LIMIT = 10**6
 
 

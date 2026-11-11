@@ -1,7 +1,7 @@
-"""Stone Game VII at n = 1,000, so recomputing each interval's remaining sum with a loop
-instead of prefix sums is ~1.7 * 10^8 steps."""
+"""Stone Game VII at n = 1,000 over 5 seeds, so recomputing each interval's remaining sum with a
+loop instead of prefix sums is ~9 * 10^8 steps in all, past the 10 s cap on the limit."""
 
-SEEDS = 2
+SEEDS = 5
 N = 1000
 LIMIT = 1000
 

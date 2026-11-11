@@ -1,9 +1,9 @@
-"""Zero Array Transformation III at 2 * 10^4 numbers and 2 * 10^4 long queries, each number up
+"""Zero Array Transformation III at 7 * 10^4 numbers and 7 * 10^4 long queries, each number up
 to half its coverage, so thousands of queries are live at once and picking the farthest-reaching
-one by scanning (and dropping expired ones by rescanning) is ~10^8 steps."""
+one by scanning (and dropping expired ones by rescanning) is ~10^9 steps."""
 
 SEEDS = 2
-N = 2 * 10**4
+N = 7 * 10**4
 
 
 def generate(rng):

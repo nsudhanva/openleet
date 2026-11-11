@@ -1,9 +1,9 @@
-"""Minimum Time to Visit a Cell at 100 x 100: a serpentine corridor of low cells (along rows,
-or columns) between walls of 5 * 10^4 to 10^5, so the best path is ~5000 steps long and
-relaxing every cell until nothing changes takes thousands of sweeps."""
+"""Minimum Time to Visit a Cell at 316 x 316 (~10^5 cells): a serpentine corridor of low cells
+(along rows, or columns) between walls of 5 * 10^4 to 10^5, so the best path is ~5 * 10^4 steps
+long and relaxing every cell until nothing changes takes tens of thousands of sweeps."""
 
 SEEDS = 2
-M = 100
+M = 316
 WALL = 10**5
 
 

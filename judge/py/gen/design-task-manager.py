@@ -1,16 +1,17 @@
-"""Design Task Manager with 2 * 10^4 starting tasks and 2 * 10^4 calls, 40 % of them execTop
-among adds, edits and removals, so scanning every task for the top is ~10^8 steps."""
+"""Design Task Manager with 4 * 10^4 starting tasks and 8 * 10^4 calls, 30 % of them execTop and
+adds keeping the live set near 3.5 * 10^4, so scanning every live task for the top is ~10^9
+steps."""
 
 import heapq
 
 SEEDS = 2
-TASKS = 2 * 10**4
-CALLS = 2 * 10**4
+TASKS = 4 * 10**4
+CALLS = 8 * 10**4
 TOP = 10**9
 
 
 def generate(rng):
-    ids = rng.sample(range(10**5 + 1), 10**5 + 1)
+    ids = rng.sample(range(10**5 + 1), 75000)
     live = {}  # taskId -> priority
     heap = []  # (-priority, -taskId), stale entries skipped
 
@@ -27,7 +28,7 @@ def generate(rng):
     order = list(live)  # live task ids, for picking one at random
     while len(ops) <= CALLS:
         r = rng.random()
-        if r < 0.4 or not order:
+        if r < 0.3 or not order:
             ops.append("execTop")
             args.append([])
             while heap and live.get(-heap[0][1]) != -heap[0][0]:
@@ -45,13 +46,13 @@ def generate(rng):
         if not order:
             continue
         task = order[j]
-        if r < 0.6:
+        if r < 0.65:
             task = ids.pop()
             put(task)
             order.append(task)
             ops.append("add")
             args.append([rng.randint(0, 10**5), task, live[task]])
-        elif r < 0.8:
+        elif r < 0.9:
             put(task)
             ops.append("edit")
             args.append([task, live[task]])

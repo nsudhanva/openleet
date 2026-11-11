@@ -1,27 +1,39 @@
-"""Seat Reservation Manager with n = 10^5 and 6 * 10^4 calls: 3 * 10^4 reserves, then
-unreserve/reserve pairs on random reserved seats, so finding the smallest free seat by a scan
-costs ~1.5 * 10^4 per call."""
+"""Seat Reservation Manager with n = 10^5 and 10^5 calls: 3 * 10^4 reserves, 2 * 10^4 unreserves
+of random seats in the upper part of them, then 2.5 * 10^4 reserve/unreserve pairs, so about
+2 * 10^4 freed seats stay pending and taking the smallest by scanning the seats or the freed set
+costs ~10^4 to 2 * 10^4 steps per reserve."""
+
+from heapq import heapify, heappop, heappush
 
 SEEDS = 2
 N = 10**5
-CALLS = 6 * 10**4
+FIRST = 3 * 10**4
+FREED = 2 * 10**4
+PAIRS = 25000
 
 
 def generate(rng):
     ops, args = ["SeatManager"], [[N]]
-    reserved = []
-    first = CALLS // 2
-    for seat in range(1, first + 1):
+    low = FIRST // 4
+    pool = list(range(low + 1, FIRST + 1))  # reserved seats that may be unreserved
+    ops += ["reserve"] * FIRST
+    args += [[]] * FIRST
+    freed = []
+    for _ in range(FREED):
+        j = rng.randrange(len(pool))
+        pool[j], pool[-1] = pool[-1], pool[j]
+        freed.append(pool.pop())
+        ops.append("unreserve")
+        args.append([freed[-1]])
+    heapify(freed)
+    for _ in range(PAIRS):
+        pool.append(heappop(freed))
         ops.append("reserve")
         args.append([])
-        reserved.append(seat)
-    while len(ops) - 1 < CALLS:
-        j = rng.randrange(len(reserved))
-        reserved[j], reserved[-1] = reserved[-1], reserved[j]
-        seat = reserved.pop()
+        j = rng.randrange(len(pool))
+        pool[j], pool[-1] = pool[-1], pool[j]
+        seat = pool.pop()
+        heappush(freed, seat)
         ops.append("unreserve")
         args.append([seat])
-        ops.append("reserve")
-        args.append([])
-        reserved.append(seat)
-    return {"ops": ops[: CALLS + 1], "args": args[: CALLS + 1]}
+    return {"ops": ops, "args": args}

@@ -1,10 +1,10 @@
-"""Router with 36,000 calls: 18,000 packets, 95% to one destination, fill memory (with some
+"""Router with 10^5 calls: 5 * 10^4 packets, 95% to one destination, fill memory (with some
 evictions and duplicates), then mostly getCount calls on that destination, so scanning the stored
-packets per count (even per destination) costs ~3 * 10^8 steps."""
+packets per count (even per destination) costs ~10^9 steps."""
 
 SEEDS = 2
-CALLS = 36000
-FILL = 18000
+CALLS = 10**5
+FILL = 50000
 DESTS = 40
 HOT = 0.95
 

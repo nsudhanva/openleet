@@ -1,6 +1,7 @@
 """10^5 buildings rising in long runs of ~10^5 climbs that shrink, each at most the smallest so
-far, with just enough bricks and ladders to reach 90 to 95% of the way, so keeping the climbs in
-a sorted list costs ~5 * 10^9 element moves and re-sorting them at every building far more."""
+far, with 1 to 3 ladders and just enough bricks to reach 90 to 95% of the way (a tiny heap keeps
+the reference fast), so keeping the climbs in a sorted list costs ~5 * 10^9 element moves and
+re-sorting them at every building far more."""
 
 SEEDS = 2
 N = 10**5
@@ -27,6 +28,6 @@ def generate(rng):
         heights.append(heights[-1])
     # Ladders take the largest climbs among the first 90-95%; bricks pay for exactly the rest.
     reach = rng.randint(len(climbs) * 9 // 10, len(climbs) * 19 // 20)
-    ladders = rng.randint(100, 2000)
+    ladders = rng.randint(1, 3)
     first = sorted(climbs[:reach])
     return {"heights": heights, "bricks": sum(first[: len(first) - ladders]), "ladders": ladders}

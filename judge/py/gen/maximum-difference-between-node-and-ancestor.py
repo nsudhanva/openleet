@@ -1,9 +1,9 @@
-"""Maximum Difference Between Node and Ancestor at 5000 nodes (the maximum) in a chain, so
-comparing every node with each of its descendants is ~1.25 * 10^7 pairs."""
+"""Maximum Difference Between Node and Ancestor on 8 chains of 5000 nodes (the maximum), so
+comparing every node with each of its ancestors is ~10^8 pairs in all."""
 
 from _shapes import level_order, shaped_tree
 
-SEEDS = 2
+SEEDS = 8
 N = 5000
 
 

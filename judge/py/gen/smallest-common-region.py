@@ -1,13 +1,15 @@
 """Smallest Common Region over ~10^4 region lists forming two chains of ~5000 below a short trunk
-(or one chain), with the two regions deep down, so looking up each parent by scanning every list
-is ~10^4 scans of 10^4 lists."""
+(or one chain), with the two regions deep down and every name 20 letters sharing a 12-letter
+prefix, so looking up each parent by scanning every list is ~10^4 scans of 10^4 lists and testing
+each ancestor of one region against a list of the other's is ~2.5 * 10^7 comparisons per seed."""
 
 from _shapes import pick_shape
 
-SEEDS = 3
+SEEDS = 6
 LISTS = 10**4
 TRUNK = 5
 LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+PREFIX = "abcdefghijkl"
 
 
 def generate(rng):
@@ -16,7 +18,7 @@ def generate(rng):
 
     def fresh():
         while True:
-            w = "".join(rng.choice(LETTERS) for _ in range(rng.randint(6, 20)))
+            w = PREFIX + "".join(rng.choice(LETTERS) for _ in range(20 - len(PREFIX)))
             if w not in seen:
                 seen.add(w)
                 names.append(w)
@@ -41,7 +43,8 @@ def generate(rng):
     if shape == 0:
         region2 = bottoms[1]
     elif shape == 1:
-        region2 = chains[0][rng.randrange(max(1, depth // 10))]
+        region1 = bottoms[1]
+        region2 = chains[0][depth * 8 // 10 + rng.randrange(max(1, depth // 10))]
     else:
         region2 = regions[[r[0] for r in regions].index(trunk[0])][-1]
     if rng.random() < 0.5:

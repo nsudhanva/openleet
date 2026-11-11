@@ -1,9 +1,9 @@
-"""Longest Duplicate Substring at n = 10^4 random letters with one planted 2000-letter repeat, so
+"""Longest Duplicate Substring at n = 25000 random letters with one planted 2000-letter repeat, so
 comparing the string with every shift of itself, or trying every length up to the answer,
-costs ~10^8 steps."""
+costs ~6 * 10^8 steps."""
 
 SEEDS = 2
-N = 10**4
+N = 25000
 PLANT = 2000
 
 

@@ -1,13 +1,13 @@
-"""Find Servers That Handled Most Number of Requests: in two seeds the first k = 10^4 of
-4 * 10^4 requests pin all but a few servers, so walking from i % k is ~k / 2 steps each; in the
-third, k = n = 8 * 10^4 with odd servers pinned and the rest churning, so the free set is big."""
+"""Find Servers That Handled Most Number of Requests: in two seeds the first k = 5 * 10^4 of
+10^5 requests pin all but a few servers, so walking from i % k is ~k / 2 steps each; in the
+third, k = n = 10^5 with odd servers pinned and the rest churning, so the free set is big."""
 
 from _shapes import pick_shape
 
 SEEDS = 3
-K = 10**4
-N = 4 * 10**4
-CHURN = 8 * 10**4
+K = 5 * 10**4
+N = 10**5
+CHURN = 10**5
 
 
 def generate(rng):

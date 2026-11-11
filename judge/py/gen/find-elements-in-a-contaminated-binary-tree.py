@@ -1,9 +1,11 @@
 """Find Elements in a Contaminated Binary Tree with 10^4 nodes (depth at most 20) and 10^4 find
-calls, most for absent values, so searching the recovered tree on each call is ~10^8 steps."""
+calls, 95% for absent values, so searching the recovered tree (or a list of its values) on each
+call is ~10^8 steps, ~0.8 s a seed against ~0.02 s for the reference; 20 seeds put that past the
+time limit."""
 
 from _shapes import level_order
 
-SEEDS = 2
+SEEDS = 20
 N = 10**4
 CALLS = 10**4
 DEPTH = 20
@@ -26,5 +28,5 @@ def generate(rng):
     ops, args = ["FindElements"], [[level_order([-1] * N, left, right)]]
     for _ in range(CALLS):
         ops.append("find")
-        args.append([rng.choice(present) if rng.random() < 0.2 else rng.randint(0, 10**6)])
+        args.append([rng.choice(present) if rng.random() < 0.05 else rng.randint(0, 10**6)])
     return {"ops": ops, "args": args}

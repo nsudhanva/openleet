@@ -1,9 +1,9 @@
-"""Minimum Increment Operations to Make Array Beautiful at n = 60 with every value below k:
+"""Minimum Increment Operations to Make Array Beautiful at n = 2 * 10^4 with every value below k:
 choosing which elements to raise, one of the next three each time, without memoization is
-~10^15 choices."""
+exponential, and a DP that scans every earlier index is 2 * 10^8 steps."""
 
 SEEDS = 2
-N = 60
+N = 2 * 10**4
 
 
 def generate(rng):

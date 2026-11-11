@@ -1,13 +1,14 @@
-"""Design Movie Rental System with 2 * 10^4 entries (one movie in 5000 shops) and 3 * 10^4
-calls: 10^4 rentals first, then searches and reports among more rentals and drops, so
-sorting the rented set or a movie's shops per query is ~10^4 * 10^4 log steps."""
+"""Design Movie Rental System with 10^5 entries (one movie in 5 * 10^4 shops) and 10^5 calls:
+3 * 10^4 rentals first, then searches and reports among more rentals and drops, so sorting or
+taking the five smallest of the rented set or a movie's shops per query is ~10^4 queries of
+~3 * 10^4 entries each."""
 
 SEEDS = 2
-SHOPS = 10**4
-ENTRIES = 2 * 10**4
-POPULAR = 5000
-CALLS = 3 * 10**4
-RENTED = 10**4
+SHOPS = 10**5
+ENTRIES = 10**5
+POPULAR = 5 * 10**4
+CALLS = 10**5
+RENTED = 3 * 10**4
 
 
 def generate(rng):
