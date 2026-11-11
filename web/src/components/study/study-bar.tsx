@@ -3,6 +3,7 @@ import { DifficultyFilter } from "@/components/difficulty-filter";
 import { SelectPicker } from "@/components/select-picker";
 import { TopicFilter } from "@/components/topic-filter";
 import type { CompanySearch } from "@/lib/companies";
+import { count } from "@/lib/format";
 import { STUDY_SETS, type StudySet } from "@/lib/scheduler";
 import type { StudySearch } from "@/lib/schemas";
 import { isAskedPeriod, PERIOD_LABEL, PERIODS, type Period } from "@/lib/types";
@@ -69,7 +70,7 @@ export function StudyBar({
 			 * fit: screen too narrow for the row, just "3092 cards".
 			 */}
 			<p className="text-sm text-muted-foreground tabular-nums max-sm:col-span-2 sm:ml-auto sm:min-w-[22ch] sm:text-right fit:max-xl:min-w-[10ch]">
-				{remaining} {remaining === 1 ? "card" : "cards"}
+				{count(remaining, "card")}
 				<span className="fit:max-xl:hidden"> in this set</span>
 			</p>
 		</>

@@ -4,8 +4,8 @@ import { PlanLink } from "@/components/plan/plan-link";
 import { PracticeButton } from "@/components/plan/practice-button";
 import { EmptyNote, Panel } from "@/components/progress/panel";
 import { Button } from "@/components/ui/button";
-import { timeFrom } from "@/lib/format";
-import { count, failureSummary } from "@/lib/insights";
+import { count, timeFrom } from "@/lib/format";
+import { failureSummary } from "@/lib/insights";
 import type { Plan } from "@/lib/plan";
 import type { ShakySolve } from "@/lib/types";
 

@@ -1,5 +1,5 @@
 import { ListBadge } from "@/components/list-badge";
-import { percent, timeFrom } from "@/lib/format";
+import { count, percent, timeFrom } from "@/lib/format";
 import type { CardState } from "@/lib/types";
 
 export function CardHistory({ state }: { state: CardState | null }) {
@@ -8,8 +8,7 @@ export function CardHistory({ state }: { state: CardState | null }) {
 	return (
 		<>
 			<span>
-				Seen {state.reviews} {state.reviews === 1 ? "time" : "times"}, last{" "}
-				{timeFrom(state.lastAt)}
+				Seen {count(state.reviews, "time")}, last {timeFrom(state.lastAt)}
 				{state.lastScore !== null && `, topics ${percent(state.lastScore)}`}
 			</span>
 			<ListBadge list={state.list} />

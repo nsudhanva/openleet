@@ -18,6 +18,11 @@ export function timeFrom(at: number, now = Date.now()): string {
 	return "now";
 }
 
+/** "3 reviews", "1 submission". */
+export function count(n: number, singular: string): string {
+	return `${n} ${singular}${n === 1 ? "" : "s"}`;
+}
+
 /** "17 ms": a CPU time as the judge reports it. */
 export function cpuTime(ms: number): string {
 	return `${ms} ms`;

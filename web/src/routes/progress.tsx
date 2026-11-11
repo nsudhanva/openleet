@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useCompanies } from "@/hooks/use-companies";
 import { api } from "@/lib/api";
 import { ANY_COMPANY, companyName } from "@/lib/companies";
-import { pageTitle, percent } from "@/lib/format";
+import { count, pageTitle, percent } from "@/lib/format";
 import type { Plan } from "@/lib/plan";
 import type { StudySet } from "@/lib/scheduler";
 import type { DailyScore, Difficulty, TopicRecall } from "@/lib/types";
@@ -89,10 +89,7 @@ function Progress() {
 							value={report.accuracy === null ? "—" : percent(report.accuracy)}
 						/>
 						<Stat label="Cards graded" value={String(report.graded)} />
-						<Stat
-							label="Day streak"
-							value={`${report.streakDays} ${report.streakDays === 1 ? "day" : "days"}`}
-						/>
+						<Stat label="Day streak" value={count(report.streakDays, "day")} />
 					</dl>
 				</Panel>
 
@@ -179,7 +176,7 @@ function TopicMeters({ topics }: { topics: TopicRecall[] }) {
 						key={t.topic}
 						label={t.topic}
 						value={t.recall}
-						detail={`${t.seen} ${t.seen === 1 ? "card" : "cards"}`}
+						detail={count(t.seen, "card")}
 						to={{ set: "all", topic: t.topic }}
 					/>
 				))}

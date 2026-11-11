@@ -21,12 +21,7 @@ import {
 import { useMedia } from "@/hooks/use-media";
 import type { Plan } from "@/lib/plan";
 import { SM_SCREEN } from "@/lib/screen";
-import { isAskedPeriod, PERIOD_LABEL, PERIODS, type Period } from "@/lib/types";
-
-const PERIOD_ITEMS = PERIODS.map((value) => ({
-	value,
-	label: PERIOD_LABEL[value],
-}));
+import { isAskedPeriod, PERIOD_OPTIONS, type Period } from "@/lib/types";
 
 const TITLE = "Practice plan";
 const DESCRIPTION =
@@ -52,7 +47,7 @@ function PlanControls({
 			<SelectPicker<Period>
 				label="Problem list"
 				value={plan.period}
-				items={PERIOD_ITEMS}
+				items={PERIOD_OPTIONS}
 				onChange={(period) => change({ period })}
 				className="w-full"
 			/>

@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 import { Panel } from "@/components/progress/panel";
+import { count } from "@/lib/format";
 import {
 	ACTIVITY_LEVELS,
 	activitySummary,
 	calendarWeeks,
-	count,
 	dayLabel,
 } from "@/lib/insights";
 import type { Activity } from "@/lib/types";

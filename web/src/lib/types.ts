@@ -20,6 +20,11 @@ export const PERIOD_LABEL: Record<Period, string> = {
 	all: "All time",
 	lc1000: "LC 1–1000",
 };
+/** Every list as a picker's options. */
+export const PERIOD_OPTIONS = PERIODS.map((value) => ({
+	value,
+	label: PERIOD_LABEL[value],
+}));
 /** "in the last 6 months", "at any time": how a sentence names an asked period. */
 export const PERIOD_PHRASE: Record<AskedPeriod, string> = {
 	"30d": "in the last 30 days",

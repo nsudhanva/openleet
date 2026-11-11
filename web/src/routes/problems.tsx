@@ -50,9 +50,8 @@ import {
 } from "@/lib/schemas";
 import {
 	isAskedPeriod,
-	PERIOD_LABEL,
+	PERIOD_OPTIONS,
 	PERIOD_PHRASE,
-	PERIODS,
 	type Period,
 	type PlanOrder,
 	type ProblemRow,
@@ -84,11 +83,6 @@ const SCROLL_PAGE_ROWS = 25;
 
 /** Typing waits this long for a pause before it searches. */
 const SEARCH_DEBOUNCE_MS = 150;
-
-const PERIOD_OPTIONS = PERIODS.map((value) => ({
-	value,
-	label: PERIOD_LABEL[value],
-}));
 
 function formatFrequency(row: ProblemRow): string {
 	return row.frequency ? String(Math.round(row.frequency)) : "";

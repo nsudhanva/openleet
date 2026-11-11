@@ -1,3 +1,4 @@
+import { count } from "@/lib/format";
 import type { ActiveDay, Activity, Failures } from "@/lib/types";
 
 /** The failed verdicts, most telling first, with what the page calls them. */
@@ -52,11 +53,6 @@ export function failureSummary(failures: Failures): string {
 			return `${n} ${kind.noun[n === 1 ? 0 : 1]}`;
 		})
 		.join(", ");
-}
-
-/** "3 reviews", "1 submission". */
-export function count(n: number, singular: string): string {
-	return `${n} ${singular}${n === 1 ? "" : "s"}`;
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
