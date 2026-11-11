@@ -14,7 +14,8 @@ def generate(rng):
     while len(s) < L:
         if rng.random() < digit_p:
             d = rng.randint(2, 9)
-            if size * d < 2**63:
+            # Leave room for the letters still to come, so the length stays below 2^63.
+            if size * d + L < 2**63:
                 s.append(str(d))
                 size *= d
                 continue

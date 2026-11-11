@@ -1,15 +1,15 @@
-"""Chalkboard XOR Game at the maximum 1000 values below 2^16: random, or a last value chosen to
-make the total XOR zero."""
+"""Chalkboard XOR Game at the maximum 1000 (or 999) distinct-drawn values below 2^16 whose XOR
+is not zero, so the game is not over at the start and a search over the moves blows up."""
 
-SEEDS = 3
+SEEDS = 2
+N = 1000
 
 
 def generate(rng):
-    n = rng.choice([1000, 999])
-    nums = [rng.randint(0, 2**16 - 1) for _ in range(n)]
-    if rng.random() < 0.5:
-        x = 0
-        for v in nums[:-1]:
-            x ^= v
-        nums[-1] = x
+    nums = rng.sample(range(2**16), N - (rng.random() < 0.5))
+    x = 0
+    for v in nums:
+        x ^= v
+    if x == 0:
+        nums[-1] ^= 1 if nums[-1] ^ 1 not in nums else 2
     return {"nums": nums}

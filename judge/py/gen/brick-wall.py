@@ -1,19 +1,16 @@
-"""Brick Wall at 2 * 10^4 bricks: 10^4 two-brick rows with huge widths, or ~100 rows of ~200
-bricks whose edges come from a small shared pool so many line up."""
+"""Brick Wall at the maximum 2 * 10^4 bricks: 10^4 two-brick rows of a huge width with (nearly)
+all-distinct cuts, so counting the rows at each distinct edge separately costs ~10^8 row
+checks."""
 
 SEEDS = 2
+ROWS = 10**4
 
 
 def generate(rng):
+    width = rng.randint(10**9, 2**31 - 1)
+    cuts = rng.sample(range(1, width), ROWS)
     if rng.random() < 0.5:
-        rows, per_row = 10**4, 2
-    else:
-        rows, per_row = 100, 200
-    width = rng.randint(10**6, 2**31 - 1)
-    pool = sorted(rng.sample(range(1, width), 3 * per_row))
-    wall = []
-    for _ in range(rows):
-        cuts = sorted(rng.sample(pool, per_row - 1))
-        edges = [0, *cuts, width]
-        wall.append([edges[i + 1] - edges[i] for i in range(per_row)])
-    return {"wall": wall}
+        # A few popular edges, so the best line is not just any edge.
+        popular = cuts[:5]
+        cuts = [rng.choice(popular) if rng.random() < 0.05 else c for c in cuts]
+    return {"wall": [[c, width - c] for c in cuts]}
