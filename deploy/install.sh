@@ -106,10 +106,15 @@ ENV
 fi
 chmod 0640 "$ENV_FILE"
 chgrp openleet "$ENV_FILE"
-# Sets KEY=VALUE in the env file, replacing the line or adding it.
+# Sets KEY=VALUE in the env file, replacing the line in place or adding it.
 set_env() {
-	grep -v "^$1=" "$ENV_FILE" >"$ENV_FILE.new" || true
-	printf '%s=%s\n' "$1" "$2" >>"$ENV_FILE.new"
+	if grep -q "^$1=" "$ENV_FILE"; then
+		K=$1 V=$2 awk 'index($0, ENVIRON["K"] "=") == 1 { print ENVIRON["K"] "=" ENVIRON["V"]; next } { print }' \
+			"$ENV_FILE" >"$ENV_FILE.new"
+	else
+		cp "$ENV_FILE" "$ENV_FILE.new"
+		printf '%s=%s\n' "$1" "$2" >>"$ENV_FILE.new"
+	fi
 	chmod 0640 "$ENV_FILE.new"
 	chgrp openleet "$ENV_FILE.new"
 	mv "$ENV_FILE.new" "$ENV_FILE"
