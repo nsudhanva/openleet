@@ -16,9 +16,11 @@ KEEP=3
 exec 9>"$ROOT/update.lock"
 flock -n 9 || exit 0
 
-# A revision names a directory that gets `rm -rf`: accept only the hex CI writes.
+# A revision names a directory that gets `rm -rf`: accept only a git revision as CI writes it,
+# 7 to 40 lowercase hex digits, as the server checks it (server/src/deploy.rs).
 valid() {
-	case $1 in '' | *[!0123456789abcdef]*) return 1 ;; esac
+	case $1 in *[!0123456789abcdef]*) return 1 ;; esac
+	[ ${#1} -ge 7 ] && [ ${#1} -le 40 ]
 }
 seen() {
 	grep -qx "$1" "$HISTORY" 2>/dev/null
