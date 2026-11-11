@@ -161,8 +161,8 @@ impl Corpus {
 pub const SAMPLE: &str = r#"
     CREATE TYPE test_kind AS ENUM ('example', 'hidden', 'stress');
     CREATE TABLE tests (slug VARCHAR NOT NULL, idx USMALLINT NOT NULL,
-        kind test_kind NOT NULL, test_case JSON NOT NULL, expected JSON,
-        expected_sha256 VARCHAR, PRIMARY KEY (slug, idx));
+        kind test_kind NOT NULL, test_case JSON NOT NULL USING COMPRESSION zstd,
+        expected JSON USING COMPRESSION zstd, expected_sha256 VARCHAR);
     INSERT INTO tests VALUES ('a', 2, 'stress', '{"gen":"a"}', NULL, 'ab12'),
         ('a', 0, 'example', '{"input":{}}', '[1, 2]', NULL),
         ('a', 1, 'hidden', '{"input":{"n":3}}', '3', NULL);

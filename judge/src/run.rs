@@ -12,12 +12,14 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use openleet_proto::{Case, Expected, Job, MAX_RUN_CPU_MS, Outcome, Verdict, wall_limit_ms};
+use openleet_proto::{
+    Case, Checker, Expected, Job, MAX_RUN_CPU_MS, Outcome, Verdict, wall_limit_ms,
+};
 use serde::Serialize;
 use serde_json::Value;
 use serde_json::value::RawValue;
 
-use crate::checker::{accepts, digest_matches};
+use crate::checker::{accepts_normalized, digest_matches, normalize};
 use crate::watchdog::{Kill, KillSwitch, watch};
 use crate::zygote::{ChildEvent, Done, Zygote};
 
@@ -107,7 +109,12 @@ fn shown(output: Box<RawValue>) -> Box<RawValue> {
 /// judge faults come back as [`Verdict::InternalError`], never as `Err` unless the zygote
 /// itself broke (the caller then restarts it).
 async fn execute(zygote: &mut Zygote, job: &Job) -> Result<(Outcome, bool)> {
-    let expected = match job.expected.as_deref().map(parse_expected).transpose() {
+    let expected = match job
+        .expected
+        .as_deref()
+        .map(|expected| parse_expected(expected, job.checker))
+        .transpose()
+    {
         Ok(expected) => expected,
         Err(error) => {
             let outcome = Outcome::internal(format!("bad expected output: {error}"));
@@ -162,11 +169,13 @@ enum Want<'a> {
     Sha256(&'a str),
 }
 
-fn parse_expected(expected: &[Expected]) -> serde_json::Result<Vec<Want<'_>>> {
+fn parse_expected(expected: &[Expected], checker: Checker) -> serde_json::Result<Vec<Want<'_>>> {
     expected
         .iter()
         .map(|want| match want {
-            Expected::Value(raw) => serde_json::from_str(raw.get()).map(Want::Value),
+            Expected::Value(raw) => {
+                serde_json::from_str(raw.get()).map(|value| Want::Value(normalize(checker, value)))
+            }
             Expected::Sha256(hex) => Ok(Want::Sha256(hex)),
         })
         .collect()
@@ -244,8 +253,10 @@ impl<'a> Run<'a> {
         let expected = self.expected.as_ref()?;
         let out = out?.get();
         Some(match expected.get(i) {
-            Some(Want::Value(want)) => serde_json::from_str::<Value>(out)
-                .is_ok_and(|actual| accepts(self.job.checker, self.job.floats, &actual, want)),
+            Some(Want::Value(want)) => serde_json::from_str::<Value>(out).is_ok_and(|actual| {
+                let actual = normalize(self.job.checker, actual);
+                accepts_normalized(self.job.floats, &actual, want)
+            }),
             Some(Want::Sha256(hex)) => digest_matches(out, hex),
             None => false,
         })
@@ -421,7 +432,7 @@ mod tests {
         let expected = job
             .expected
             .as_deref()
-            .map(parse_expected)
+            .map(|expected| parse_expected(expected, job.checker))
             .transpose()
             .unwrap();
         Run::new(job, expected)
@@ -451,6 +462,25 @@ mod tests {
         assert_eq!(outcome.cases[0].stdout, "hi");
         assert_eq!(outcome.cases[1].cpu_ms, 20);
         assert_eq!((outcome.cpu_ms, outcome.max_rss_kb), (40, 9000));
+    }
+
+    #[test]
+    fn unordered_float_answers_use_the_normalized_expected_value() {
+        let mut job = job(1, Some("[[[10.00001,2]]]"));
+        job.checker = Checker::UnorderedNested;
+        job.floats = true;
+        let expected = job
+            .expected
+            .as_deref()
+            .map(|values| parse_expected(values, job.checker));
+        let expected = expected.unwrap().unwrap();
+        assert!(matches!(
+            &expected[0],
+            Want::Value(value) if value == &json!([[2, 10.00001]])
+        ));
+        let mut run = Run::new(&job, Some(expected));
+        run.child_event(event(r#"{"i":0,"out":[[2.00001,9.99999]]}"#), 0);
+        assert_eq!(run.cases[0].ok, Some(true));
     }
 
     #[test]

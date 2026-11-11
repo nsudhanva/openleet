@@ -215,7 +215,10 @@ def child(job: dict, prepared: list, out_fd: int) -> None:
                 out = harness.run(namespace, spec, test)
             except MemoryError:
                 send({"i": i, "mle": True})
-                return
+                if not keep_going:
+                    return
+                gc.collect()
+                continue
             except BaseException as error:
                 send({"i": i, "error": user_traceback(error), "stdout": stdout.take()})
                 if keep_going:

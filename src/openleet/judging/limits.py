@@ -1,9 +1,9 @@
 """Each problem's time limit, in reference milliseconds (judge/py/calibrate.py): the judge
 scales it by how fast its machine runs at the moment, so it holds on any machine and load.
 
-The limit follows the trusted references (LeetCodeDataset's and doocs' solutions, which are
-written for the intended complexity), never Mercury's crowd submissions: those keep voting on
-answers, but the slowest of them is often a worse complexity class that LeetCode let through.
+The limit follows trusted references (LeetCodeDataset's and doocs' solutions), never Mercury's
+crowd submissions. A trusted reference more than 10 times slower than the median of its peers
+still votes on answers but does not set the limit.
 
 A submission may take MARGIN times the fastest trusted reference, up to MARGIN_CAP_MS. Accepted
 Mercury submissions of the intended complexity written clumsily (memoized recursion, a sorted
@@ -11,11 +11,12 @@ container searched by hand, tuples as dict keys) took up to 41 times as long, an
 room for measuring noise; the next complexity class does n / log2 n times the work, 180 times
 or more on stress inputs of 2,000 elements and up. FLOOR_MS absorbs fixed costs and measuring
 noise on the many problems whose references take a few milliseconds; below it, Mercury's slow
-submissions were mostly quadratic on tests too small to tell. Every trusted reference passes,
-with room for noise (SLOWEST_MARGIN).
+submissions were mostly quadratic on tests too small to tell. The slowest included trusted
+reference gets room for noise (SLOWEST_MARGIN).
 """
 
 import json
+from statistics import median
 
 import duckdb
 
@@ -28,6 +29,7 @@ SLOWEST_MARGIN = 2.0
 FLOOR_MS = 1000
 # The server's cap (server/src/judge.rs, limits::MAX_MS).
 CAP_MS = 30_000
+SLOW_REFERENCE_FACTOR = 10
 
 
 def limit_ms(times: list[int]) -> int:
@@ -36,8 +38,23 @@ def limit_ms(times: list[int]) -> int:
     return round(min(CAP_MS, max(FLOOR_MS, clumsy, SLOWEST_MARGIN * max(times))))
 
 
+def limit_times(times: dict[str, int]) -> dict[str, int]:
+    """Trusted reference times used for the limit, excluding isolated slow outliers."""
+    references = {name: ms for name, ms in times.items() if trusted(name)}
+    if len(references) < 2:
+        return references or times
+    kept = {
+        name: ms
+        for name, ms in references.items()
+        if ms
+        <= SLOW_REFERENCE_FACTOR
+        * max(1, median([other for other_name, other in references.items() if other_name != name]))
+    }
+    return kept or references
+
+
 def set_limit(entry: dict, measured: dict[str, dict] | None) -> list[str]:
-    """Sets `cpuMs` (each trusted reference's time) and `limitMs` on a problem's spec entry,
+    """Sets `cpuMs` (included trusted reference times) and `limitMs` on a problem's spec entry,
     from the references' timings through the judge, else from their voting times (the entry's
     `cpuMs`). Returns the trusted references the judge did not accept."""
     if measured is None:
@@ -46,8 +63,7 @@ def set_limit(entry: dict, measured: dict[str, dict] | None) -> list[str]:
     else:
         times = {n: t["cpuMs"] for n, t in measured.items() if t["verdict"] == "accepted"}
         failed = [n for n, t in measured.items() if trusted(n) and t["verdict"] != "accepted"]
-    # Problems without a trusted reference fall back on the crowd's.
-    times = {n: ms for n, ms in times.items() if trusted(n)} or times
+    times = limit_times(times)
     if times:
         entry["cpuMs"] = times
         entry["limitMs"] = limit_ms(list(times.values()))

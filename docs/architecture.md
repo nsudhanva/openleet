@@ -57,7 +57,9 @@ imports the LeetCode environment once and forks a child per submission. The chil
 user and process group, cannot write files or start processes, and has no network. Expected
 outputs stay in the Rust daemon.
 
-A solution gets about 370 MB of heap before Memory Limit Exceeded.
+Each solution runs in a 704 MB address space. During corpus voting, a test is kept only when the
+required reference solutions finish it within that limit. A reference's memory failure drops that
+test, while voting continues on later tests.
 
 ### Time limits
 
@@ -75,9 +77,11 @@ its full limit within that, the submission is not judged and the page asks for i
 
 Each problem's limit comes from its trusted reference solutions (LeetCodeDataset's and
 doocs'), timed through the judge on exactly the tests a submission gets: 50× the fastest (but
-no more than 10 s for that), at least 2× the slowest and at least 1 s, at most 30 s
-(`src/openleet/judging/limits.py`). Mercury's accepted submissions vote on the expected outputs
-but set no limits: the slowest of them are often a worse complexity class that LeetCode accepts.
+no more than 10 s for that), at least 2× the slowest included reference and at least 1 s, at most
+30 s (`src/openleet/judging/limits.py`). A trusted reference more than 10× slower than the median
+of the problem's other trusted references does not set the limit, but it still votes on answers.
+Mercury's accepted submissions vote on the expected outputs but set no limits: the slowest of them
+are often a worse complexity class that LeetCode accepts.
 The same complexity written clumsily (memoized recursion, a sorted container searched by hand)
 takes up to 41× the fastest reference, while the next complexity class does about n / log n
 times the work: 180× or more on stress inputs of 2,000 elements and up, and thousands of times
@@ -103,6 +107,13 @@ flowchart LR
 
 A reference solution counts only if it reproduces the statement's example outputs. A test is kept
 only when every counted reference gives the same answer.
+
+The `unordered` checker sorts the outer list by structural JSON order, with numbers sorted
+numerically; `unordered_nested` also sorts each inner list. When a problem returns floats, the
+judge applies the 1e-5 tolerance after sorting. The assembler and Rust judge use the same ordering.
+The corpus stores test cases and JSON answers with Zstandard compression, in `(slug, idx)` order;
+large exact stress answers store a digest instead. The writer checks that each problem's indexes
+are unique and consecutive.
 
 ```bash
 uv run openleet judge all       # rebuild data/judge/tests.duckdb

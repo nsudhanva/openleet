@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 from collections.abc import Callable
+from decimal import Decimal
 from typing import Any
 
 from openleet.judging import (
@@ -42,13 +43,30 @@ def key(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
+def structural_key(value: Any) -> tuple:
+    """JSON order shared with judge/src/checker.rs; numbers sort by numeric value."""
+    if value is None:
+        return (0, 0)
+    if isinstance(value, bool):
+        return (1, value)
+    if isinstance(value, (int, float)):
+        return (2, Decimal(str(value)))
+    if isinstance(value, str):
+        return (3, value)
+    if isinstance(value, list):
+        return (4, tuple(structural_key(item) for item in value))
+    if isinstance(value, dict):
+        return (5, tuple((name, structural_key(item)) for name, item in sorted(value.items())))
+    raise TypeError(f"not a JSON value: {type(value).__name__}")
+
+
 def normalize(value: Any, checker: str) -> Any:
     """The form two answers must share to be equal under a checker (floats aside)."""
     if checker == "unordered" and isinstance(value, list):
-        return sorted(value, key=key)
+        return sorted(value, key=structural_key)
     if checker == "unordered_nested" and isinstance(value, list):
-        inner = [sorted(v, key=key) if isinstance(v, list) else v for v in value]
-        return sorted(inner, key=key)
+        inner = [sorted(v, key=structural_key) if isinstance(v, list) else v for v in value]
+        return sorted(inner, key=structural_key)
     return value
 
 

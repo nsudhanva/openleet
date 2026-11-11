@@ -56,8 +56,7 @@ def mercury() -> dict[str, list[str]]:
     """Accepted LeetCode submissions per slug: the fastest, median and slowest."""
     paths = [str(path) for path in dataset_files(MERCURY)]
     with duckdb.connect() as con:
-        query = f"SELECT slug_name, solutions FROM read_parquet({paths!r})"
-        rows = con.execute(query).fetchall()
+        rows = con.execute("SELECT slug_name, solutions FROM read_parquet(?)", [paths]).fetchall()
     out: dict[str, list[str]] = {}
     for slug, solutions in rows:
         ranked = sorted(solutions, key=lambda s: int(re.sub(r"\D", "", s["runtime"]) or 0))

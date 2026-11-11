@@ -6,6 +6,7 @@ root unless a builder returns one. Stored stress tests are keyed by the hash of 
 input, so every function here must keep drawing from rng in exactly the same order.
 """
 
+from collections import deque
 from collections.abc import Iterable, Sequence
 from random import Random
 
@@ -30,13 +31,14 @@ def level_order(
     empty: int | None = None,
 ) -> list:
     """LeetCode's level-order list for the tree, with trailing Nones dropped."""
-    out, queue = [], [root]
-    for node in queue:
+    out, queue = [], deque([root])
+    while queue:
+        node = queue.popleft()
         if node == empty:
             out.append(None)
         else:
             out.append(vals[node])
-            queue += (left[node], right[node])
+            queue.extend((left[node], right[node]))
     while out and out[-1] is None:
         out.pop()
     return out
@@ -148,8 +150,6 @@ def shaped_tree(rng: Random, n: int, kind: str) -> Children:
     for i in range(1, n):
         if kind == "chain" or (kind == "deep" and rng.random() < 0.9):
             parent, side = i - 1, rng.randrange(2)
-            if (left, right)[side][parent] is not None:
-                side = 1 - side
         else:
             while True:
                 j = rng.randrange(len(slots))
@@ -229,8 +229,9 @@ def nary_tree(rng: Random, n: int, max_depth: int) -> list[int | None]:
     for kids in children:
         rng.shuffle(kids)
     vals = [rng.randint(0, 10**4) for _ in range(n)]
-    out, queue = [vals[0], None], [0]
-    for node in queue:
+    out, queue = [vals[0], None], deque([0])
+    while queue:
+        node = queue.popleft()
         for child in children[node]:
             out.append(vals[child])
             queue.append(child)

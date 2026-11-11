@@ -22,10 +22,9 @@ CREATE TABLE tests (
     slug VARCHAR NOT NULL CHECK (slug <> ''),
     idx USMALLINT NOT NULL,
     kind test_kind NOT NULL,
-    test_case JSON NOT NULL,
-    expected JSON,
+    test_case JSON NOT NULL USING COMPRESSION zstd,
+    expected JSON USING COMPRESSION zstd,
     expected_sha256 VARCHAR CHECK (regexp_full_match(expected_sha256, '[0-9a-f]{{64}}')),
-    PRIMARY KEY (slug, idx),
     CHECK ((expected IS NULL) <> (expected_sha256 IS NULL))
 );
 COMMENT ON TABLE tests IS 'Every test the judge runs, stored in (slug, idx) order so a lookup by '
@@ -102,8 +101,7 @@ def fill(path: Path, rows: str, built_by: str, attach: Path | None) -> None:
         if attach is not None:
             con.execute(f"ATTACH {quoted(attach)} AS src (READ_ONLY)")
         con.execute(SCHEMA)
-        # Sorted by slug so the server's lookups skip all row groups but one; DuckDB's own
-        # compression (dictionary, FSST) keeps the corpus small.
+        # Sorted by slug so the server's lookups skip row groups that cannot contain it.
         con.execute(f"INSERT INTO tests BY NAME ({rows}) ORDER BY slug, idx")
         con.execute(
             """INSERT INTO meta SELECT ?, current_timestamp, ?, count(DISTINCT slug), count(*)
@@ -112,7 +110,8 @@ def fill(path: Path, rows: str, built_by: str, attach: Path | None) -> None:
         )
         gaps = con.execute(
             """SELECT count(*) FROM (SELECT slug FROM tests GROUP BY slug
-            HAVING min(idx) <> 0 OR max(idx) + 1 <> count(*))"""
+            HAVING min(idx) <> 0 OR max(idx) + 1 <> count(DISTINCT idx)
+                OR count(*) <> count(DISTINCT idx))"""
         ).fetchone()
         if gaps and gaps[0]:
             raise SystemExit(f"{gaps[0]} problems' test indexes do not run 0, 1, 2, ...")

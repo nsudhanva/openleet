@@ -14,6 +14,7 @@ from pathlib import Path
 from random import Random
 
 import vote
+from client import SANDBOX_UID_START, ZygoteClient
 from zygote import GEN_DIR, generator, input_sha
 
 # The zygote module puts GEN_DIR on sys.path, so generators can import _shapes.
@@ -21,13 +22,13 @@ from zygote import GEN_DIR, generator, input_sha
 LIMITS = {**vote.LIMITS, "cpu_s": 120}
 
 
-def stress(slug: str, item: dict, entry: dict, results_dir: Path) -> None:
+def stress(slug: str, item: dict, entry: dict, results_dir: Path, client: ZygoteClient) -> None:
     gen = generator(slug)
     seeds = list(range(getattr(gen, "SEEDS", 3)))
     shas = [input_sha(gen.generate(Random(seed))) for seed in seeds]
     tests = [{"gen": slug, "seed": seed, "sha": sha} for seed, sha in zip(seeds, shas, strict=True)]
     codes = {name: item["voters"][name] for name in entry["voters"]}
-    voters = vote.ballots(entry["spec"], codes, tests, LIMITS)
+    voters = vote.ballots(entry["spec"], codes, tests, LIMITS, client)
     out = {"slug": slug, "seeds": seeds, "shas": shas, "voters": voters}
     (results_dir / f"{slug}.json").write_text(json.dumps(out))
 
@@ -44,15 +45,22 @@ def main() -> None:
     )
     print(f"Stress-testing {len(slugs)} problems with {jobs} workers", flush=True)
 
-    def one(slug: str) -> None:
-        item = json.loads((work / f"{slug}.json").read_text())
-        try:
-            stress(slug, item, specs[slug], results)
-        except Exception as error:
-            print(f"  {slug}: {type(error).__name__}: {error}", flush=True)
+    workers = min(max(1, jobs), len(slugs))
+    chunks = [(i, slugs[i::workers]) for i in range(workers)]
 
-    with ThreadPoolExecutor(jobs) as pool:
-        list(pool.map(one, slugs))
+    def run_chunk(chunk: tuple[int, list[str]]) -> None:
+        worker, items = chunk
+        with ZygoteClient(SANDBOX_UID_START + worker) as client:
+            for slug in items:
+                item = json.loads((work / f"{slug}.json").read_text())
+                try:
+                    stress(slug, item, specs[slug], results, client)
+                except Exception as error:
+                    print(f"  {slug}: {type(error).__name__}: {error}", flush=True)
+
+    if chunks:
+        with ThreadPoolExecutor(workers) as pool:
+            list(pool.map(run_chunk, chunks))
 
 
 if __name__ == "__main__":

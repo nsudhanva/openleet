@@ -143,13 +143,33 @@ def front_matter(markdown: str) -> tuple[str, list[str]]:
     match = FRONT_MATTER.match(markdown)
     if not match:
         raise SystemExit("doocs README without front matter")
+
+    def scalar(value: str) -> str:
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1]:
+            if value[0] == '"':
+                try:
+                    return json.loads(value)
+                except json.JSONDecodeError:
+                    return value[1:-1]
+            if value[0] == "'":
+                return value[1:-1].replace("''", "'")
+        return value
+
     difficulty, tags, in_tags = "", [], False
     for line in match.group(1).splitlines():
+        if in_tags:
+            if not line.startswith((" ", "\t")):
+                in_tags = False
+            else:
+                value = line.strip()
+                if value.startswith("- "):
+                    tags.append(scalar(value[2:]))
+                continue
         if line.startswith("difficulty:"):
-            difficulty = line.split(":", 1)[1].strip()
-        in_tags = line.startswith("tags:") or (in_tags and line.startswith(" "))
-        if in_tags and line.strip().startswith("- "):
-            tags.append(line.strip()[2:].strip())
+            difficulty = scalar(line.split(":", 1)[1])
+        elif line.startswith("tags:"):
+            in_tags = True
     return difficulty, tags
 
 
