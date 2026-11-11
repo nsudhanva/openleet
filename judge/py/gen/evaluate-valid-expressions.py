@@ -21,7 +21,7 @@ def generate(rng):
                 b = rng.choice([d for d in (1, -1, 2, -2, 3, -3) if value % d == 0])
             else:
                 op = "mul"
-        new = {"add": value + b, "sub": value - b, "mul": value * b}.get(op)
+        new = {"add": value + b, "sub": value - b, "mul": value * b, "div": 0}[op]
         if op == "sub" and not first:
             new = b - value
         if op == "div":

@@ -17,7 +17,8 @@ def generate(rng):
     for w in dictionary:
         abbr.setdefault((w[0], w[-1], len(w)) if len(w) > 2 else w, set()).add(w)
     alone = sorted(w for group in abbr.values() if len(group) == 1 for w in group)
-    ops, args = ["ValidWordAbbr"], [[dictionary]]
+    ops: list = ["ValidWordAbbr"]
+    args: list = [[dictionary]]
     for _ in range(CALLS):
         r = rng.random()
         if r < 0.05:
