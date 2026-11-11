@@ -14,7 +14,6 @@ pub mod backup;
 mod corpus;
 pub mod migrate;
 mod plans;
-mod sqlite;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -35,7 +34,6 @@ use corpus::Corpus;
 pub use corpus::TestRow;
 use migrate::{Migrated, Shape};
 pub use plans::{Changed, MAX_PINNED_PLANS, PlanChange, PlanKey, SavedPlan};
-pub use sqlite::Imported;
 
 /// DuckDB's buffer pool; the whole box has 1 GB and the judge needs most of it.
 const MEMORY_LIMIT: &str = "64MB";
@@ -120,13 +118,6 @@ pub enum Opening {
         quarantined: PathBuf,
         backup: Option<PathBuf>,
     },
-}
-
-impl Opening {
-    /// Whether the database started out empty (so older data may be imported into it).
-    pub const fn started_empty(&self) -> bool {
-        matches!(self, Self::Created | Self::Recovered { backup: None, .. })
-    }
 }
 
 /// The progress database, with the test corpus attached when present.
@@ -316,14 +307,6 @@ impl Store {
         self.conn
             .try_lock_for(wait)
             .is_some_and(|c| c.execute_batch("SELECT 1").is_ok())
-    }
-
-    /// Imports the SQLite database servers used before DuckDB, if there is one.
-    pub fn import_sqlite(&self, path: &Path) -> Result<Option<Imported>> {
-        if !path.exists() {
-            return Ok(None);
-        }
-        sqlite::import(&mut self.conn.lock(), path).map(Some)
     }
 
     /// Takes the day's backup unless there is one (see [`backup::daily`]).
@@ -904,90 +887,6 @@ mod tests {
         assert!(matches!(&tests[0].expected, Expected::Value(v) if v.get() == "[1, 2]"));
     }
 
-    /// A SQLite database as servers left it before DuckDB, with every table.
-    fn old_sqlite(path: &Path, with_hints: bool) {
-        let old = rusqlite::Connection::open(path).unwrap();
-        let hints = if with_hints {
-            ", hints INTEGER NOT NULL DEFAULT 0"
-        } else {
-            ""
-        };
-        old.execute_batch(&format!(
-            "CREATE TABLE attempts (id INTEGER PRIMARY KEY, slug TEXT NOT NULL, at INTEGER NOT NULL,
-                grade TEXT NOT NULL, guessed TEXT NOT NULL DEFAULT '[]', score REAL{hints});
-             CREATE TABLE daily_scores (day TEXT PRIMARY KEY, at INTEGER NOT NULL,
-                readiness REAL NOT NULL, coverage REAL NOT NULL, accuracy REAL);
-             CREATE TABLE notes (slug TEXT PRIMARY KEY, text TEXT NOT NULL, at INTEGER NOT NULL);
-             INSERT INTO attempts (slug, at, grade, guessed, score)
-                VALUES ('is-subsequence', 1793327257719, 'less', '[\"Array\",\"Two Pointers\"]', 0.4),
-                       ('two-sum', 1793316907566, 'skip', '[]', NULL);
-             INSERT INTO daily_scores VALUES
-                ('2026-10-29', 1793343472296, 0.00076930108636657178, 0.0012610340479192938, 0.4),
-                ('2026-10-30', 1793429873666, 0.5, 1.0, NULL);
-             INSERT INTO notes VALUES ('two-sum', 'Use a hash map.', 1793314419541);"
-        ))
-        .unwrap();
-    }
-
-    #[test]
-    fn imports_every_table_of_the_old_sqlite_database() {
-        for with_hints in [true, false] {
-            let (store, dir) = store();
-            let path = dir.path("progress.db");
-            old_sqlite(&path, with_hints);
-            let imported = store.import_sqlite(&path).unwrap().unwrap();
-            assert_eq!(
-                imported,
-                Imported {
-                    attempts: 2,
-                    notes: 1,
-                    daily_scores: 2
-                }
-            );
-            let attempts = store.attempts().unwrap();
-            assert_eq!(
-                attempts
-                    .iter()
-                    .map(|a| (a.slug.as_str(), a.at, a.score, a.hints))
-                    .collect::<Vec<_>>(),
-                [
-                    ("two-sum", 1_793_316_907_566, None, 0),
-                    ("is-subsequence", 1_793_327_257_719, Some(0.4), 0)
-                ]
-            );
-            assert_eq!(attempts[1].guessed, ["Array", "Two Pointers"]);
-            assert_eq!(store.notes().unwrap()["two-sum"], "Use a hash map.");
-            let days = store.daily_scores(60).unwrap();
-            assert_eq!(days.len(), 2);
-            assert_eq!(days[0].day, "2026-10-29");
-            assert_eq!(
-                days[0].readiness.to_bits(),
-                0.000_769_301_086_366_571_8_f64.to_bits()
-            );
-            assert_eq!(days[1].accuracy, None);
-            let at: i64 = store
-                .with(|c| {
-                    c.query_row(
-                        "SELECT epoch_ms(computed_at) FROM daily_scores ORDER BY scored_on LIMIT 1",
-                        [],
-                        |r| r.get(0),
-                    )
-                })
-                .unwrap();
-            assert_eq!(at, 1_793_343_472_296);
-        }
-    }
-
-    #[test]
-    fn imports_sqlite_only_into_a_new_database() {
-        let dir = TempDir::new("db-sqlite-once");
-        let path = dir.path("openleet.duckdb");
-        let (_, first) = Store::open(&path, &dir.path("none")).unwrap();
-        assert!(first.started_empty());
-        let (_, second) = Store::open(&path, &dir.path("none")).unwrap();
-        assert!(!second.started_empty());
-    }
-
     #[test]
     fn backs_up_rotates_and_recovers_a_corrupt_database() {
         let dir = TempDir::new("db-recover");
@@ -1084,10 +983,13 @@ mod tests {
         let path = dir.path("openleet.duckdb");
         std::fs::write(&path, b"not a database").unwrap();
         let (store, opening) = Store::open(&path, &dir.path("none")).unwrap();
-        assert!(opening.started_empty());
         assert_eq!(store.attempts().unwrap().len(), 0);
-        let Opening::Recovered { quarantined, .. } = opening else {
-            panic!("expected a recovery");
+        let Opening::Recovered {
+            quarantined,
+            backup: None,
+        } = opening
+        else {
+            panic!("expected a recovery without a backup, got {opening:?}");
         };
         assert_eq!(
             std::fs::read(quarantined.join("openleet.duckdb")).unwrap(),

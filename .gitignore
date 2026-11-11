@@ -30,8 +30,8 @@ client_secret*.json
 # Claude Code local settings
 .claude/settings.local.json
 
-# Fetched sources and local server state: DuckDB, the old SQLite progress database it imports,
-# the HTTPS certificate cache, backups and quarantine (STATE_DIR=data)
+# Fetched sources and local server state: DuckDB, the HTTPS certificate cache, backups and
+# quarantine (STATE_DIR=data), and any other local database
 data/.cache/
 data/*.db
 data/*.db-*

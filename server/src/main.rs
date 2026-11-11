@@ -153,13 +153,6 @@ fn load_state(config: &Config) -> Result<Shared> {
             quarantined.display()
         ),
     }
-    // The SQLite database of older servers is imported once, into a database that starts out
-    // empty; never again after that (clearing your progress must not bring it back).
-    if opening.started_empty()
-        && let Some(imported) = store.import_sqlite(&config.state_dir.join("progress.db"))?
-    {
-        tracing::info!("imported the old SQLite database: {imported:?}");
-    }
     let judge = Judge::load(
         &config.data_dir.join("judge/specs.json"),
         config.judge.clone(),
