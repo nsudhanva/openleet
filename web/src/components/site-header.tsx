@@ -16,7 +16,7 @@ const NAV: { to: LinkProps["to"]; label: string; exact?: boolean }[] = [
 	{ to: "/about", label: "About" },
 ];
 
-/** `readiness` is null while the server cannot say; the header then leaves it out. */
+/** The header shows readiness only once there is a score; before that it leaves it out. */
 export function SiteHeader({ readiness }: { readiness: Readiness | null }) {
 	const company = useCompany();
 	const name = companyName(useCompanies(), company);
@@ -52,7 +52,7 @@ export function SiteHeader({ readiness }: { readiness: Readiness | null }) {
 				</nav>
 				<div className="ml-auto flex items-center gap-0.5 sm:gap-1">
 					<SearchDialog />
-					{readiness !== null && (
+					{readiness?.score != null && (
 						<Link
 							to="/progress"
 							className="hidden items-center gap-2 rounded-md px-2 py-1 text-sm text-muted-foreground hover:text-foreground lg:flex"
