@@ -19,6 +19,7 @@ import { MyAnswer } from "@/components/study/my-answer";
 import { TopicPicker } from "@/components/study/topic-picker";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useHotkeys } from "@/hooks/use-hotkeys";
+import { lockedGuess, lockGuess } from "@/lib/reveal";
 import type { ListFilters } from "@/lib/schemas";
 import { scoreTopics } from "@/lib/scorer";
 import type { AskedPeriod, Grade, StudyCard } from "@/lib/types";
@@ -75,9 +76,11 @@ export function Flashcard({
 }) {
 	const { problem, approach, state } = card;
 	const hints = approach?.hints ?? [];
-	const [guessed, setGuessed] = useState<string[]>([]);
-	const [hintsShown, setHintsShown] = useState(0);
-	const [revealed, setRevealed] = useState(false);
+	const cardKey = `${problem.slug}:${state?.lastAt ?? 0}`;
+	const [locked] = useState(() => lockedGuess(cardKey));
+	const [guessed, setGuessed] = useState<string[]>(locked?.guessed ?? []);
+	const [hintsShown, setHintsShown] = useState(locked?.hints ?? 0);
+	const [revealed, setRevealed] = useState(locked !== null);
 	const [pane, setPane] = useState<Pane>("problem");
 	const [note, setNote] = useState(card.note);
 	const [editing, setEditing] = useState(false);
@@ -93,6 +96,7 @@ export function Flashcard({
 		setPane("aside");
 	};
 	const reveal = () => {
+		lockGuess(cardKey, { guessed, hints: hintsShown });
 		setRevealed(true);
 		setPane("aside");
 	};
@@ -104,9 +108,10 @@ export function Flashcard({
 		setNote(await onSaveNote(text));
 		setEditing(false);
 	};
+	// Once the answer shows, the guess is locked: Back goes to the previous card, never back
+	// to the guess, so the graded guess is the one made before seeing the answer.
 	const back = () => {
-		if (revealed) setRevealed(false);
-		else if (canGoBack) onBack();
+		if (canGoBack) onBack();
 	};
 
 	useHotkeys({
@@ -214,7 +219,7 @@ export function Flashcard({
 						shortcut="B"
 						icon={<ArrowLeftIcon />}
 						onClick={back}
-						disabled={(!revealed && !canGoBack) || busy}
+						disabled={!canGoBack || busy}
 					/>
 					<ActionButton
 						variant="ghost"
