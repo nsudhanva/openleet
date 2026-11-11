@@ -75,9 +75,9 @@ export function CompanyTags({
 	if (!ranked.length) return null;
 	return (
 		<div className={cn("flex min-w-0 items-center gap-1", className)}>
-			{/* Remount on a new order, so the chips are measured again. */}
+			{/* Remount on a new order or rank label, so the chips are measured again. */}
 			<FittedChips
-				key={ranked.map((r) => r.slug).join()}
+				key={[selected, period, ...ranked.map((r) => r.slug)].join()}
 				ranked={ranked}
 				selected={selected}
 				onOverflow={show}

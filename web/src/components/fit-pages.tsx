@@ -120,10 +120,17 @@ function Fitted({ children, className, arrowKeys = false }: FitPagesProps) {
 		});
 		observer.observe(box);
 		// Images and fonts load late and change the content height.
+		const unmounted = new AbortController();
 		for (const img of inner.querySelectorAll("img")) {
-			img.addEventListener("load", measure, { once: true });
+			img.addEventListener("load", measure, {
+				once: true,
+				signal: unmounted.signal,
+			});
 		}
-		return () => observer.disconnect();
+		return () => {
+			observer.disconnect();
+			unmounted.abort();
+		};
 	}, []);
 
 	const paged = layout.pages > 1;
