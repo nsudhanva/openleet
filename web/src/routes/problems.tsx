@@ -16,7 +16,7 @@ import { ListBadge } from "@/components/list-badge";
 import { PageHeader } from "@/components/page-header";
 import { PagerControls } from "@/components/pager";
 import { OrderPicker, StatusFilter } from "@/components/plan/plan-filters";
-import { remember } from "@/components/plan/plan-link";
+import { PlanLink } from "@/components/plan/plan-link";
 import { PracticeButton } from "@/components/plan/practice-button";
 import { SavedPlans } from "@/components/plan/saved-plans";
 import { PremiumBadge } from "@/components/premium-badge";
@@ -321,12 +321,10 @@ function Problems() {
 									{row.lastScore === null ? "—" : percent(row.lastScore)}
 								</TableCell>
 								<TableCell>
-									<Link
-										to="/code/$slug"
-										params={{ slug: row.slug }}
-										// The plan of the table: Next goes on from this row.
-										search={plan}
-										onClick={() => remember(plan)}
+									{/* The plan of the table: Next goes on from this row. */}
+									<PlanLink
+										plan={plan}
+										slug={row.slug}
 										className={cn(
 											buttonVariants({ variant: "ghost", size: "icon-xs" }),
 											"text-muted-foreground",
@@ -335,7 +333,7 @@ function Problems() {
 										title="Solve it in Python"
 									>
 										<CodeXmlIcon />
-									</Link>
+									</PlanLink>
 								</TableCell>
 								<TableCell>
 									{row.lastAt && (

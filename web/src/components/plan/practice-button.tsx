@@ -14,6 +14,7 @@ const LABEL = {
 	empty: "Nothing left",
 	failed: "Try again",
 } as const;
+type State = keyof typeof LABEL;
 
 /**
  * Opens the first problem of `plan` on the code page, with the plan in its URL so Next goes
@@ -34,7 +35,11 @@ export function PracticeButton({
 	iconOnPhone?: boolean;
 }) {
 	const navigate = useNavigate();
-	const [state, setState] = useState<keyof typeof LABEL>("idle");
+	// A result belongs to the plan it was for: with other filters the button is idle again.
+	const key = JSON.stringify(plan);
+	const [found, setFound] = useState<{ key: string; state: State }>();
+	const state = found?.key === key ? found.state : "idle";
+	const setState = (state: State) => setFound({ key, state });
 	async function start() {
 		setState("busy");
 		try {

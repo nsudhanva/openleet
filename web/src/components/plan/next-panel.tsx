@@ -104,7 +104,7 @@ export function NextPanel({ plan, slug }: { plan: Plan; slug: string }) {
 					</p>
 					{next ? (
 						<PlanLink
-							view={ready.plan}
+							plan={planOf(ready.plan)}
 							slug={next.slug}
 							className={cn(
 								buttonVariants({ size: "lg" }),
@@ -135,7 +135,7 @@ export function NextPanel({ plan, slug }: { plan: Plan; slug: string }) {
 								{ready.pivots.map((pivot) => (
 									<li key={`${pivot.kind}:${pivot.plan.label}`}>
 										<PlanLink
-											view={pivot.plan}
+											plan={planOf(pivot.plan)}
 											slug={pivot.next.slug}
 											title={`${pivot.plan.label}. Next: ${pivot.next.title}`}
 											className={cn(

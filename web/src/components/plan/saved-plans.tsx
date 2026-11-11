@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { useLoadOnUse } from "@/hooks/use-load-on-use";
 import { useMedia } from "@/hooks/use-media";
 import { api, messageOf } from "@/lib/api";
-import { progressShare } from "@/lib/plan";
+import { planOf, progressShare } from "@/lib/plan";
 import { SM_SCREEN } from "@/lib/screen";
 import type { SavedPlan } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -162,7 +162,7 @@ function PlanRow({
 			</div>
 			{plan.next ? (
 				<PlanLink
-					view={plan.plan}
+					plan={planOf(plan.plan)}
 					slug={plan.next.slug}
 					title={`Next: ${plan.next.title}`}
 					className={cn(

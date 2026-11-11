@@ -1,6 +1,6 @@
-import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { DifficultyBadge } from "@/components/difficulty-badge";
+import { PlanLink } from "@/components/plan/plan-link";
 import { PracticeButton } from "@/components/plan/practice-button";
 import { EmptyNote, Panel } from "@/components/progress/panel";
 import { Button } from "@/components/ui/button";
@@ -46,14 +46,13 @@ export function ShakyPanel({
 					{shown.map((s) => (
 						<li key={s.slug} className="py-2">
 							<div className="flex items-center gap-2">
-								<Link
-									to="/code/$slug"
-									params={{ slug: s.slug }}
-									search={plan}
+								<PlanLink
+									plan={plan}
+									slug={s.slug}
 									className="min-w-0 truncate text-sm font-medium hover:text-primary hover:underline"
 								>
 									{s.title}
-								</Link>
+								</PlanLink>
 								<DifficultyBadge difficulty={s.difficulty} />
 							</div>
 							<p className="text-xs text-muted-foreground">
