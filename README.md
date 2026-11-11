@@ -34,6 +34,16 @@ docker compose up -d
 Open <http://openleet.localhost>. If port 80 is taken, run `HTTP_PORT=8088 docker compose up -d`
 and open <http://openleet.localhost:8088>.
 
+On an Ubuntu server with a domain pointed at it and ports 80 and 443 open:
+
+```bash
+git clone https://github.com/nsudhanva/openleet && cd openleet
+sudo SITE_ADDRESS=openleet.example.com deploy/install.sh
+```
+
+It serves <https://openleet.example.com> with a certificate from Let's Encrypt and installs new
+releases on its own. See [Deployment](docs/deployment.md#new-server).
+
 ## Documentation
 
 - [Architecture](docs/architecture.md): how pages load, how a submission is judged, and where

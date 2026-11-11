@@ -71,12 +71,40 @@ above).
 
 ## New server
 
-1. In Google Cloud, create an e2-micro VM with Ubuntu, a static external IP and the network tag
-   `web-server`, which the firewall rule for ports 80 and 443 applies to. Point a DNS A record
-   for every name in `SITE_ADDRESS` at that IP.
-2. Copy `deploy/` to the VM and run `sudo deploy/install.sh`. It also adds 1 GB of swap when the
-   machine has none, and lets security updates reboot the machine at 10:00.
-3. Fill in `/etc/openleet.env` (`DEPLOY_SECRET` must match the GitHub secret), then run
-   `sudo /opt/openleet/update.sh` and `sudo systemctl restart openleet`: the update timer may
-   already have started the server with the file's placeholder values.
-4. To bring progress over, restore a backup of the old server (see above).
+You need an Ubuntu 24.04 machine with 1 GB of memory or more (a free e2-micro on Google Cloud
+works), ports 80 and 443 open to the internet, and a DNS A record pointing a domain at it.
+
+```bash
+git clone https://github.com/nsudhanva/openleet && cd openleet
+sudo SITE_ADDRESS=openleet.example.com deploy/install.sh
+```
+
+The installer takes about two minutes. It creates the `openleet` user, installs Python for the
+judge, adds 1 GB of swap when the machine has none, lets security updates reboot the machine at
+10:00, writes `/etc/openleet.env`, then downloads the newest release (server, web app, problems
+and test corpus) and starts it. The server gets its TLS certificate from Let's Encrypt within a minute;
+check it with `curl https://openleet.example.com/api/health`.
+
+The installer also takes `TZ` (the day boundary for streaks, such as `America/Los_Angeles`; UTC
+by default) and `DEPLOY_SECRET` (see below). Run it again to change them; it keeps the values
+you leave out. `SITE_ADDRESS=http://HOST` serves plain HTTP without a certificate.
+
+The server installs each new release within 5 minutes. To bring progress over from another
+server, restore a backup of it (see above).
+
+## Deploy from your own fork
+
+A server installs releases from the GitHub repository it was cloned from (`OPENLEET_REPO` in
+`/etc/openleet.env`), so clone your fork on the server. Then, in the fork's settings:
+
+1. Enable GitHub Actions. Each push to `main` publishes a release; your server picks it up within
+   5 minutes.
+2. For deploys within seconds of a push, add the repository variable `SITE_URL`
+   (`https://openleet.example.com`) and the secret `DEPLOY_SECRET` (any long random string,
+   such as the output of `openssl rand -hex 32`), and give the server the same secret:
+   `sudo DEPLOY_SECRET=... deploy/install.sh`.
+
+The test corpus is not in git: `data/judge/corpus.json` names the repository and release asset
+that hold it, so a fork uses its upstream's corpus until it rebuilds and publishes its own
+(`uv run openleet judge publish`). The fork's `images` workflow publishes Docker images to
+`ghcr.io/OWNER`; run them with `IMAGES=ghcr.io/OWNER docker compose up -d`.
