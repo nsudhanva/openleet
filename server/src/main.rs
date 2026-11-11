@@ -51,9 +51,10 @@ const SCORE_REFRESH: Duration = Duration::from_mins(15);
 /// How often the server checks that the current UTC day has a backup (taken at startup, then
 /// once a day; a failed one is retried at the next check).
 const BACKUP_CHECK: Duration = Duration::from_hours(1);
-/// How long a stopping server waits for in-flight HTTPS requests (a submission can take
-/// several seconds to judge).
-const DRAIN: Duration = Duration::from_secs(30);
+/// How long a stopping server waits for in-flight HTTPS requests before closing their
+/// connections. Well under `TimeoutStopSec=` in deploy/openleet.service, so systemd never has to
+/// kill it: browsers keep idle HTTP/2 connections open, and a drain waits out its whole limit.
+const DRAIN: Duration = Duration::from_secs(5);
 
 struct Config {
     data_dir: PathBuf,
@@ -264,17 +265,27 @@ async fn main() -> Result<()> {
     let certificate = Arc::clone(&state.certificate);
     let router = app(state);
     let http = SocketAddr::from((Ipv6Addr::UNSPECIFIED, config.http_port));
+    let stop = Shutdown::new(signal());
     match config.tls_domains() {
         None => {
             tracing::info!("serving {} on {http}", config.site);
             let listener = tokio::net::TcpListener::from_std(sockets.take("http", http)?)?;
             health::ready();
             axum::serve(listener, router)
-                .with_graceful_shutdown(shutdown())
+                .with_graceful_shutdown(stop.wait())
                 .await?;
         }
         Some(domains) => {
-            serve_tls(&config, domains, router, &mut sockets, http, certificate).await?;
+            serve_tls(
+                &config,
+                domains,
+                router,
+                &mut sockets,
+                http,
+                certificate,
+                stop,
+            )
+            .await?;
         }
     }
     Ok(())
@@ -357,6 +368,7 @@ async fn serve_tls(
     sockets: &mut Sockets,
     http: SocketAddr,
     certificate: CertificateSlot,
+    stop: Shutdown,
 ) -> Result<()> {
     let Some((primary, aliases)) = domains.split_first() else {
         anyhow::bail!("SITE_ADDRESS names no domain");
@@ -386,9 +398,10 @@ async fn serve_tls(
         async move { Redirect::permanent(&target) }
     });
     let listener = tokio::net::TcpListener::from_std(sockets.take("http", http)?)?;
+    let redirect_stop = stop.clone();
     tokio::spawn(async move {
         axum::serve(listener, redirect)
-            .with_graceful_shutdown(shutdown())
+            .with_graceful_shutdown(redirect_stop.wait())
             .await
     });
 
@@ -405,7 +418,7 @@ async fn serve_tls(
     let handle = axum_server::Handle::new();
     let stopper = handle.clone();
     tokio::spawn(async move {
-        shutdown().await;
+        stop.wait().await;
         stopper.graceful_shutdown(Some(DRAIN));
     });
     let mut server = axum_server::from_tcp(https_listener)?;
@@ -440,7 +453,8 @@ async fn hsts(mut response: axum::response::Response) -> axum::response::Respons
     response
 }
 
-async fn shutdown() {
+/// Resolves on SIGINT or SIGTERM.
+async fn signal() {
     let ctrl_c = tokio::signal::ctrl_c();
     #[cfg(unix)]
     let term = async {
@@ -454,8 +468,31 @@ async fn shutdown() {
         _ = ctrl_c => {},
         () = term => {},
     }
-    tracing::info!("shutting down");
-    health::stopping();
+}
+
+/// The server's stop, shared by its listeners: logged and reported to systemd once, however
+/// many listeners wait for it.
+#[derive(Clone)]
+struct Shutdown(tokio::sync::watch::Receiver<bool>);
+
+impl Shutdown {
+    /// Stops when `trigger` resolves.
+    fn new(trigger: impl Future<Output = ()> + Send + 'static) -> Self {
+        let (stopped, receiver) = tokio::sync::watch::channel(false);
+        tokio::spawn(async move {
+            trigger.await;
+            tracing::info!("shutting down");
+            health::stopping();
+            stopped.send_replace(true);
+        });
+        Self(receiver)
+    }
+
+    /// Resolves once the server is stopping.
+    async fn wait(mut self) {
+        // An error means the sender is gone, which happens only after it sent `true`.
+        let _ = self.0.wait_for(|&stopped| stopped).await;
+    }
 }
 
 #[cfg(test)]
@@ -502,6 +539,40 @@ mod tests {
         );
         assert_eq!(canonical.redirect("openleet.sudhanva.me", "/"), None);
         assert_eq!(canonical.redirect("evil.example", "/"), None);
+    }
+
+    #[test]
+    fn drains_well_within_the_stop_timeout() {
+        let unit = include_str!("../../deploy/openleet.service");
+        let timeout = unit
+            .lines()
+            .find_map(|line| line.strip_prefix("TimeoutStopSec="))
+            .and_then(|seconds| seconds.trim().parse::<u64>().ok())
+            .expect("TimeoutStopSec in openleet.service");
+        // Room left to close the database after the drain.
+        assert!(DRAIN * 2 <= Duration::from_secs(timeout), "{DRAIN:?}");
+    }
+
+    #[tokio::test]
+    async fn one_shutdown_reaches_every_listener() {
+        let (trigger, fired) = tokio::sync::oneshot::channel::<()>();
+        let stop = Shutdown::new(async {
+            let _ = fired.await;
+        });
+        let waiters: Vec<_> = (0..3).map(|_| tokio::spawn(stop.clone().wait())).collect();
+        tokio::task::yield_now().await;
+        assert!(waiters.iter().all(|w| !w.is_finished()));
+        trigger.send(()).unwrap();
+        for waiter in waiters {
+            tokio::time::timeout(Duration::from_secs(5), waiter)
+                .await
+                .expect("stopped")
+                .unwrap();
+        }
+        // A listener that starts waiting after the stop returns at once.
+        tokio::time::timeout(Duration::from_secs(5), stop.wait())
+            .await
+            .expect("already stopped");
     }
 
     #[test]
