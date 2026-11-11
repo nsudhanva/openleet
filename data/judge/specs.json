@@ -75,8 +75,7 @@
   "checker": "exact",
   "cpuMs": {
    "dataset": 38,
-   "doocs1": 41,
-   "doocs2": 481
+   "doocs1": 41
   },
   "floats": false,
   "limitMs": 1900,
@@ -32746,11 +32745,10 @@
  "find-the-number-of-subsequences-with-equal-gcd": {
   "checker": "exact",
   "cpuMs": {
-   "dataset": 26037,
    "doocs2": 2038
   },
   "floats": false,
-  "limitMs": 30000,
+  "limitMs": 10000,
   "reference": "class Solution:\n    def subsequencePairCount(self, nums: List[int]) -> int:\n        mod = 10**9 + 7\n        m = max(nums)\n        f = [[0] * (m + 1) for _ in range(m + 1)]\n        f[0][0] = 1\n        for x in nums:\n            g = [[0] * (m + 1) for _ in range(m + 1)]\n            for j in range(m + 1):\n                for k in range(m + 1):\n                    if f[j][k] == 0:\n                        continue\n                    v = f[j][k]\n                    g[j][k] = (g[j][k] + v) % mod\n                    gj, gk = gcd(j, x), gcd(k, x)\n                    g[gj][k] = (g[gj][k] + v) % mod\n                    g[j][gk] = (g[j][gk] + v) % mod\n            f = g\n        return (sum(f[i][i] for i in range(m + 1)) - 1) % mod",
   "spec": {
    "cls": "Solution",
@@ -36467,8 +36465,7 @@
   "checker": "exact",
   "cpuMs": {
    "dataset": 19,
-   "doocs1": 22,
-   "doocs2": 218
+   "doocs1": 22
   },
   "floats": false,
   "limitMs": 1000,
@@ -44761,11 +44758,10 @@
  "longest-duplicate-substring": {
   "checker": "exact",
   "cpuMs": {
-   "dataset": 127,
-   "doocs1": 17501
+   "dataset": 127
   },
   "floats": false,
-  "limitMs": 30000,
+  "limitMs": 6350,
   "reference": "class Solution:\n    def longestDupSubstring(self, s: str) -> str:\n        def check(l):\n            vis = set()\n            for i in range(n - l + 1):\n                t = s[i : i + l]\n                if t in vis:\n                    return t\n                vis.add(t)\n            return ''\n\n        n = len(s)\n        left, right = 0, n\n        ans = ''\n        while left < right:\n            mid = (left + right + 1) >> 1\n            t = check(mid)\n            ans = t or ans\n            if t:\n                left = mid\n            else:\n                right = mid - 1\n        return ans\n",
   "spec": {
    "cls": "Solution",
@@ -48579,11 +48575,10 @@
  "max-sum-of-rectangle-no-larger-than-k": {
   "checker": "exact",
   "cpuMs": {
-   "dataset": 7,
-   "doocs1": 1174
+   "dataset": 7
   },
   "floats": false,
-  "limitMs": 2348,
+  "limitMs": 1000,
   "reference": "import bisect\nfrom typing import List\n\nclass Solution:\n    def maxSumSubmatrix(self, matrix: List[List[int]], k: int) -> int:\n        m = len(matrix)\n        n = len(matrix[0])\n        \n        # Transpose the matrix if the number of rows is larger to minimize the outer loop\n        if m > n:\n            matrix = list(map(list, zip(*matrix)))  # transpose\n            m, n = n, m\n        \n        # Precompute the prefix sums for each row\n        prefix_rows = []\n        for row in matrix:\n            curr = [0]\n            s = 0\n            for num in row:\n                s += num\n                curr.append(s)\n            prefix_rows.append(curr)\n        \n        max_total = -float('inf')\n        \n        # Iterate over all possible left and right column pairs\n        for left in range(n):\n            for right in range(left, n):\n                # Compute the row_sums array for the current column range [left, right]\n                row_sums = []\n                for r in range(m):\n                    current_sum = prefix_rows[r][right + 1] - prefix_rows[r][left]\n                    row_sums.append(current_sum)\n                \n                # Find the maximum subarray sum <=k in row_sums\n                current_max = self.compute_max_subarray(row_sums, k)\n                if current_max > max_total:\n                    max_total = current_max\n                    if max_total == k:  # Early exit if we find exactly k\n                        return k\n        \n        return max_total\n    \n    def compute_max_subarray(self, arr: List[int], k: int) -> int:\n        sorted_prefix = [0]\n        max_sum = -float('inf')\n        current_prefix = 0\n        \n        for num in arr:\n            current_prefix += num\n            # Find the smallest element in sorted_prefix >= current_prefix - k\n            target = current_prefix - k\n            idx = bisect.bisect_left(sorted_prefix, target)\n            if idx < len(sorted_prefix):\n                candidate = current_prefix - sorted_prefix[idx]\n                if candidate > max_sum:\n                    max_sum = candidate\n            # Insert the current prefix into the sorted list\n            ins_pos = bisect.bisect_left(sorted_prefix, current_prefix)\n            sorted_prefix.insert(ins_pos, current_prefix)\n        \n        return max_sum\n",
   "spec": {
    "cls": "Solution",
@@ -53933,7 +53928,6 @@
  "maximum-number-of-non-overlapping-substrings": {
   "checker": "unordered",
   "cpuMs": {
-   "dataset": 462,
    "doocs1": 31
   },
   "floats": false,
@@ -56528,8 +56522,7 @@
   "checker": "exact",
   "cpuMs": {
    "dataset": 27,
-   "doocs1": 26,
-   "doocs2": 316
+   "doocs1": 26
   },
   "floats": false,
   "limitMs": 1300,
@@ -62071,11 +62064,10 @@
  "minimum-cost-to-merge-stones": {
   "checker": "exact",
   "cpuMs": {
-   "dataset": 1295,
    "doocs1": 45
   },
   "floats": false,
-  "limitMs": 2590,
+  "limitMs": 2250,
   "reference": "class Solution:\n    def mergeStones(self, stones: list[int], K: int) -> int:\n        n = len(stones)\n        if (n - 1) % (K - 1):\n            return -1\n        s = list(accumulate(stones, initial=0))\n        f = [[[inf] * (K + 1) for _ in range(n + 1)] for _ in range(n + 1)]\n        for i in range(1, n + 1):\n            f[i][i][1] = 0\n        for l in range(2, n + 1):\n            for i in range(1, n - l + 2):\n                j = i + l - 1\n                for k in range(1, K + 1):\n                    for h in range(i, j):\n                        f[i][j][k] = min(f[i][j][k], f[i][h][1] + f[h + 1][j][k - 1])\n                f[i][j][1] = f[i][j][K] + s[j] - s[i - 1]\n        return f[1][n][1]",
   "spec": {
    "cls": "Solution",
@@ -75255,8 +75247,7 @@
   "checker": "exact",
   "cpuMs": {
    "dataset": 12,
-   "doocs1": 12,
-   "doocs2": 172
+   "doocs1": 12
   },
   "floats": false,
   "limitMs": 1000,
@@ -77956,11 +77947,10 @@
   "cpuMs": {
    "dataset": 31,
    "doocs1": 30,
-   "doocs2": 91,
-   "doocs3": 983
+   "doocs2": 91
   },
   "floats": false,
-  "limitMs": 1966,
+  "limitMs": 1500,
   "reference": "class Solution:\n    def canPartitionKSubsets(self, nums: List[int], k: int) -> bool:\n        def dfs(i: int) -> bool:\n            if i == len(nums):\n                return True\n            for j in range(k):\n                if j and cur[j] == cur[j - 1]:\n                    continue\n                cur[j] += nums[i]\n                if cur[j] <= s and dfs(i + 1):\n                    return True\n                cur[j] -= nums[i]\n            return False\n\n        s, mod = divmod(sum(nums), k)\n        if mod:\n            return False\n        cur = [0] * k\n        nums.sort(reverse=True)\n        return dfs(0)\n",
   "spec": {
    "cls": "Solution",
@@ -80447,8 +80437,7 @@
   "checker": "exact",
   "cpuMs": {
    "dataset": 117,
-   "doocs1": 81,
-   "doocs2": 1251
+   "doocs1": 81
   },
   "floats": false,
   "limitMs": 4050,
@@ -96846,11 +96835,10 @@
   "checker": "exact",
   "cpuMs": {
    "dataset": 815,
-   "doocs1": 886,
-   "doocs2": 16800
+   "doocs1": 886
   },
   "floats": false,
-  "limitMs": 30000,
+  "limitMs": 10000,
   "reference": "class Solution:\n    def superEggDrop(self, k: int, n: int) -> int:\n        @cache\n        def dfs(i: int, j: int) -> int:\n            if i < 1:\n                return 0\n            if j == 1:\n                return i\n            l, r = 1, i\n            while l < r:\n                mid = (l + r + 1) >> 1\n                a = dfs(mid - 1, j - 1)\n                b = dfs(i - mid, j)\n                if a <= b:\n                    l = mid\n                else:\n                    r = mid - 1\n            return max(dfs(l - 1, j - 1), dfs(i - l, j)) + 1\n\n        return dfs(n, k)\n",
   "spec": {
    "cls": "Solution",
@@ -97764,8 +97752,7 @@
  "the-earliest-and-latest-rounds-where-players-compete": {
   "checker": "exact",
   "cpuMs": {
-   "dataset": 5,
-   "doocs1": 296
+   "dataset": 5
   },
   "floats": false,
   "limitMs": 1000,
@@ -101744,11 +101731,10 @@
   "checker": "exact",
   "cpuMs": {
    "dataset": 3,
-   "doocs1": 2,
-   "doocs2": 16296
+   "doocs1": 2
   },
   "floats": false,
-  "limitMs": 30000,
+  "limitMs": 1000,
   "reference": "class Solution:\n    def isPerfectSquare(self, num: int) -> bool:\n        l = bisect_left(range(1, num + 1), num, key=lambda x: x * x) + 1\n        return l * l == num",
   "spec": {
    "cls": "Solution",
@@ -101780,13 +101766,11 @@
  "valid-permutations-for-di-sequence": {
   "checker": "exact",
   "cpuMs": {
-   "dataset": 584,
-   "doocs1": 559,
    "doocs2": 22,
    "doocs3": 17
   },
   "floats": false,
-  "limitMs": 1168,
+  "limitMs": 1000,
   "reference": "class Solution:\n    def numPermsDISequence(self, s: str) -> int:\n        mod = 10**9 + 7\n        n = len(s)\n        f = [1] + [0] * n\n        for i, c in enumerate(s, 1):\n            pre = 0\n            g = [0] * (n + 1)\n            if c == \"D\":\n                for j in range(i, -1, -1):\n                    pre = (pre + f[j]) % mod\n                    g[j] = pre\n            else:\n                for j in range(i + 1):\n                    g[j] = pre\n                    pre = (pre + f[j]) % mod\n            f = g\n        return sum(f) % mod",
   "spec": {
    "cls": "Solution",
@@ -102926,8 +102910,7 @@
  "ways-to-express-an-integer-as-sum-of-powers": {
   "checker": "exact",
   "cpuMs": {
-   "dataset": 10,
-   "doocs1": 116
+   "dataset": 10
   },
   "floats": false,
   "limitMs": 1000,
