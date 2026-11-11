@@ -1,26 +1,19 @@
-"""Scramble String at length 30 over a tiny alphabet: a genuine random scramble (true), or an
-anagram of s1 that defeats character-count pruning, so unmemoized recursion explodes."""
+"""Scramble String at length 30: one letter repeated around a 4-letter core in the 2413 or 3142
+order, which no scramble makes, so every split of the padding passes the letter-count check and
+unmemoized recursion runs exponentially long before answering false."""
 
-from _shapes import random_string
+from string import ascii_lowercase
 
 SEEDS = 3
-
-
-def scramble(rng, s):
-    if len(s) <= 1:
-        return s
-    i = rng.randint(1, len(s) - 1)
-    x, y = scramble(rng, s[:i]), scramble(rng, s[i:])
-    return y + x if rng.random() < 0.5 else x + y
+N = 30
 
 
 def generate(rng):
-    alphabet = rng.choice(["ab", "abc", "a"])
-    s1 = random_string(rng, alphabet, 30)
-    if rng.random() < 0.5:
-        s2 = scramble(rng, s1)
-    else:
-        chars = list(s1)
-        rng.shuffle(chars)
-        s2 = "".join(chars)
+    letters = rng.sample(ascii_lowercase, 5)
+    pad, core = letters[0], letters[1:]
+    order = rng.choice([(1, 3, 0, 2), (2, 0, 3, 1)])
+    left = rng.randint(0, N - 4)
+    right = N - 4 - left
+    s1 = pad * left + "".join(core) + pad * right
+    s2 = pad * left + "".join(core[i] for i in order) + pad * right
     return {"s1": s1, "s2": s2}

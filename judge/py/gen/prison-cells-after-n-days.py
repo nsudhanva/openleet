@@ -2,7 +2,8 @@
 cycle must be found."""
 
 SEEDS = 2
+LOW, HIGH = 9 * 10**8, 10**9
 
 
 def generate(rng):
-    return {"cells": [rng.randint(0, 1) for _ in range(8)], "n": rng.randint(9 * 10**8, 10**9)}
+    return {"cells": [rng.randint(0, 1) for _ in range(8)], "n": rng.randint(LOW, HIGH)}

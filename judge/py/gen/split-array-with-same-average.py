@@ -1,30 +1,23 @@
-"""Split Array With Same Average at the maximum n = 30 (2^30 subsets): random values, values
-that can never balance, or a constructed true case."""
+"""Split Array With Same Average at the maximum n = 30, always false while every subset size
+passes the divisibility test and the deviations from the mean mix signs, so a search over the
+2^30 subsets, pruned by bounds or not, runs to the end."""
 
-from _shapes import pick_shape
-
-SEEDS = 3
+SEEDS = 2
+N = 30
+TOP = 10**4
+M = 31  # A prime above N - 1.
+SPREAD = 40
 
 
 def generate(rng):
-    shape = pick_shape(rng)
-    n = 30
-    if shape == 0:
-        nums = [rng.randint(0, 10**4) for _ in range(n)]
-    elif shape == 1:
-        # Equal values except one: the only balancing subsets do not exist.
-        nums = [rng.randint(0, 10**4)] * (n - 1)
-        nums.append(nums[0] + rng.choice([1, -1]) if nums[0] else 1)
-        rng.shuffle(nums)
-    else:
-        # Two halves of 15 with the same sum (b is a with mass moved between entries).
-        a = [rng.randint(0, 10**4) for _ in range(15)]
-        b = list(a)
-        for _ in range(10):
-            i, j = rng.sample(range(15), 2)
-            t = rng.randint(0, min(b[i], 10**4 - b[j]))
-            b[i] -= t
-            b[j] += t
-        nums = a + b
-        rng.shuffle(nums)
+    # Deviations d = nums - mean: N - 1 of them are 1 mod M and the last makes the total 0, so
+    # a proper subset of size j sums to j or j - N mod M, never 0: no split balances.
+    while True:
+        d = [1 + M * rng.randint(-SPREAD, SPREAD) for _ in range(N - 1)]
+        d.append(-sum(d))
+        if abs(d[-1]) <= M * SPREAD:
+            break
+    mean = rng.randint(-min(d), TOP - max(d))
+    nums = [mean + x for x in d]
+    rng.shuffle(nums)
     return {"nums": nums}
