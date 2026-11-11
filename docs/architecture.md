@@ -59,7 +59,10 @@ outputs stay in the Rust daemon.
 
 Each solution runs in a 704 MB address space. During corpus voting, a test is kept only when the
 required reference solutions finish it within that limit. A reference's memory failure drops that
-test, while voting continues on later tests.
+test, while voting continues on later tests. Timing runs the references again through the
+judge, one test after another in the same process: a test that a trusted reference cannot finish
+in memory there is dropped for every reference and the timing repeated, so every limit comes from
+references that finish every kept test.
 
 ### Time limits
 

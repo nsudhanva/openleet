@@ -19,7 +19,14 @@ from typing import Any
 
 import duckdb
 
-from openleet.judging import SPECS_PATH, TESTS_PATH, TIMING_DIR, WORK_ITEMS_DIR, trusted
+from openleet.judging import (
+    MEMORY_DIR,
+    SPECS_PATH,
+    TESTS_PATH,
+    TIMING_DIR,
+    WORK_ITEMS_DIR,
+    trusted,
+)
 
 DEFAULT_SOCKETS = "tcp://127.0.0.1:7777"
 # The judge's own cap: trusted references get all of it, so a slow one is measured, not cut off.
@@ -101,6 +108,30 @@ def cached(slug: str, print_: str) -> dict | None:
     return timing if timing.get("tests") == print_ else None
 
 
+def canonical(case: str) -> str:
+    """A stored test case as assemble writes it: sorted keys, no spaces."""
+    return json.dumps(json.loads(case), sort_keys=True, separators=(",", ":"))
+
+
+def memory_drops(slug: str) -> set[str]:
+    """The test cases (as stored) that a trusted reference could not finish within the memory
+    limit when run in sequence through the judge."""
+    path = MEMORY_DIR / f"{slug}.json"
+    return set(json.loads(path.read_text())) if path.exists() else set()
+
+
+def too_big(outcome: dict) -> bool:
+    """Whether a reference's run ended on a test it could not hold in memory: a Memory Limit
+    Exceeded, or a child the kernel killed for the container's memory (no verdict of its own)."""
+    return outcome["failed"] is not None and (
+        outcome["verdict"] == "memory_limit_exceeded"
+        or (
+            outcome["verdict"] == "runtime_error"
+            and "exited before every test ran" in (outcome["error"] or "")
+        )
+    )
+
+
 def endpoints() -> list[str]:
     sockets = os.environ.get("JUDGE_SOCKETS", DEFAULT_SOCKETS).split(",")
     return [s.strip() for s in sockets if s.strip()]
@@ -138,7 +169,17 @@ def time_references() -> None:
             }
 
         try:
-            voters = timed([n for n in entry["voters"] if trusted(n)], TIMING_LIMIT_MS)
+            while True:
+                voters = timed([n for n in entry["voters"] if trusted(n)], TIMING_LIMIT_MS)
+                failed = {v["failed"] for v in voters.values() if too_big(v)}
+                # A test a reference cannot hold in memory is left out for every reference, and
+                # the rest run again: an earlier test's memory can tip a later one over.
+                if not failed or len(tests) == len(failed):
+                    break
+                drops = memory_drops(slug) | {canonical(tests[i][1]) for i in failed}
+                MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+                (MEMORY_DIR / f"{slug}.json").write_text(json.dumps(sorted(drops)))
+                tests = [t for i, t in enumerate(tests) if i not in failed]
             times = [v["cpuMs"] for v in voters.values() if v["verdict"] == "accepted"]
             crowd = [n for n in entry["voters"] if not trusted(n)]
             bound = TIMING_LIMIT_MS

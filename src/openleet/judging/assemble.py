@@ -27,7 +27,7 @@ from openleet.judging import (
 )
 from openleet.judging.limits import set_limit
 from openleet.judging.testdb import TEST_KINDS, write_jsonl
-from openleet.judging.timing import tests_print_of, timings
+from openleet.judging.timing import memory_drops, tests_print_of, timings
 
 FLOAT_TOLERANCE = 1e-5
 # Larger exact stress answers are stored as a SHA-256 of their printed form.
@@ -192,6 +192,10 @@ def judge_problem(item: dict, votes: dict) -> tuple[dict, list[dict]]:
             tests.append({"kind": kind, "test": {"input": test["input"]}, "expected": expected})
     stress, stress_cpu = stress_tests(item["slug"], voters, same)
     tests += stress
+    # Left out: tests a trusted reference could not finish in the memory limit when timed
+    # through the judge (timing.py); the other references' answers to them would be unchecked.
+    too_big = memory_drops(item["slug"])
+    tests = [t for t in tests if key(t["test"]) not in too_big]
     # Until the references are timed on these tests through the judge (limits.py), their
     # voting times stand in: those that answered every stress input, since the CPU time of one
     # killed on an input says nothing about how long a correct answer takes.

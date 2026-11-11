@@ -36,6 +36,9 @@ RESULTS_DIR = WORK_DIR / "results"
 STRESS_DIR = WORK_DIR / "stress"
 # Each reference's verdict and CPU time through the judge (timing.py).
 TIMING_DIR = WORK_DIR / "timing"
+# The tests a trusted reference could not finish within the memory limit when run in sequence
+# through the judge (timing.py); assemble leaves them out.
+MEMORY_DIR = WORK_DIR / "memory"
 JUDGE_DIR = DATA_DIR / "judge"
 SPECS_PATH = JUDGE_DIR / "specs.json"
 TESTS_PATH = JUDGE_DIR / "tests.duckdb"
