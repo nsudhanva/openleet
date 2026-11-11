@@ -85,7 +85,7 @@ jobs:
             org.opencontainers.image.licenses=MIT
           outputs: type=image,name=${{ env.APP }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=app-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=app-${{ matrix.arch }}
+          cache-to: type=gha,mode=min,scope=app-${{ matrix.arch }}
       - name: Build and push judge
         id: judge
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -100,7 +100,7 @@ jobs:
             org.opencontainers.image.licenses=MIT
           outputs: type=image,name=${{ env.JUDGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=judge-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=judge-${{ matrix.arch }}
+          cache-to: type=gha,mode=min,scope=judge-${{ matrix.arch }}
       - name: Record digests
         env:
           APP_DIGEST: ${{ steps.app.outputs.digest }}
