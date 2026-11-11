@@ -223,7 +223,11 @@ async fn main() -> Result<()> {
     if std::env::args().nth(1).as_deref() == Some("health") {
         return health();
     }
-    tracing_subscriber::fmt().with_target(false).init();
+    // Colors only on a terminal: journald and docker logs store the escape codes verbatim.
+    tracing_subscriber::fmt()
+        .with_target(false)
+        .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stdout()))
+        .init();
     let mut sockets = Sockets::from_systemd();
     let config = Config::from_env()?;
     let state = load_state(&config)?;
