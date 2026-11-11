@@ -9,19 +9,17 @@ use serde::{Deserialize, Serialize};
 
 use openleet::content::Content;
 use openleet::fingerprint;
-use openleet::insights::{Insights, Learner, insights};
+use openleet::insights::{Insights, insights};
 use openleet::scorer::{ScoreReport, local_zone};
 use openleet::service::{self, AttemptInput, DeckParams, DeckQuery, ProblemParams, ProblemQuery};
 
 use super::{Params, param};
-use crate::db::DailyScore;
 use crate::error::{ApiError, ApiResult};
 use crate::state::{Shared, now_ms};
 
 const MAX_NOTE_CHARS: usize = 4000;
 const SEARCH_LIMIT: usize = 20;
 const MAX_SEARCH_LIMIT: usize = 2000;
-const HISTORY_DAYS: usize = 60;
 
 /// `GET /api/companies` as sent, with its `ETag`; built once at start-up.
 pub fn companies_response(content: &Content) -> (Bytes, HeaderValue) {
@@ -101,7 +99,8 @@ struct Scored {
     score: Option<f64>,
 }
 
-/// Records a graded (or skipped) answer and returns its topic score.
+/// Records a graded (or skipped) answer and returns its topic score. One insert; the reports
+/// are recomputed when next read.
 pub async fn record_attempt(
     State(state): State<Shared>,
     Json(input): Json<AttemptInput>,
@@ -117,7 +116,6 @@ pub async fn record_attempt(
             Ok(score)
         })
         .await?;
-    state.refresh_scores().await?;
     Ok((StatusCode::CREATED, Json(Scored { score })))
 }
 
@@ -239,45 +237,29 @@ pub async fn search(State(state): State<Shared>, Query(params): Params) -> ApiRe
 #[derive(Serialize)]
 struct ReportPage<'a> {
     report: &'a ScoreReport,
-    history: Vec<DailyScore>,
     #[serde(flatten)]
     insights: Insights<'a>,
 }
 
-/// `?company=` (default google): the report for that company's 6-month list, with the coding
-/// progress, shaky solves, topic map and activity calendar over the same list. The daily
-/// history is the default company's. All but the history comes from memory.
-pub async fn report(State(state): State<Shared>, Query(params): Params) -> ApiResult<Response> {
+/// `?company=` (default google): the report for that company, with the coding progress,
+/// shaky solves, topic map and activity calendar over its 6-month list. All from memory.
+pub async fn report(State(state): State<Shared>, Query(params): Params) -> Response {
     let content = &state.content;
     let company = content.company_or_default(param(&params, "company"));
-    let history = state.db(|store| store.daily_scores(HISTORY_DAYS)).await?;
     let now = now_ms();
     let (progress, report) = state.report(company, now);
-    let learner = Learner {
-        attempts: &progress.attempts,
-        states: &progress.states,
-        coding: &progress.coding,
-        recall: &report.topics,
-    };
-    let insights = insights(content, company, learner, now, &local_zone());
-    Ok(Json(&ReportPage {
+    let insights = insights(content, company, progress.learner(), now, &local_zone());
+    Json(&ReportPage {
         report: &report,
-        history,
         insights,
     })
-    .into_response())
-}
-
-#[derive(Serialize)]
-struct Readiness {
-    readiness: f64,
+    .into_response()
 }
 
 /// `?company=` (default google): that company's readiness alone.
 pub async fn readiness(State(state): State<Shared>, Query(params): Params) -> Response {
     let company = state.content.company_or_default(param(&params, "company"));
-    let readiness = state.report(company, now_ms()).1.readiness;
-    Json(Readiness { readiness }).into_response()
+    Json(&state.report(company, now_ms()).1.readiness).into_response()
 }
 
 #[cfg(test)]
@@ -304,6 +286,10 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    async fn readiness_of(state: &Shared, company: &str) -> Response {
+        readiness(State(Arc::clone(state)), query(&[("company", company)])).await
     }
 
     async fn rows(state: &Shared, pairs: &[(&str, &str)]) -> Vec<serde_json::Value> {
@@ -417,7 +403,7 @@ mod tests {
                 ("add-two-numbers", TimeLimitExceeded),
                 ("add-two-numbers", Accepted),
             ] {
-                progress.coding.record(slug, now, verdict);
+                progress.record_submission(slug, now, verdict);
             }
             progress.push(openleet::model::Attempt {
                 slug: "two-sum".into(),
@@ -428,13 +414,19 @@ mod tests {
                 hints: 0,
             });
         }
-        let page = json(
-            report(State(Arc::clone(&state)), query(&[("company", "google")]))
-                .await
-                .expect("report"),
-        )
-        .await;
+        let page =
+            json(report(State(Arc::clone(&state)), query(&[("company", "google")])).await).await;
         assert_eq!(page["report"]["graded"], 1);
+        // Two Google problems in the judge, one card: readiness has data, the trend waits.
+        let readiness = &page["report"]["readiness"];
+        assert_eq!(readiness["period"], "6m");
+        assert_eq!(readiness["problems"], 100);
+        assert!(readiness["score"].as_f64() > Some(0.0));
+        assert_eq!(page["report"]["trend"]["practiceDays"], 1);
+        assert_eq!(page["report"]["trend"]["points"], serde_json::json!([]));
+        assert_eq!(page["report"]["streakDays"], 1);
+        let header = json(readiness_of(&state, "google").await).await;
+        assert_eq!(&header, readiness);
         let coding = &page["coding"];
         assert_eq!(coding["byDifficulty"][0]["difficulty"], "Easy");
         let solved: u64 = coding["byDifficulty"]
@@ -452,14 +444,18 @@ mod tests {
         assert_eq!(page["shaky"][0]["failures"]["timeLimitExceeded"], 1);
         assert!(page["shaky"][0].get("topics").is_none());
         let map = page["topicMap"].as_array().expect("topics");
-        let weights: Vec<u64> = map
+        let problems: Vec<u64> = map
             .iter()
-            .map(|t| t["weight"].as_u64().expect("w"))
+            .map(|t| t["problems"].as_u64().expect("problems"))
             .collect();
-        assert!(weights.windows(2).all(|w| w[0] >= w[1]));
+        assert!(problems.windows(2).all(|w| w[0] >= w[1]));
         let array = map.iter().find(|t| t["topic"] == "Array").expect("Array");
         assert!(array["covered"].as_u64() >= Some(1));
-        assert_eq!(array["recall"], 1.0);
+        // One graded card: too few to say how often Array was named.
+        assert_eq!(
+            (&array["graded"], &array["named"]),
+            (&1.into(), &serde_json::Value::Null)
+        );
         let days = page["activity"]["days"].as_array().expect("days");
         assert_eq!(days.len(), 1);
         assert_eq!(

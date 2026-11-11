@@ -219,8 +219,7 @@ pub async fn submit(
             state
                 .progress
                 .write()
-                .coding
-                .record(&input.slug, at, outcome.verdict);
+                .record_submission(&input.slug, at, outcome.verdict);
             Ok(id)
         })
         .await?;

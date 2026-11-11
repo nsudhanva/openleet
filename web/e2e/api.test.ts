@@ -144,12 +144,15 @@ describe("HTTP API, end to end", () => {
 		expect(again.body.card.state.list).toBe("again");
 	});
 
-	it("reports the score the background scorer computes", async () => {
+	it("reports readiness for the most-asked problems, and the header's alike", async () => {
 		const { body } = await api("/api/report");
 		expect(body.report.graded).toBe(2);
 		expect(body.report.counts.again).toBe(1);
-		expect(body.report.readiness).toBeGreaterThan(0);
-		expect(body.history).toHaveLength(1);
+		expect(body.report.readiness.score).toBeGreaterThan(0);
+		expect(body.report.readiness.problems).toBe(100);
+		// One day of practice: the trend waits for seven.
+		expect(body.report.trend).toEqual({ practiceDays: 1, points: [] });
+		expect((await api("/api/readiness")).body).toEqual(body.report.readiness);
 	});
 
 	it("saves your own answer on the card, and deletes it with empty text", async () => {

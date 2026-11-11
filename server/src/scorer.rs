@@ -1,10 +1,10 @@
-//! Topic-guess scoring and the readiness report.
+//! Topic-guess scoring and the report.
 //!
-//! The report is company-scoped: readiness, coverage, `by_difficulty` and the due/new/again/less
-//! counts only count the company's 6-month list. Topic recall, accuracy and the streak use
-//! every attempt.
+//! Readiness and its trend cover the company's most-asked problems (see [`crate::readiness`]),
+//! the study counts and cards by difficulty its 6-month list. Topic accuracy, the graded
+//! count, the topics you name least and the streak count every list.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use jiff::Timestamp;
 use jiff::civil::Date;
@@ -12,9 +12,11 @@ use jiff::tz::TimeZone;
 use serde::Serialize;
 
 use crate::content::Content;
+use crate::insights::{Learner, practice_days, streak};
 use crate::lists::ListId;
-use crate::model::{Attempt, CompanyFilter, Difficulty, Grade, Period, Problem};
-use crate::scheduler::{CardList, CardState, CardStates, CardStatus, DAY, INTERVALS, card_status};
+use crate::model::{Attempt, CompanyFilter, Difficulty, Grade, MAX_TOPICS, Period, TopicId};
+use crate::readiness::{Readiness, Trend, readiness, readiness_list, trend};
+use crate::scheduler::{CardList, CardStatus, card_status};
 
 /// How a topic guess compares with the problem's tags.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -57,45 +59,16 @@ pub fn score_topics(guessed: &[String], actual: &[String]) -> TopicResult {
     }
 }
 
-/// Weight of each grade in an attempt's quality.
-const fn grade_value(grade: Grade) -> Option<f64> {
-    match grade {
-        Grade::Again => Some(0.0),
-        Grade::Good => Some(0.8),
-        Grade::Less => Some(1.0),
-        Grade::Skip => None,
-    }
-}
-/// Each hint opened keeps this share of the topic recall.
-const HINT_DISCOUNT: f64 = 0.75;
 /// Accuracy averages this many most recent graded attempts.
 const RECENT_ATTEMPTS: usize = 50;
-
-/// How well a graded attempt went: half topic recall (each hint opened costs a quarter of it),
-/// half the learner's own grade. `None` for skips.
-fn quality(attempt: &Attempt) -> Option<f64> {
-    let grade = grade_value(attempt.grade)?;
-    let hints = i32::try_from(attempt.hints).unwrap_or(i32::MAX);
-    let recall = attempt.score.unwrap_or(0.0) * HINT_DISCOUNT.powi(hints);
-    Some(0.5 * recall + 0.5 * grade)
-}
-
-/// Memory fades between reviews: at the card's own interval, retention is ~70%.
-/// Half-life is twice the box interval, never less than a day.
-fn retention(state: &CardState, now: i64) -> f64 {
-    let half_life = (2 * INTERVALS[state.box_]).max(DAY);
-    0.5_f64.powf(millis(0.max(now - state.last_at)) / millis(half_life))
-}
-
-/// Lossless for any realistic span (below 2^53 ms, about 285,000 years).
-#[allow(clippy::cast_precision_loss)]
-const fn millis(ms: i64) -> f64 {
-    ms as f64
-}
+/// A topic is rated once this many graded cards carried it.
+pub const MIN_TOPIC_CARDS: usize = 5;
+/// Topics rated below this are listed as the ones you name least.
+const WEAK_TOPIC_BELOW: f64 = 0.6;
 
 /// `num / den` as a float; counts here are far below 2^53.
 #[allow(clippy::cast_precision_loss)]
-fn ratio(num: usize, den: usize) -> f64 {
+pub(crate) fn ratio(num: usize, den: usize) -> f64 {
     num as f64 / den as f64
 }
 
@@ -112,51 +85,133 @@ pub struct Counts {
     pub less: usize,
 }
 
-/// Mastery of one difficulty, over the selected company's 6-month list.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct DifficultyMastery {
+/// How many cards of one difficulty were graded, over the selected company's 6-month list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct DifficultyCoverage {
     /// The difficulty.
     pub difficulty: Difficulty,
-    /// Mean mastery over every problem of this difficulty, 0..1.
-    pub mastery: f64,
     /// Problems graded at least once.
     pub seen: usize,
     /// Problems of this difficulty.
     pub total: usize,
 }
 
-/// How often the learner named a topic when it applied.
+/// How a topic fared on graded cards: named when it applied, missed when it applied, and
+/// named when it did not (a false alarm).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TopicTally {
+    /// Graded cards with the topic that named it.
+    pub named: usize,
+    /// Graded cards with the topic.
+    pub seen: usize,
+    /// Graded cards without the topic that named it.
+    pub false_alarms: usize,
+}
+
+impl TopicTally {
+    /// Named over named plus half the mistakes (misses and false alarms), an F1 for the
+    /// topic: naming it on every card scores no better than never naming it. `None` before
+    /// [`MIN_TOPIC_CARDS`] graded cards carried it.
+    #[must_use]
+    pub fn score(self) -> Option<f64> {
+        if self.seen < MIN_TOPIC_CARDS {
+            return None;
+        }
+        let mistakes = self.seen - self.named + self.false_alarms;
+        Some(ratio(2 * self.named, 2 * self.named + mistakes))
+    }
+}
+
+/// Every topic's tally over graded attempts, indexed by [`TopicId`].
+pub fn topic_tallies<'a>(
+    content: &Content,
+    graded: impl IntoIterator<Item = &'a Attempt>,
+) -> Vec<TopicTally> {
+    let mut tallies = vec![TopicTally::default(); MAX_TOPICS];
+    for attempt in graded {
+        let Some(problem) = content.problem(&attempt.slug) else {
+            continue;
+        };
+        let guessed: HashSet<TopicId> = attempt
+            .guessed
+            .iter()
+            .filter_map(|g| content.topic_id(g))
+            .collect();
+        for id in problem.topic_set.iter() {
+            let t = &mut tallies[usize::from(id)];
+            t.seen += 1;
+            t.named += usize::from(guessed.contains(&id));
+        }
+        for &id in &guessed {
+            if !problem.topic_set.contains(id) {
+                tallies[usize::from(id)].false_alarms += 1;
+            }
+        }
+    }
+    tallies
+}
+
+/// A topic you name least: its score with the cards behind it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct TopicRecall {
     /// The topic tag.
     pub topic: String,
-    /// Share of graded attempts on tagged problems that named it.
-    pub recall: f64,
-    /// Graded attempts on problems with this tag.
+    /// [`TopicTally::score`].
+    pub score: f64,
+    /// Graded cards with the topic that named it.
+    pub named: usize,
+    /// Graded cards with the topic.
     pub seen: usize,
 }
 
-/// The readiness report.
+/// The rated topics scoring under [`WEAK_TOPIC_BELOW`], weakest first, then most seen, then
+/// by name.
+fn weak_topics(content: &Content, tallies: &[TopicTally]) -> Vec<TopicRecall> {
+    let mut weak: Vec<TopicRecall> = content
+        .topics
+        .iter()
+        .zip(tallies)
+        .filter_map(|(topic, t)| {
+            let score = t.score().filter(|&s| s < WEAK_TOPIC_BELOW)?;
+            Some(TopicRecall {
+                topic: topic.clone(),
+                score,
+                named: t.named,
+                seen: t.seen,
+            })
+        })
+        .collect();
+    weak.sort_by(|a, b| {
+        a.score
+            .total_cmp(&b.score)
+            .then(b.seen.cmp(&a.seen))
+            .then_with(|| a.topic.cmp(&b.topic))
+    });
+    weak
+}
+
+/// The report: readiness and its trend over the company's most-asked problems, the study
+/// counts over its 6-month list, and the flashcard figures over every list.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScoreReport {
     /// When it was computed, Unix milliseconds.
     pub computed_at: i64,
-    /// Mastery weighted by the selected company's 6-month frequency, 0..1.
-    pub readiness: f64,
-    /// Share of the selected company's 6-month list graded at least once.
-    pub coverage: f64,
-    /// Mean topic score over the last 50 graded attempts.
+    /// Readiness for the company's most-asked problems.
+    pub readiness: Readiness,
+    /// Readiness at the end of each recent day.
+    pub trend: Trend,
+    /// Mean topic score (F1) of the last 50 graded attempts, on any list.
     pub accuracy: Option<f64>,
-    /// Graded (non-skip) attempts.
+    /// Graded (non-skip) attempts, on any list.
     pub graded: usize,
     /// Consecutive days with practice, ending today or yesterday.
     pub streak_days: usize,
-    /// Cards per study state.
+    /// Cards per study state, over the 6-month list.
     pub counts: Counts,
-    /// Mastery per difficulty, Easy to Hard.
-    pub by_difficulty: Vec<DifficultyMastery>,
-    /// Recall per topic, weakest first.
+    /// Cards graded per difficulty over the 6-month list, Easy to Hard.
+    pub by_difficulty: Vec<DifficultyCoverage>,
+    /// The topics you name least, over every graded card, weakest first.
     pub topics: Vec<TopicRecall>,
 }
 
@@ -185,103 +240,28 @@ pub fn civil_day(at: i64, tz: &TimeZone) -> Date {
     tz.to_datetime(ts).date()
 }
 
-/// Calendar day in the process time zone (set `TZ`), such as "2026-10-28".
+/// The last millisecond of a calendar day in `tz` (the next day's start, less one), so
+/// `civil_day(day_end(d)) == d` even across daylight-saving changes.
 #[must_use]
-pub fn day_key(at: i64) -> String {
-    civil_day(at, &local_zone()).to_string()
+pub fn day_end(day: Date, tz: &TimeZone) -> i64 {
+    day.tomorrow()
+        .and_then(|next| next.to_zoned(tz.clone()))
+        .map_or(i64::MAX, |start| start.timestamp().as_millisecond() - 1)
 }
 
-/// Consecutive calendar days with an attempt, ending today; today without practice yet does
-/// not break a streak that ran through yesterday. Steps by calendar day, not 24 hours, so
-/// daylight-saving days count once.
-fn streak(attempts: &[Attempt], now: i64) -> usize {
-    let tz = local_zone();
-    let days: HashSet<Date> = attempts.iter().map(|a| civil_day(a.at, &tz)).collect();
-    let mut day = civil_day(now, &tz);
-    if !days.contains(&day) {
-        let Ok(yesterday) = day.yesterday() else {
-            return 0;
-        };
-        day = yesterday;
-    }
-    let mut count = 0;
-    while days.contains(&day) {
-        count += 1;
-        match day.yesterday() {
-            Ok(prev) => day = prev,
-            Err(_) => break,
-        }
-    }
-    count
-}
-
-/// Mastery per attempted slug: an exponential moving average of attempt quality (latest
-/// weighted most), faded by retention since the last attempt.
-fn masteries<'a>(attempts: &'a [Attempt], states: &CardStates, now: i64) -> HashMap<&'a str, f64> {
-    let mut averages: HashMap<&str, f64> = HashMap::new();
-    for attempt in attempts {
-        let Some(q) = quality(attempt) else { continue };
-        averages
-            .entry(attempt.slug.as_str())
-            .and_modify(|avg| *avg = f64::midpoint(*avg, q))
-            .or_insert(q);
-    }
-    averages.retain(|slug, average| match states.get(*slug) {
-        Some(state) => {
-            *average *= retention(state, now);
-            true
-        }
-        None => false,
-    });
-    averages
-}
-
-/// Recall per topic over every graded attempt, weakest first, then most seen first; ties keep
-/// the order topics were first met.
-fn topic_recall(content: &Content, graded: &[&Attempt]) -> Vec<TopicRecall> {
-    let mut index: HashMap<&str, usize> = HashMap::new();
-    let mut tally: Vec<(&str, usize, usize)> = Vec::new();
-    for attempt in graded {
-        let Some(problem) = content.problem(&attempt.slug) else {
-            continue;
-        };
-        for topic in &problem.topics {
-            let i = *index.entry(topic).or_insert_with(|| {
-                tally.push((topic, 0, 0));
-                tally.len() - 1
-            });
-            let entry = &mut tally[i];
-            entry.2 += 1;
-            if attempt.guessed.iter().any(|g| g == topic) {
-                entry.1 += 1;
-            }
-        }
-    }
-    let mut result: Vec<TopicRecall> = tally
-        .into_iter()
-        .map(|(topic, hit, seen)| TopicRecall {
-            topic: topic.to_owned(),
-            recall: ratio(hit, seen),
-            seen,
-        })
-        .collect();
-    result.sort_by(|a, b| a.recall.total_cmp(&b.recall).then(b.seen.cmp(&a.seen)));
-    result
-}
-
-/// The report for one company (or any) from the attempt log (oldest first) and the card
-/// states replayed from it. Readiness, coverage, `by_difficulty` and counts cover the
-/// company's 6-month list, weighted by its 6-month frequency.
+/// The report for one company (or any) from what the learner did; `tz` is the server's
+/// time zone, for calendar days.
 #[must_use]
 pub fn score_report(
     content: &Content,
     company: CompanyFilter,
-    attempts: &[Attempt],
-    states: &CardStates,
+    learner: Learner<'_>,
     now: i64,
+    tz: &TimeZone,
 ) -> ScoreReport {
-    let mastery = masteries(attempts, states, now);
-    let mastery_of = |p: &Problem| mastery.get(p.slug.as_str()).copied();
+    let Learner {
+        attempts, states, ..
+    } = learner;
     let graded: Vec<&Attempt> = attempts.iter().filter(|a| a.grade != Grade::Skip).collect();
     let scope = content.list(ListId {
         company,
@@ -289,12 +269,10 @@ pub fn score_report(
     });
 
     let mut counts = Counts::default();
-    let (mut weight, mut weighted, mut seen) = (0.0, 0.0, 0);
-    let mut by_difficulty: Vec<DifficultyMastery> = Difficulty::ALL
+    let mut by_difficulty: Vec<DifficultyCoverage> = Difficulty::ALL
         .iter()
-        .map(|&difficulty| DifficultyMastery {
+        .map(|&difficulty| DifficultyCoverage {
             difficulty,
-            mastery: 0.0,
             seen: 0,
             total: 0,
         })
@@ -312,47 +290,28 @@ pub fn score_report(
             Some(CardList::Less) => counts.less += 1,
             None => {}
         }
-        let frequency = f64::from(entry.frequency);
-        weight += frequency;
-        let group = by_difficulty
+        if let Some(group) = by_difficulty
             .iter_mut()
-            .find(|d| d.difficulty == p.difficulty);
-        if let Some(group) = group {
+            .find(|d| d.difficulty == p.difficulty)
+        {
             group.total += 1;
-            if let Some(m) = mastery_of(p) {
-                group.mastery += m;
-                group.seen += 1;
-            }
+            group.seen += usize::from(state.is_some_and(|s| s.reviews > 0));
         }
-        if let Some(m) = mastery_of(p) {
-            weighted += frequency * m;
-            seen += 1;
-        }
-    }
-    for group in &mut by_difficulty {
-        // The sum so far becomes the mean over every problem of the group.
-        group.mastery = if group.total == 0 {
-            0.0
-        } else {
-            group.mastery / ratio(group.total, 1)
-        };
     }
 
+    let days = practice_days(attempts, learner.coding, tz);
+    let list = readiness_list(content, company);
     let recent = &graded[graded.len().saturating_sub(RECENT_ATTEMPTS)..];
     ScoreReport {
         computed_at: now,
-        readiness: if weight > 0.0 { weighted / weight } else { 0.0 },
-        coverage: if scope.is_empty() {
-            0.0
-        } else {
-            ratio(seen, scope.len())
-        },
+        readiness: readiness(&list, learner, now),
+        trend: trend(&list, learner, &days, now, tz),
         accuracy: mean(recent.iter().map(|a| a.score.unwrap_or(0.0))),
         graded: graded.len(),
-        streak_days: streak(attempts, now),
+        streak_days: streak(&days, civil_day(now, tz)),
         counts,
         by_difficulty,
-        topics: topic_recall(content, &graded),
+        topics: weak_topics(content, &topic_tallies(content, graded.iter().copied())),
     }
 }
 
@@ -361,23 +320,25 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
+    use crate::coding::CodingLog;
     use crate::model::fixtures::{
         GOOGLE, META, T0, asked, attempt, attempt_scored, classic, companies, problem, with,
     };
-    use crate::scheduler::card_states;
+    use crate::scheduler::{DAY, card_states};
 
     fn strings(items: &[&str]) -> Vec<String> {
         items.iter().map(|&s| s.to_owned()).collect()
     }
 
-    /// p1 (Google 90, Meta 20, Array + Graph), p2 (Google 10, Easy), p500 (Meta only, Graph)
-    /// and p900 (no company).
+    /// p1 (Google 90, Meta 20, Array + Graph), p2 (Google 10, Easy, Tree), p500 (Meta only,
+    /// Graph) and p900 (no company).
     fn content() -> Content {
         let mut p1 = with(problem(1), GOOGLE, Period::Months6, asked(1, 90.0));
         p1 = with(p1, META, Period::Months6, asked(2, 20.0));
         p1.topics = strings(&["Array", "Graph"]);
         let mut p2 = problem(2);
         p2.difficulty = Difficulty::Easy;
+        p2.topics = strings(&["Tree"]);
         let mut p500 = with(classic(500), META, Period::Months6, asked(1, 80.0));
         p500.topics = strings(&["Graph"]);
         Content::new(
@@ -388,13 +349,27 @@ mod tests {
     }
 
     fn report(log: &[Attempt], company: CompanyFilter, now: i64) -> ScoreReport {
-        score_report(&content(), company, log, &card_states(log), now)
+        let states = card_states(log);
+        let coding = CodingLog::new(TimeZone::UTC);
+        let learner = Learner {
+            attempts: log,
+            states: &states,
+            coding: &coding,
+        };
+        score_report(&content(), company, learner, now, &TimeZone::UTC)
     }
 
     const G: CompanyFilter = CompanyFilter::Company(GOOGLE);
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-6
+    }
+
+    /// An attempt guessing these topics.
+    fn guess(slug: &str, guessed: &[&str], at: i64) -> Attempt {
+        let mut a = attempt_scored(slug, Grade::Good, at, Some(0.5));
+        a.guessed = strings(guessed);
+        a
     }
 
     #[test]
@@ -416,106 +391,122 @@ mod tests {
     }
 
     #[test]
-    fn weights_readiness_by_frequency_discounts_hints_and_decays() {
-        let frequent = report(&[attempt("p1", Grade::Less, T0)], G, T0);
-        assert!(close(frequent.readiness, 0.9));
-        assert!(close(frequent.coverage, 0.5));
-        let mut hinted_attempt = attempt("p1", Grade::Less, T0);
-        hinted_attempt.hints = 1;
-        let hinted = report(&[hinted_attempt], G, T0);
-        assert!(hinted.readiness < frequent.readiness);
-        let later = report(&[attempt("p1", Grade::Less, T0)], G, T0 + 30 * DAY);
-        assert!(later.readiness < frequent.readiness);
-    }
-
-    #[test]
-    fn counts_streaks_lists_and_the_weakest_topics() {
-        let mut answer = attempt_scored("p1", Grade::Again, T0, Some(0.67));
-        answer.guessed = strings(&["Array"]);
-        let report = report(&[attempt("p2", Grade::Skip, T0 - DAY), answer], G, T0);
-        assert_eq!(report.graded, 1);
-        assert_eq!(report.streak_days, 2);
-        // The day-old skip is past its delay, so it counts as new again.
-        assert_eq!((report.counts.again, report.counts.new), (1, 1));
-        let topics: Vec<_> = report
-            .topics
-            .iter()
-            .map(|t| (t.topic.as_str(), t.recall))
-            .collect();
-        assert_eq!(topics, [("Graph", 0.0), ("Array", 1.0)]);
-    }
-
-    #[test]
-    fn streak_allows_a_gap_today_but_not_before() {
-        let log = [
-            attempt("p1", Grade::Good, T0 - 2 * DAY),
-            attempt("p1", Grade::Good, T0 - DAY),
-        ];
-        assert_eq!(report(&log, G, T0).streak_days, 2);
-        assert_eq!(report(&log, G, T0 + DAY).streak_days, 0);
-    }
-
-    #[test]
-    fn readiness_is_scoped_to_the_company_six_month_list() {
+    fn counts_the_six_month_list_and_grades_on_every_list() {
         let log = [
             attempt("p1", Grade::Less, T0),
             attempt("p500", Grade::Again, T0),
             attempt("p900", Grade::Good, T0),
+            attempt("p2", Grade::Skip, T0),
         ];
         let google = report(&log, G, T0);
-        // Google: p1 (90, mastered) and p2 (10); p500 and p900 are not in its list.
-        assert!(close(google.readiness, 0.9));
-        assert!(close(google.coverage, 0.5));
+        // Google's list: p1 (on the less list) and p2 (skipped, so not due yet, nor new).
         assert_eq!(
             google.counts,
             Counts {
                 due: 0,
-                new: 1,
+                new: 0,
                 again: 0,
                 less: 1
             }
         );
-        let medium = &google.by_difficulty[1];
-        assert_eq!(
-            (medium.difficulty, medium.seen, medium.total),
-            (Difficulty::Medium, 1, 1)
-        );
-        // Graded attempts, accuracy and topics stay global.
-        assert_eq!(google.graded, 3);
-        let graph = google
-            .topics
+        let seen: Vec<_> = google
+            .by_difficulty
             .iter()
-            .find(|t| t.topic == "Graph")
-            .map(|t| t.seen);
-        assert_eq!(graph, Some(2));
-
-        // Meta: p1 (20, mastery 1) and p500 (80, an "again" with score 1: quality 0.5).
-        let meta = report(&log, CompanyFilter::Company(META), T0);
-        assert!(close(meta.readiness, 0.2 * 1.0 + 0.8 * 0.5));
-        assert!(close(meta.coverage, 1.0));
+            .map(|d| (d.difficulty, d.seen, d.total))
+            .collect();
         assert_eq!(
-            meta.counts,
-            Counts {
-                due: 0,
-                new: 0,
-                again: 1,
-                less: 1
-            }
+            seen,
+            [
+                (Difficulty::Easy, 0, 1),
+                (Difficulty::Medium, 1, 1),
+                (Difficulty::Hard, 0, 0)
+            ]
         );
+        // Grades and accuracy count every list; skips are no grades.
+        assert_eq!(google.graded, 3);
+        assert_eq!(google.accuracy, Some(1.0));
+        let meta = report(&log, CompanyFilter::Company(META), T0);
+        assert_eq!((meta.counts.again, meta.counts.less), (1, 1));
         assert_eq!(meta.graded, google.graded);
-
-        // Any: p1 weighted by its best (90), p2 (10), p500 (80).
         let any = report(&log, CompanyFilter::Any, T0);
-        assert!(close(any.readiness, (90.0 + 80.0 * 0.5) / 180.0));
-        assert!(close(any.coverage, 2.0 / 3.0));
+        assert_eq!(any.by_difficulty.iter().map(|d| d.total).sum::<usize>(), 3);
     }
 
     #[test]
-    fn day_keys_are_iso_dates() {
-        let key = day_key(T0);
-        assert_eq!(key.len(), 10);
-        assert!(key.starts_with("2025-12-3") || key.starts_with("2026-01-0"));
-        let utc = civil_day(T0, &TimeZone::UTC);
-        assert_eq!(utc.to_string(), "2026-01-01");
+    fn rates_a_topic_from_five_cards_counting_misses_and_false_alarms() {
+        let tally = |named, seen, false_alarms| TopicTally {
+            named,
+            seen,
+            false_alarms,
+        };
+        assert_eq!(tally(4, 4, 0).score(), None);
+        assert_eq!(tally(0, 5, 0).score(), Some(0.0));
+        assert!(close(tally(5, 5, 0).score().unwrap(), 1.0));
+        // Named 2 of 9: 2 / (2 + 7/2).
+        assert!(close(tally(2, 9, 0).score().unwrap(), 4.0 / 11.0));
+        // Named every time, but also on 5 cards without it: 5 / (5 + 5/2).
+        assert!(close(tally(5, 5, 5).score().unwrap(), 2.0 / 3.0));
+    }
+
+    #[test]
+    fn lists_the_topics_named_least_weakest_first() {
+        let mut log = Vec::new();
+        for i in 0..5 {
+            // Array named every time on p1, Graph never; Tree guessed where it is not.
+            log.push(guess("p1", &["Array", "Tree"], T0 + i));
+            // Graph named on p500 every time, Array guessed where it is not.
+            log.push(guess("p500", &["Graph", "Array"], T0 + i));
+        }
+        // Tree, on p2, named once in four: too few cards to rate.
+        for i in 0..4 {
+            let guessed: &[&str] = if i == 0 { &["Tree"] } else { &[] };
+            log.push(guess("p2", guessed, T0 + i));
+        }
+        let topics: Vec<_> = report(&log, G, T0 + DAY)
+            .topics
+            .iter()
+            .map(|t| (t.topic.clone(), t.named, t.seen))
+            .collect();
+        // Graph: 5 of 10, 10 / (10 + 5) = 67%, not listed. Array: 5 of 5 but 5 false alarms,
+        // 67%, not listed either. Only a weaker topic shows, so add misses on Array.
+        assert!(topics.is_empty(), "{topics:?}");
+        for i in 0..3 {
+            log.push(guess("p1", &["Graph"], T0 + 10 + i));
+        }
+        let topics: Vec<_> = report(&log, G, T0 + DAY)
+            .topics
+            .iter()
+            .map(|t| (t.topic.clone(), t.named, t.seen))
+            .collect();
+        // Array: 5 of 8, 5 false alarms: 10 / (10 + 3 + 5) = 56%.
+        assert_eq!(topics, [("Array".to_owned(), 5, 8)]);
+    }
+
+    #[test]
+    fn day_end_is_the_last_millisecond_of_the_calendar_day() {
+        let utc = TimeZone::UTC;
+        let day = civil_day(T0, &utc);
+        assert_eq!(day.to_string(), "2026-01-01");
+        assert_eq!(day_end(day, &utc), T0 + DAY - 1);
+        // New York springs forward on 2026-03-08: a day of 23 hours.
+        let ny = TimeZone::get("America/New_York").expect("zone");
+        let spring = jiff::civil::date(2026, 3, 8);
+        let end = day_end(spring, &ny);
+        assert_eq!(civil_day(end, &ny), spring);
+        assert_eq!(civil_day(end + 1, &ny), jiff::civil::date(2026, 3, 9));
+        assert_eq!(
+            end - day_end(jiff::civil::date(2026, 3, 7), &ny),
+            23 * 3_600_000
+        );
+    }
+
+    #[test]
+    fn an_empty_log_reports_nothing_measured() {
+        let report = report(&[], G, T0);
+        assert_eq!((report.graded, report.streak_days), (0, 0));
+        assert_eq!(report.accuracy, None);
+        assert!(report.topics.is_empty());
+        assert_eq!(report.readiness.score, None);
+        assert_eq!(report.trend.practice_days, 0);
     }
 }

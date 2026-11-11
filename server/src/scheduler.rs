@@ -29,7 +29,7 @@ const TOP_BOX: usize = INTERVALS.len() - 1;
 const SKIP_DELAY: i64 = HOUR;
 /// "Visit less often" jumps two boxes and doubles the wait.
 const LESS_FACTOR: i64 = 2;
-/// A graded card whose last topic score is below this is in the "missed" set.
+/// A graded card whose last topic score is below this is in the "missed last time" set.
 const MISSED_BELOW: f64 = 0.5;
 
 wire_enum! {
@@ -68,7 +68,7 @@ impl StudySet {
             Self::New => "Not seen yet",
             Self::Again => "Visit again",
             Self::Less => "Visit less often",
-            Self::Missed => "Missed topics",
+            Self::Missed => "Missed last time",
             Self::Skipped => "Skipped",
             Self::All => "All problems",
         }
@@ -107,6 +107,17 @@ impl CardState {
         last_score: None,
         last_grade: Grade::Skip,
     };
+
+    /// How long the last grade scheduled the card for: its box's interval, doubled on the
+    /// visit-less-often list.
+    #[must_use]
+    pub const fn interval(&self) -> i64 {
+        let factor = match self.list {
+            Some(CardList::Less) => LESS_FACTOR,
+            _ => 1,
+        };
+        INTERVALS[self.box_] * factor
+    }
 }
 
 /// Card state per problem slug.
@@ -118,7 +129,7 @@ pub type CardStates = HashMap<String, CardState>;
 pub fn apply_attempt(state: Option<&CardState>, attempt: &Attempt) -> CardState {
     let prev = state.copied().unwrap_or(CardState::UNSEEN);
     let at = attempt.at;
-    let (box_, list, factor) = match attempt.grade {
+    let (box_, list) = match attempt.grade {
         Grade::Skip => {
             return CardState {
                 due: prev.due.max(at + SKIP_DELAY),
@@ -127,23 +138,21 @@ pub fn apply_attempt(state: Option<&CardState>, attempt: &Attempt) -> CardState 
                 ..prev
             };
         }
-        Grade::Again => (0, Some(CardList::Again), 1),
-        Grade::Good => ((prev.box_ + 1).min(TOP_BOX), None, 1),
-        Grade::Less => (
-            (prev.box_ + 2).min(TOP_BOX),
-            Some(CardList::Less),
-            LESS_FACTOR,
-        ),
+        Grade::Again => (0, Some(CardList::Again)),
+        Grade::Good => ((prev.box_ + 1).min(TOP_BOX), None),
+        Grade::Less => ((prev.box_ + 2).min(TOP_BOX), Some(CardList::Less)),
     };
-    CardState {
+    let mut next = CardState {
         box_,
-        due: at + INTERVALS[box_] * factor,
+        due: at,
         list,
         reviews: prev.reviews + 1,
         last_at: at,
         last_score: attempt.score,
         last_grade: attempt.grade,
-    }
+    };
+    next.due += next.interval();
+    next
 }
 
 /// Folds one attempt into `states` in place, so a cache can stay current without a replay.

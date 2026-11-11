@@ -46,8 +46,9 @@ use crate::state::{AppState, Progress, Shared};
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-/// How often today's scores are saved even without new attempts (memory decays over time).
-const SCORE_REFRESH: Duration = Duration::from_mins(15);
+/// How often cached reports are dropped even without new practice, so the progress page sees
+/// cards fall overdue and days pass; the database is checkpointed at the same time.
+const REPORT_REFRESH: Duration = Duration::from_mins(15);
 /// How often the server checks that the current UTC day has a backup (taken at startup, then
 /// once a day; a failed one is retried at the next check).
 const BACKUP_CHECK: Duration = Duration::from_hours(1);
@@ -241,12 +242,10 @@ async fn main() -> Result<()> {
 
     let scorer = Arc::clone(&state);
     tokio::spawn(async move {
-        let mut tick = tokio::time::interval(SCORE_REFRESH);
+        let mut tick = tokio::time::interval(REPORT_REFRESH);
         loop {
             tick.tick().await;
-            if let Err(error) = scorer.refresh_scores().await {
-                tracing::warn!("scorer: {error}");
-            }
+            scorer.refresh_reports();
             let store = Arc::clone(&scorer);
             let _ = store.db(Store::checkpoint).await;
         }

@@ -56,7 +56,7 @@ wire_enum! {
         List = "list",
         /// One difficulty above the solved problem's.
         Harder = "harder",
-        /// The learner's weakest topic, from the readiness report.
+        /// The topic the learner names least on flashcards (the first of the report's topics).
         Weakest = "weakest",
     }
 }

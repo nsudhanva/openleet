@@ -52,10 +52,11 @@ pub async fn next(State(state): State<Shared>, Query(params): Params) -> ApiResu
         }
         None => (state.progress.read(), None),
     };
-    // Topics stay global in the report, so any company's names the same weakest one.
+    // The topic you name least, as the progress page lists them: rated on every graded card,
+    // so any company's report names the same one.
     let weakest = report
         .as_ref()
-        .and_then(|r| r.topics.iter().find(|t| t.recall < 1.0))
+        .and_then(|r| r.topics.first())
         .map(|t| t.topic.as_str());
     let page = plan::next_page(content, &plan, current, progress.marks(), weakest);
     Ok(Json(&page).into_response())

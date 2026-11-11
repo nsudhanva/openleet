@@ -36,6 +36,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "shaky_plans",
         sql: include_str!("migrations/0003_shaky_plans.sql"),
     },
+    Migration {
+        version: 4,
+        name: "metric_comments",
+        sql: include_str!("migrations/0004_metric_comments.sql"),
+    },
 ];
 
 /// The version this build migrates databases to.
@@ -276,7 +281,16 @@ mod tests {
         );
         assert_eq!(
             strings(&conn, "SELECT name FROM schema_migrations ORDER BY version"),
-            ["progress", "plans", "shaky_plans"]
+            ["progress", "plans", "shaky_plans", "metric_comments"]
+        );
+        // Migration 4 changes only comments: the daily scores stay, described as kept data.
+        let comment = strings(
+            &conn,
+            "SELECT comment FROM duckdb_tables() WHERE table_name = 'daily_scores'",
+        );
+        assert!(
+            comment[0].contains("Neither written nor read"),
+            "{comment:?}"
         );
         // The new table takes plans, with NULL filters, and rejects impossible ones.
         let id: i64 = conn

@@ -8,14 +8,16 @@ use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use openleet::coding::CodingLog;
 use openleet::content::Content;
+use openleet::insights::Learner;
 use openleet::model::{Attempt, CompanyFilter, Problem};
 use openleet::plan::Marks;
 use openleet::scheduler::{CardStates, card_states, record_attempt};
-use openleet::scorer::{ScoreReport, day_key, score_report};
+use openleet::scorer::{ScoreReport, local_zone, score_report};
 use openleet::service;
+use openleet_proto::Verdict;
 
 use crate::acme::CertificateSlot;
-use crate::db::{DailyScore, SavedPlan, Store};
+use crate::db::{SavedPlan, Store};
 use crate::error::{ApiError, ApiResult};
 use crate::judge::Judge;
 
@@ -66,6 +68,12 @@ impl Progress {
         self.reports.clear();
     }
 
+    /// Records a judged submission.
+    pub fn record_submission(&mut self, slug: &str, at: i64, verdict: Verdict) {
+        self.coding.record(slug, at, verdict);
+        self.reports.clear();
+    }
+
     /// Forgets one problem's attempts, or every attempt.
     pub fn clear(&mut self, slug: Option<&str>) {
         match slug {
@@ -76,23 +84,34 @@ impl Progress {
         self.reports.clear();
     }
 
-    /// Drops every cached report, so the next reads see memory decay up to now.
+    /// Drops every cached report.
     pub fn invalidate_reports(&mut self) {
         self.reports.clear();
     }
 
-    /// A company's report, computed only on the first read after the log changed.
+    /// What the learner did, for the report and the insights.
+    pub fn learner(&self) -> Learner<'_> {
+        Learner {
+            attempts: &self.attempts,
+            states: &self.states,
+            coding: &self.coding,
+        }
+    }
+
+    /// A company's report, computed only on the first read after the logs changed.
     fn report(&mut self, content: &Content, company: CompanyFilter, now: i64) -> Arc<ScoreReport> {
-        let report = self.reports.entry(company).or_insert_with(|| {
-            Arc::new(score_report(
-                content,
-                company,
-                &self.attempts,
-                &self.states,
-                now,
-            ))
-        });
-        Arc::clone(report)
+        if let Some(report) = self.reports.get(&company) {
+            return Arc::clone(report);
+        }
+        let report = Arc::new(score_report(
+            content,
+            company,
+            self.learner(),
+            now,
+            &local_zone(),
+        ));
+        self.reports.insert(company, Arc::clone(&report));
+        report
     }
 }
 
@@ -183,29 +202,9 @@ impl AppState {
         (RwLockWriteGuard::downgrade(progress), report)
     }
 
-    /// Recomputes the default company's report and stores today's scores. Other companies'
-    /// reports are recomputed when next read.
-    pub async fn refresh_scores(self: &Arc<Self>) -> ApiResult<()> {
-        self.update_progress(|state| state.save_scores()).await
-    }
-
-    fn save_scores(&self) -> Result<()> {
-        let now = now_ms();
-        let score = {
-            let mut progress = self.progress.write();
-            progress.invalidate_reports();
-            let report = progress.report(&self.content, self.content.default_company(), now);
-            (report.graded > 0).then(|| DailyScore {
-                day: day_key(now),
-                readiness: report.readiness,
-                coverage: report.coverage,
-                accuracy: report.accuracy,
-            })
-        };
-        if let Some(score) = score {
-            self.store.save_daily_score(now, &score)?;
-        }
-        Ok(())
+    /// Drops every cached report, so the next reads see cards fall overdue and days pass.
+    pub fn refresh_reports(&self) {
+        self.progress.write().invalidate_reports();
     }
 }
 

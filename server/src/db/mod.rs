@@ -47,16 +47,6 @@ pub struct Draft {
     pub previous: Option<String>,
 }
 
-/// One day's readiness, coverage and accuracy, for the progress chart.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DailyScore {
-    pub day: String,
-    pub readiness: f64,
-    pub coverage: f64,
-    pub accuracy: Option<f64>,
-}
-
 /// The columns [`SubmissionRow::from_row`] reads, in order.
 const SUBMISSION_COLUMNS: &str =
     "id, epoch_ms(submitted_at), verdict::VARCHAR, tests_passed, tests_total, cpu_ms";
@@ -366,38 +356,6 @@ impl Store {
                 .execute("DELETE FROM attempts WHERE slug = ?", [slug])
                 .map(drop),
             None => c.execute_batch("DELETE FROM attempts; DELETE FROM daily_scores;"),
-        })
-    }
-
-    /// Stores one day's scores, replacing that day's earlier ones.
-    pub fn save_daily_score(&self, at: i64, s: &DailyScore) -> Result<()> {
-        self.with(|c| {
-            c.prepare_cached(
-                "INSERT OR REPLACE INTO daily_scores
-                    (scored_on, computed_at, readiness, coverage, accuracy)
-                 VALUES (?::DATE, to_timestamp(? / 1000), ?, ?, ?)",
-            )?
-            .execute(params![s.day, at, s.readiness, s.coverage, s.accuracy])
-            .map(drop)
-        })
-    }
-
-    /// The last `limit` days with a score, oldest first.
-    pub fn daily_scores(&self, limit: usize) -> Result<Vec<DailyScore>> {
-        self.with(|c| {
-            let mut stmt = c.prepare_cached(
-                "SELECT strftime(scored_on, '%Y-%m-%d'), readiness, coverage, accuracy
-                 FROM (FROM daily_scores ORDER BY scored_on DESC LIMIT ?) ORDER BY scored_on",
-            )?;
-            let rows = stmt.query_map([limit], |r| {
-                Ok(DailyScore {
-                    day: r.get(0)?,
-                    readiness: r.get(1)?,
-                    coverage: r.get(2)?,
-                    accuracy: r.get(3)?,
-                })
-            })?;
-            rows.collect()
         })
     }
 
@@ -801,33 +759,6 @@ mod tests {
         assert!(store.restore_draft("b", "x", 6).unwrap().is_none());
         // Reset of an empty editor with nothing saved leaves no row.
         assert!(store.reset_draft("c", "", 7).unwrap().previous.is_none());
-    }
-
-    #[test]
-    fn daily_scores_keep_one_row_per_day() {
-        let (store, _dir) = store();
-        let daily = |day: &str, r| DailyScore {
-            day: day.to_owned(),
-            readiness: r,
-            coverage: 0.1,
-            accuracy: None,
-        };
-        store
-            .save_daily_score(1, &daily("2026-11-01", 0.1))
-            .unwrap();
-        store
-            .save_daily_score(2, &daily("2026-11-02", 0.2))
-            .unwrap();
-        store
-            .save_daily_score(3, &daily("2026-11-02", 0.3))
-            .unwrap();
-        let days = store.daily_scores(60).unwrap();
-        assert_eq!(
-            days.iter().map(|d| d.day.as_str()).collect::<Vec<_>>(),
-            ["2026-11-01", "2026-11-02"]
-        );
-        assert!((days[1].readiness - 0.3).abs() < 1e-9);
-        assert_eq!(store.daily_scores(1).unwrap()[0].day, "2026-11-02");
     }
 
     #[test]
