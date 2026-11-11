@@ -118,20 +118,17 @@ impl Listener {
     }
 }
 
-async fn serve(read: Reader, mut write: Writer, zygote: &mut Zygote) -> Result<()> {
-    let mut line = Vec::new();
-    let mut reader = BufReader::new(read).take(MAX_JOB_BYTES as u64);
-    match tokio::time::timeout(READ_TIMEOUT, reader.read_until(b'\n', &mut line)).await {
-        Ok(read) => read?,
-        Err(_) => {
-            eprintln!("judge: a client sent no job in time");
+/// Serves one client. Only a broken zygote is an error (the caller restarts it): a client
+/// that goes away, even before its verdict, leaves the zygote and its caches as they are.
+async fn serve(read: Reader, write: Writer, zygote: &mut Zygote) -> Result<()> {
+    let line = match receive(read).await {
+        Ok(Some(line)) => line,
+        Ok(None) => return Ok(()),
+        Err(error) => {
+            eprintln!("judge: could not read the job: {error:#}");
             return Ok(());
         }
     };
-    if line.is_empty() {
-        // A health probe: connected and closed without a job.
-        return Ok(());
-    }
     let outcome = match serde_json::from_slice::<Job>(&line) {
         Ok(mut job) => {
             job.cpu_limit_ms = job.cpu_limit_ms.min(MAX_CPU_LIMIT_MS);
@@ -139,7 +136,28 @@ async fn serve(read: Reader, mut write: Writer, zygote: &mut Zygote) -> Result<(
         }
         Err(error) => Outcome::internal(format!("bad job: {error}")),
     };
-    let mut reply = serde_json::to_vec(&outcome)?;
+    if let Err(error) = reply(write, &outcome).await {
+        eprintln!("judge: could not send the verdict: {error:#}");
+    }
+    Ok(())
+}
+
+/// The client's job line; `None` for a health probe (connected and closed without a job) or
+/// a client that sent no job in time.
+async fn receive(read: Reader) -> Result<Option<Vec<u8>>> {
+    let mut line = Vec::new();
+    let mut reader = BufReader::new(read).take(MAX_JOB_BYTES as u64);
+    let Ok(read) = tokio::time::timeout(READ_TIMEOUT, reader.read_until(b'\n', &mut line)).await
+    else {
+        eprintln!("judge: a client sent no job in time");
+        return Ok(None);
+    };
+    read?;
+    Ok((!line.is_empty()).then_some(line))
+}
+
+async fn reply(mut write: Writer, outcome: &Outcome) -> Result<()> {
+    let mut reply = serde_json::to_vec(outcome)?;
     reply.push(b'\n');
     write.write_all(&reply).await?;
     Ok(())
