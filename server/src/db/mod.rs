@@ -685,6 +685,28 @@ mod tests {
         assert_eq!(store.attempts().unwrap().len(), 0);
     }
 
+    /// The Python tools write the corpus this engine reads, so both use one minor version.
+    #[test]
+    fn python_pins_the_bundled_duckdb_minor_version() {
+        let pinned = include_str!("../../../pyproject.toml")
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("\"duckdb=="))
+            .and_then(|pin| pin.strip_suffix(".*\","))
+            .expect("pyproject.toml pins duckdb==MAJOR.MINOR.*");
+        let conn = Connection::open_in_memory().unwrap();
+        let bundled: String = conn
+            .query_row("SELECT library_version FROM pragma_version()", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(
+            bundled
+                .trim_start_matches('v')
+                .starts_with(&format!("{pinned}.")),
+            "the server bundles DuckDB {bundled}, pyproject.toml pins {pinned}.*"
+        );
+    }
+
     #[test]
     fn millisecond_times_round_trip_exactly() {
         let dir = TempDir::new("db-times");

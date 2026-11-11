@@ -5,8 +5,10 @@ description = "OpenLeet data tools: problem lists, approaches, judge tests"
 readme = "README.md"
 authors = [{ name = "Sudhanva Narayana", email = "nsudhanva@gmail.com" }]
 requires-python = ">=3.15"
+# The corpus this writes (data/judge/tests.duckdb) is read by the server's bundled DuckDB: keep
+# the same minor version as the duckdb crate in server/Cargo.toml (the server's tests check it).
 dependencies = [
-    "duckdb>=2.0.0",
+    "duckdb==2.0.*",
 ]
 
 [project.scripts]
