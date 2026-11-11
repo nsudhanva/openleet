@@ -74,6 +74,11 @@ jobs:
         # The version and components in rust-toolchain.toml.
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Drop the cached DuckDB sources
+        # rust-cache keeps target/duckdb-sources as directories without their files, the
+        # `.complete` marker included, and libduckdb-sys then fails to unpack over the
+        # incomplete tree ("Directory not empty"). Unpacking again takes seconds.
+        run: rm -rf target/duckdb-sources
       - name: Install dependencies
         # No lifecycle scripts: nothing the web app needs has one.
         run: |
