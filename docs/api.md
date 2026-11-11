@@ -14,7 +14,7 @@ All endpoints are under `/api` and return JSON.
 | `PUT /notes` `{slug, text}` | Save your own answer |
 | `DELETE /progress?slug=` or `?all=true` | Clear progress |
 | `GET /report?company=` | Readiness, streak, weak topics and trend; coding progress, shaky solves, the topic map and the activity calendar |
-| `GET /code/:slug` | Starter code, your draft, examples and the time limit |
+| `GET /code/:slug` | Starter code, your draft, the time limit and the examples, each as the Testcase box takes it (one JSON value per line) |
 | `PUT /drafts`, `POST /drafts/reset`, `POST /drafts/restore` | Save, reset or restore code |
 | `POST /run` `{slug, code, input?}` | Run the examples or your own input |
 | `POST /submit` `{slug, code}` | Run every test: verdict, CPU time against the limit, the intended complexity |

@@ -286,12 +286,6 @@ const VERDICTS = [
 ] as const;
 export type Verdict = (typeof VERDICTS)[number];
 
-export interface CodeExample {
-	/** One `name = value` line per parameter. */
-	input: string;
-	expected: string;
-}
-
 export interface CodeInfo {
 	slug: string;
 	starter: string | null;
@@ -306,7 +300,11 @@ export interface CodeInfo {
 		stress: number;
 		timeLimitMs: number | null;
 	};
-	examples: CodeExample[];
+	/**
+	 * Each example's input in the Testcase box's format: one JSON value per line, one line per
+	 * parameter in signature order (a design problem: its operations, then its arguments).
+	 */
+	examples: string[];
 	solved: boolean;
 }
 

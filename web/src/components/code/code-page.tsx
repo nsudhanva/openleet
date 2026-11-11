@@ -11,7 +11,6 @@ import {
 	lazy,
 	type ReactNode,
 	Suspense,
-	useMemo,
 	useRef,
 	useState,
 } from "react";
@@ -41,7 +40,6 @@ import { api, messageOf } from "@/lib/api";
 import { companyName } from "@/lib/companies";
 import { cpuTime } from "@/lib/format";
 import type { Plan } from "@/lib/plan";
-import { examplesToTestcase } from "@/lib/testcase";
 import { TONE } from "@/lib/tones";
 import type {
 	CodeInfo,
@@ -175,10 +173,7 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 	const [previous, setPrevious] = useState(code.previous);
 	const [swapping, setSwapping] = useState(false);
 
-	const examples = useMemo(
-		() => examplesToTestcase(code.examples),
-		[code.examples],
-	);
+	const examples = code.examples.join("\n");
 	const [testcase, setTestcase] = useState(examples);
 	const custom = testcase.trim() !== examples.trim();
 

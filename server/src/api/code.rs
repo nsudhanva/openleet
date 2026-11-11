@@ -11,7 +11,7 @@ use openleet_proto::Verdict;
 use super::{Params, param};
 use crate::db::{NewSubmission, Store, TestRow};
 use crate::error::{ApiError, ApiResult};
-use crate::judge::{self, Entry, Shown, show_expected, show_input};
+use crate::judge::{self, Entry};
 use crate::state::{Shared, now_ms};
 
 const SUBMISSIONS_SHOWN: usize = 50;
@@ -49,7 +49,8 @@ struct CodeInfo<'a> {
     draft: Option<String>,
     previous: Option<String>,
     judge: JudgeInfo<'a>,
-    examples: Vec<Shown>,
+    /// Each example's input as Testcase lines.
+    examples: Vec<String>,
     solved: bool,
 }
 
@@ -58,24 +59,16 @@ pub async fn code_info(
     State(state): State<Shared>,
     Path(slug): Path<String>,
 ) -> ApiResult<Response> {
-    let tests = tests(&state, &slug).await?;
+    let mut examples = tests(&state, &slug).await?;
+    let tested = !examples.is_empty();
+    examples.retain(TestRow::is_example);
     let draft = state.db_for(&slug, Store::draft).await?;
     let entry = state.judge.entry(&slug);
-    let examples: Vec<Shown> = entry.map_or_else(Vec::new, |entry| {
-        tests
-            .iter()
-            .filter(|t| t.is_example())
-            .map(|t| Shown {
-                input: show_input(entry, &t.test),
-                expected: show_expected(&t.expected),
-            })
-            .collect()
-    });
-    let supported = entry.is_some_and(|e| e.supported) && !tests.is_empty();
+    let supported = entry.is_some_and(|e| e.supported) && tested;
     let reason = match entry {
         Some(e) if !e.supported => e.reason.as_deref(),
         None => Some("This problem cannot be judged yet."),
-        _ if tests.is_empty() => Some("This problem has no tests yet."),
+        _ if !tested => Some("This problem has no tests yet."),
         _ => None,
     };
     let counts = entry.map(|e| &e.tests);
@@ -92,7 +85,7 @@ pub async fn code_info(
             stress: counts.map_or(0, |c| c.stress),
             time_limit_ms: entry.filter(|_| supported).map(Entry::limit_ms),
         },
-        examples,
+        examples: entry.map_or_else(Vec::new, |entry| judge::testcases(entry, &examples)),
         solved: state.progress.read().coding.solved(&slug),
     };
     Ok(Json(&info).into_response())

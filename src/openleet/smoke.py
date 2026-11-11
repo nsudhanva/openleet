@@ -600,13 +600,7 @@ class Smoke:
 
     def custom_input(self, slug: str, count: int = 2) -> str:
         """The shortest examples, in the Testcase box's format (one JSON value per line)."""
-        shown = sorted(self.info(slug)["examples"], key=lambda e: len(e["input"]))[:count]
-        lines = []
-        for example in shown:
-            for line in example["input"].splitlines():
-                name, sep, value = line.partition(" = ")
-                lines.append(value if sep and name.isidentifier() else line)
-        return "\n".join(lines)
+        return "\n".join(sorted(self.info(slug)["examples"], key=len)[:count])
 
     def run_custom(self, slug: str) -> Row:
         custom = self.custom_input(slug)

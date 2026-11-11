@@ -224,13 +224,6 @@ async fn exchange(stream: impl AsyncRead + AsyncWrite + Unpin, line: &[u8]) -> R
     Ok(reply)
 }
 
-/// A test case as people read it.
-#[derive(Serialize)]
-pub struct Shown {
-    pub input: String,
-    pub expected: String,
-}
-
 fn clip(mut text: String) -> String {
     if text.chars().count() > SHOWN_CHARS {
         text = text.chars().take(SHOWN_CHARS).collect::<String>() + " …";
@@ -278,21 +271,22 @@ pub fn show_expected(expected: &Expected) -> String {
     }
 }
 
-/// Parses the Testcase box: one JSON value per line, one line per input name, case after case.
-fn custom_tests(entry: &Entry, names: &[String], text: &str) -> ApiResult<Vec<Box<RawValue>>> {
+/// Parses the Testcase box: one JSON value per line, one line per key of [`case_keys`], case
+/// after case.
+fn custom_tests(entry: &Entry, keys: &[String], text: &str) -> ApiResult<Vec<Box<RawValue>>> {
     let lines: Vec<&str> = text
         .lines()
         .map(str::trim)
         .filter(|l| !l.is_empty())
         .collect();
-    let width = if entry.design { 2 } else { names.len().max(1) };
+    let width = keys.len().max(1);
     if lines.is_empty() || !lines.len().is_multiple_of(width) {
         return Err(ApiError::BadRequest(format!(
             "Each case needs {width} line(s): {}",
             if entry.design {
                 "operations, then arguments".to_owned()
             } else {
-                names.join(", ")
+                keys.join(", ")
             }
         )));
     }
@@ -302,11 +296,6 @@ fn custom_tests(entry: &Entry, names: &[String], text: &str) -> ApiResult<Vec<Bo
             "At most {MAX_CUSTOM_CASES} cases at a time"
         )));
     }
-    let keys: Vec<&str> = if entry.design {
-        vec!["ops", "args"]
-    } else {
-        names.iter().map(String::as_str).collect()
-    };
     lines
         .chunks(width)
         .map(|chunk| {
@@ -314,7 +303,7 @@ fn custom_tests(entry: &Entry, names: &[String], text: &str) -> ApiResult<Vec<Bo
             for (key, line) in keys.iter().zip(chunk) {
                 let value: Value = serde_json::from_str(line)
                     .map_err(|e| ApiError::BadRequest(format!("{key}: not valid JSON ({e})")))?;
-                input.insert((*key).to_owned(), value);
+                input.insert(key.clone(), value);
             }
             let case = serde_json::json!({ "input": input });
             RawValue::from_string(case.to_string()).map_err(|e| ApiError::Internal(e.into()))
@@ -322,8 +311,34 @@ fn custom_tests(entry: &Entry, names: &[String], text: &str) -> ApiResult<Vec<Bo
         .collect()
 }
 
-/// Input names in display order: the signature's, then any the examples add (such as `pos`).
-fn input_names(entry: &Entry, examples: &[TestRow]) -> Vec<String> {
+/// The examples in the Testcase box's format, which [`custom_tests`] reads back: one JSON
+/// value per line, one line per key of [`case_keys`].
+pub fn testcases(entry: &Entry, examples: &[TestRow]) -> Vec<String> {
+    let keys = case_keys(entry, examples);
+    examples
+        .iter()
+        .filter_map(|t| match serde_json::from_str(&t.test) {
+            Ok(Value::Object(mut test)) => match test.remove("input") {
+                Some(Value::Object(input)) => Some(input),
+                _ => None,
+            },
+            _ => None,
+        })
+        .map(|input| {
+            keys.iter()
+                .map(|key| input.get(key).unwrap_or(&Value::Null).to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .collect()
+}
+
+/// The keys of a case's input, one per Testcase line: a design problem's operations and
+/// arguments, else the signature's input names, then any the examples add (such as `pos`).
+fn case_keys(entry: &Entry, examples: &[TestRow]) -> Vec<String> {
+    if entry.design {
+        return vec!["ops".to_owned(), "args".to_owned()];
+    }
     let mut names = entry.names.clone();
     if let Some(Value::Object(test)) = examples
         .first()
@@ -454,7 +469,7 @@ impl Judge {
         checked_code(code)?;
         let spec = spec_of(entry)?;
         let (tests, expected) = if let Some(text) = custom {
-            let tests = custom_tests(entry, &input_names(entry, examples), text)?;
+            let tests = custom_tests(entry, &case_keys(entry, examples), text)?;
             let expected = self
                 .reference_answers(entry, &spec, &tests)
                 .await?
@@ -656,6 +671,28 @@ mod tests {
             tokio::time::timeout(short, judge.execute(&job))
                 .await
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn examples_fill_the_testcase_box_whole_and_read_back() {
+        let mut entry: Entry = serde_json::from_str(r#"{"supported":true}"#).unwrap();
+        entry.names = vec!["nums".into(), "target".into()];
+        // Longer than an input shown in a result, which is cut.
+        let nums: Vec<u32> = (0..2000).collect();
+        let test = serde_json::json!({ "input": { "target": 9, "nums": nums } }).to_string();
+        let examples = [TestRow {
+            kind: "example".into(),
+            test: test.clone(),
+            expected: Expected::Sha256(String::new()),
+        }];
+        let shown = testcases(&entry, &examples);
+        assert_eq!(shown.len(), 1);
+        assert!(shown[0].starts_with("[0,1,2,") && shown[0].ends_with("1999]\n9"));
+        let parsed = custom_tests(&entry, &case_keys(&entry, &examples), &shown[0]).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(parsed[0].get()).unwrap(),
+            serde_json::from_str::<Value>(&test).unwrap()
         );
     }
 
