@@ -93,5 +93,25 @@ fi
 echo "kernel.io_uring_disabled = 2" >/etc/sysctl.d/90-openleet.conf
 sysctl -q --system
 
+# 1 GB of swap for the rest of a 1 GB machine (apt, the update's unpacking); the judge never
+# swaps (MemorySwapMax=0 in openleet-judge.service).
+if [ -z "$(swapon --show --noheadings)" ]; then
+	fallocate -l 1G /swapfile
+	chmod 0600 /swapfile
+	mkswap /swapfile >/dev/null
+	swapon /swapfile
+fi
+if [ -f /swapfile ] && ! grep -q '^/swapfile ' /etc/fstab; then
+	echo '/swapfile none swap sw 0 0' >>/etc/fstab
+fi
+
+# Ubuntu's unattended-upgrades installs security updates daily; one that needs a reboot (a new
+# kernel) reboots the machine at the next 10:00 machine time (UTC on GCP). Every unit starts
+# again at boot.
+cat >/etc/apt/apt.conf.d/52openleet-reboot <<'APT'
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "10:00";
+APT
+
 install_units
 echo "Fill in $ENV_FILE, then run $ROOT/update.sh"
