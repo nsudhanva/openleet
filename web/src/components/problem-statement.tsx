@@ -21,7 +21,7 @@ export function ProblemStatement({
 		>
 			<div
 				// biome-ignore lint/security/noDangerouslySetInnerHtml: statements are allowlist-sanitized at ingest (src/openleet/sanitize.py)
-				dangerouslySetInnerHTML={{ __html: problem.description }}
+				dangerouslySetInnerHTML={{ __html: problem.description ?? "" }}
 			/>
 		</FitPages>
 	);

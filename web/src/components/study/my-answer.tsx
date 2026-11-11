@@ -98,6 +98,7 @@ function NoteEditor({
 	}, []);
 
 	async function save() {
+		if (saving) return;
 		setSaving(true);
 		setFailed(false);
 		try {

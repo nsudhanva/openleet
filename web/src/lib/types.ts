@@ -60,8 +60,11 @@ export interface Problem {
 	url: string;
 	topics: string[];
 	premium: boolean;
-	/** Sanitized HTML statement (doocs/leetcode, CC BY-SA 4.0), premium problems included. */
-	description: string;
+	/**
+	 * Sanitized HTML statement (doocs/leetcode, CC BY-SA 4.0), premium problems included; null
+	 * only when no source has one.
+	 */
+	description: string | null;
 }
 
 /** One entry of data/approaches.json, written in ASD-STE100 Simplified Technical English. */

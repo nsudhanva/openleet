@@ -116,7 +116,11 @@ export function Flashcard({
 			? Object.fromEntries(
 					GRADE_ACTIONS.map((a) => [a.key, () => answer(a.grade)]),
 				)
-			: { Enter: reveal, s: () => answer("skip"), h: showHint }),
+			: {
+					Enter: reveal,
+					s: () => answer("skip"),
+					...(hintsShown < hints.length && { h: showHint }),
+				}),
 	});
 
 	return (
