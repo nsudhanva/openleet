@@ -16,7 +16,9 @@ reviews and a judge for the Python solutions you write in the browser.
 - After an accepted submission, a button offers the next problem in your practice plan: a list,
   topic, difficulty and order you can change at any time. Recent plans are remembered, and you
   can pin the ones you want to keep.
-- A readiness score for each company, plus your streak and weakest topics.
+- Readiness for a company's 100 most-asked problems, weighted by how often it asks each: 60%
+  for solving a problem cleanly in the judge, 40% for keeping its flashcard current. A daily
+  trend, your streak and the topics you name least sit beside it.
 - Keyboard shortcuts, listed on the site's About page.
 - No account. Progress is stored on the server you run it on.
 

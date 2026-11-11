@@ -19,7 +19,9 @@ flowchart LR
 The server keeps the attempt log, card states, notes, a log of every submission's verdict
 (`server/src/coding.rs`) and the practice plans in memory and writes every change through to
 DuckDB. A plan's next problem and the progress page's analytics (`server/src/insights.rs`) are
-computed from memory on each request.
+computed from memory on each request. Readiness and its daily trend (`server/src/readiness.rs`)
+are replayed from the attempt and submission logs, cached per company until the logs change or
+15 minutes pass.
 
 A page loads in one round trip. `web/index.html` inlines the stylesheet and a static shell, and the
 server adds preload links for the route's code and its first API calls (`server/src/preload.rs`),
