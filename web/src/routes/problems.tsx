@@ -234,7 +234,10 @@ function Problems() {
 					<TableHeader>
 						<TableRow>
 							<TableHead className="w-12 text-right">Rank</TableHead>
-							<TableHead className="hidden w-14 text-right sm:table-cell">
+							<TableHead
+								className="hidden w-14 text-right sm:table-cell"
+								title="LeetCode's frequency score, 100 = most asked"
+							>
 								Freq.
 							</TableHead>
 							<TableHead className="w-16">LC</TableHead>
@@ -242,8 +245,11 @@ function Problems() {
 							<TableHead className="hidden sm:table-cell">Difficulty</TableHead>
 							<TableHead className="hidden xl:table-cell">Asked by</TableHead>
 							<TableHead className="hidden md:table-cell">Status</TableHead>
-							<TableHead className="hidden text-right md:table-cell">
-								Last topics
+							<TableHead
+								className="hidden text-right md:table-cell"
+								title="How well your last topic guess on this card matched its topics (F1)"
+							>
+								Last guess
 							</TableHead>
 							<TableHead className="w-10">
 								<span className="sr-only">Code</span>

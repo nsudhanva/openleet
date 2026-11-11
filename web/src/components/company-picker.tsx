@@ -5,8 +5,9 @@ import { ANY_COMPANY, companyName } from "@/lib/companies";
 import { cn } from "@/lib/utils";
 
 /**
- * Chooses the company whose lists you study: "Any company", then every company by count.
- * On a phone it fills its cell of the filter grid.
+ * Chooses the company whose lists you study: "Any company", then every company by how many
+ * problems it asked at any time, which the list says. On a phone it fills its cell of the
+ * filter grid.
  */
 export function CompanyPicker({
 	value,
@@ -42,6 +43,7 @@ export function CompanyPicker({
 			value={value}
 			valueLabel={companyName(companies, value)}
 			options={options}
+			countNote="Problems asked, all time"
 			onChange={onChange}
 			disabled={disabled}
 			className={cn("w-36 max-sm:w-full", className)}

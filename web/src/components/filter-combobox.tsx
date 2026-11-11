@@ -57,6 +57,7 @@ export function FilterCombobox({
 	valueLabel,
 	options,
 	optionsKey,
+	countNote,
 	onChange,
 	disabled = false,
 	className,
@@ -107,6 +108,11 @@ export function FilterCombobox({
 					placeholder={`Search ${noun}`}
 					aria-label={`Search ${noun}`}
 				/>
+				{countNote && (
+					<p className="px-3 pt-1.5 text-right text-xs text-muted-foreground">
+						{countNote}
+					</p>
+				)}
 				<ComboboxEmpty>
 					{loaded === null
 						? `Loading ${noun}…`

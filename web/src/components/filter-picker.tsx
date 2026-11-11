@@ -31,6 +31,8 @@ export interface FilterPickerProps {
 	options: FilterOption[] | (() => Promise<FilterOption[]>);
 	/** Names the loaded choices: a new key loads them again. */
 	optionsKey?: string;
+	/** What the counts count, shown above the choices, such as "Problems asked, all time". */
+	countNote?: string;
 	onChange: (value: string) => void;
 	disabled?: boolean;
 	/** Sets the width, which stays the same whatever is chosen, so nothing around it moves. */
