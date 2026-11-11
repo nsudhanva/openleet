@@ -76,14 +76,13 @@ RUN cargo build --release --locked ${JOBS:+--jobs $JOBS} -p openleet \
 
 # App files: test corpus, time zones, user
 FROM alpine:${ALPINE} AS files
-# tests.duckdb is a release asset named (with its sha256) in data/judge/corpus.json.
-ARG REPOSITORY=nsudhanva/openleet
+# tests.duckdb is a release asset; data/judge/corpus.json names its repository, name and sha256.
 RUN --mount=type=bind,source=data/judge/corpus.json,target=/corpus.json \
 	set -eu; \
 	field() { sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p" /corpus.json; }; \
 	mkdir -p /rootfs/app/data/judge /rootfs/etc /rootfs/state; \
 	wget -q -O /rootfs/app/data/judge/tests.duckdb \
-		"https://github.com/$REPOSITORY/releases/download/corpus/$(field asset)"; \
+		"https://github.com/$(field repository)/releases/download/corpus/$(field asset)"; \
 	echo "$(field sha256)  /rootfs/app/data/judge/tests.duckdb" | sha256sum -c -
 RUN set -eu; \
 	apk add --no-cache tzdata; \
