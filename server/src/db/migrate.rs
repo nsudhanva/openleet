@@ -41,6 +41,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "metric_comments",
         sql: include_str!("migrations/0004_metric_comments.sql"),
     },
+    Migration {
+        version: 5,
+        name: "submissions_kept",
+        sql: include_str!("migrations/0005_submissions_kept.sql"),
+    },
 ];
 
 /// The version this build migrates databases to.
@@ -281,7 +286,13 @@ mod tests {
         );
         assert_eq!(
             strings(&conn, "SELECT name FROM schema_migrations ORDER BY version"),
-            ["progress", "plans", "shaky_plans", "metric_comments"]
+            [
+                "progress",
+                "plans",
+                "shaky_plans",
+                "metric_comments",
+                "submissions_kept"
+            ]
         );
         // Migration 4 changes only comments: the daily scores stay, described as kept data.
         let comment = strings(
@@ -377,6 +388,46 @@ mod tests {
                  VALUES ('google', '6m', 'solved', 'rank', now(), now())"
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn migrates_version_4_submissions_to_let_old_ones_lose_their_code() {
+        let dir = TempDir::new("migrate-v4");
+        let path = dir.path("p.duckdb");
+        {
+            let mut conn = Connection::open(&path).unwrap();
+            migrate_to(&mut conn, 4).unwrap();
+            conn.execute_batch(
+                "INSERT INTO submissions (slug, submitted_at, code, verdict, tests_passed,
+                    tests_total, cpu_ms, detail)
+                 VALUES ('a', to_timestamp(1), 'print(1)', 'wrong_answer', 0, 2, 3,
+                    '{\"limitMs\":2000}'::JSON::VARIANT)",
+            )
+            .unwrap();
+            assert!(
+                conn.execute_batch("UPDATE submissions SET code = NULL")
+                    .is_err()
+            );
+        }
+        let mut conn = Connection::open(&path).unwrap();
+        assert_eq!(migrate(&mut conn).unwrap().from, Shape::Version(4));
+        assert_eq!(
+            strings(
+                &conn,
+                "SELECT format('{}|{}|{}|{}', id, code, verdict, detail::JSON::VARCHAR)
+                 FROM submissions"
+            ),
+            [r#"1|print(1)|wrong_answer|{"limitMs":2000}"#]
+        );
+        conn.execute_batch("UPDATE submissions SET code = NULL, detail = NULL")
+            .unwrap();
+        assert_eq!(
+            strings(
+                &conn,
+                "SELECT format('{}|{}', id, verdict) FROM submissions WHERE code IS NULL"
+            ),
+            ["1|wrong_answer"]
         );
     }
 

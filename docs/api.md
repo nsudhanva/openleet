@@ -20,6 +20,7 @@ All endpoints are under `/api` and return JSON.
 | `POST /run` `{slug, code, input?}` | Run the examples or your own input |
 | `POST /submit` `{slug, code}` | Run every test: verdict, CPU time against the limit, the intended complexity |
 | `GET /submissions?slug=` | Your submissions for a problem |
+| `GET /submissions/:id` | One submission with its code and result |
 | `GET /next?slug=&company=&period=&topic=&difficulty=&status=&order=` | The plan's next problem after `slug`, the plan's progress, and up to four related plans |
 | `GET /plans` | Your pinned plans, then your recent ones, each with its progress and next problem |
 | `PUT /plans` `{company, period, topic, difficulty, status, order}` | Remember a plan you used; returns it |
@@ -89,8 +90,9 @@ A real failure is a wrong answer, a time limit, a memory limit or a runtime erro
 errors and output limits do not count. A solve is shaky when two or more real failures came
 before the first Accepted, or any time limit did, until a later Accepted clears it: one at
 least a calendar day after the first Accepted, with no real failure since the Accepted before
-it. The server keeps the newest 100 submissions of each problem and its latest Accepted one;
-the report counts only those. Days are calendar days in the server's time zone.
+it. The report counts every submission. `GET /submissions/:id` returns the code and result only
+for a problem's newest 100 submissions and its latest Accepted one. Days are calendar days in
+the server's time zone.
 
 ## Errors
 

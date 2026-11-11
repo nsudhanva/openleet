@@ -15,6 +15,8 @@ use crate::judge::{self, Entry};
 use crate::state::{Shared, now_ms};
 
 const SUBMISSIONS_SHOWN: usize = 50;
+// Every submission listed keeps its code, so the editor can open it.
+const _: () = assert!(SUBMISSIONS_SHOWN <= crate::db::SUBMISSIONS_KEPT);
 
 /// A problem's tests, in order (404 for an unknown problem).
 async fn tests(state: &Shared, slug: &str, which: Tests) -> ApiResult<Vec<TestRow>> {

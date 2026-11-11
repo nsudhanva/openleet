@@ -37,7 +37,7 @@ pub use plans::{Changed, MAX_PINNED_PLANS, PlanChange, PlanKey, SavedPlan};
 
 /// DuckDB's buffer pool; the whole box has 1 GB and the judge needs most of it.
 const MEMORY_LIMIT: &str = "64MB";
-/// Submissions kept per problem (each holds up to 64 KB of code).
+/// Submissions per problem that keep their code (up to 64 KB each) and detail.
 pub const SUBMISSIONS_KEPT: usize = 100;
 
 /// Your code for a problem: the current draft and the version Reset replaced.
@@ -51,7 +51,8 @@ pub struct Draft {
 const SUBMISSION_COLUMNS: &str =
     "id, epoch_ms(submitted_at), verdict::VARCHAR, tests_passed, tests_total, cpu_ms";
 
-/// A stored submission; `code` and `detail` only when one submission is read.
+/// A stored submission; `code` and `detail` only when one submission is read and they are
+/// kept (see [`Store::insert_submission`]).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmissionRow {
@@ -474,9 +475,10 @@ impl Store {
         }
     }
 
-    /// Stores a judged submission and returns its id. Only the problem's newest
-    /// [`SUBMISSIONS_KEPT`] are kept, plus its latest accepted one (which marks it solved);
-    /// older ones go in the same transaction.
+    /// Stores a judged submission and returns its id. Every submission stays (the coding
+    /// analytics are replayed from them), but only the problem's newest [`SUBMISSIONS_KEPT`]
+    /// and its latest accepted one keep their code and detail; the others lose them in the same
+    /// transaction.
     pub fn insert_submission(&self, s: &NewSubmission) -> Result<i64> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
@@ -494,7 +496,8 @@ impl Store {
                 |r| r.get(0),
             )?;
         tx.prepare_cached(
-            "DELETE FROM submissions WHERE slug = $1
+            "UPDATE submissions SET code = NULL, detail = NULL
+             WHERE slug = $1 AND code IS NOT NULL
                 AND id NOT IN (SELECT id FROM submissions WHERE slug = $1 ORDER BY id DESC LIMIT $2)
                 AND id IS DISTINCT FROM (SELECT max(id) FROM submissions
                                          WHERE slug = $1 AND verdict = 'accepted')",
@@ -524,7 +527,7 @@ impl Store {
             .query_row([id], |r| {
                 let detail: Option<String> = r.get(7)?;
                 Ok(SubmissionRow {
-                    code: Some(r.get(6)?),
+                    code: r.get(6)?,
                     detail: detail.and_then(|d| RawValue::from_string(d).ok()),
                     ..SubmissionRow::from_row(r)?
                 })
@@ -533,8 +536,7 @@ impl Store {
         })
     }
 
-    /// Every stored submission's problem, time and verdict, replayed in the order they were
-    /// judged. Submissions pruned for space (see [`Self::insert_submission`]) are not in it.
+    /// Every submission's problem, time and verdict, replayed in the order they were judged.
     pub fn coding_log(&self) -> Result<CodingLog> {
         let rows: Vec<(String, i64, String)> = self.with(|c| {
             let mut stmt = c.prepare(
@@ -792,7 +794,7 @@ mod tests {
     }
 
     #[test]
-    fn keeps_the_newest_submissions_and_the_latest_accepted_one() {
+    fn keeps_every_submission_but_old_ones_lose_their_code() {
         let (store, _dir) = store();
         let submit = |slug, verdict| {
             store
@@ -804,22 +806,43 @@ mod tests {
                     passed: 0,
                     total: 1,
                     cpu_ms: 1,
-                    detail: "null",
+                    detail: r#"{"limitMs":2000}"#,
                 })
                 .unwrap()
         };
+        let first = submit("a", "wrong_answer");
         let accepted = submit("a", "accepted");
         let other = submit("b", "wrong_answer");
-        let mut last = 0;
         for _ in 0..SUBMISSIONS_KEPT + 5 {
-            last = submit("a", "wrong_answer");
+            submit("a", "wrong_answer");
         }
-        let kept = store.submissions("a", 1000).unwrap();
-        assert_eq!(kept.len(), SUBMISSIONS_KEPT + 1);
-        assert_eq!(kept[0].id, last);
-        assert_eq!(kept[SUBMISSIONS_KEPT].id, accepted);
-        // The first Accepted is kept, so the problem stays solved after a restart.
-        assert!(store.coding_log().unwrap().solved("a"));
+        let all = store.submissions("a", 1000).unwrap();
+        assert_eq!(all.len(), SUBMISSIONS_KEPT + 7);
+        let with_code: Vec<i64> = all
+            .iter()
+            .filter(|s| store.submission(s.id).unwrap().unwrap().code.is_some())
+            .map(|s| s.id)
+            .collect();
+        // The newest ones, and the latest Accepted for the solved problem.
+        assert_eq!(with_code.len(), SUBMISSIONS_KEPT + 1);
+        assert_eq!(
+            with_code[..SUBMISSIONS_KEPT],
+            all[..SUBMISSIONS_KEPT]
+                .iter()
+                .map(|s| s.id)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(with_code[SUBMISSIONS_KEPT], accepted);
+        let pruned = store.submission(first).unwrap().unwrap();
+        assert!(pruned.code.is_none() && pruned.detail.is_none());
+        assert_eq!(
+            (pruned.verdict.as_str(), pruned.cpu_ms),
+            ("wrong_answer", 1)
+        );
+        // The analytics after a restart see every submission: the first try failed.
+        let log = store.coding_log().unwrap();
+        let problem = log.problem("a").unwrap();
+        assert!(log.solved("a") && !problem.first_try());
         assert_eq!(store.submissions("b", 10).unwrap()[0].id, other);
     }
 
