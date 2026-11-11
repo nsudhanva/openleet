@@ -1,26 +1,44 @@
-"""Interleaving String at the maximum lengths (100 + 100 = 200) over one or two letters, so many
-split choices look valid; s3 is a true interleaving or one with a letter changed."""
+"""Interleaving String at the maximum lengths (100 + 100 = 200), false although s3 holds exactly the
+letters of s1 and s2, with the mismatch near s3's middle or end, so recursion without memoization
+tries exponentially many splits before it fails."""
 
-from _shapes import random_string
+from string import ascii_lowercase
 
-SEEDS = 3
+SEEDS = 2
+N = 100
+
+
+def interleaves(s1, s2, s3):
+    row = [True] + [False] * len(s2)
+    for j in range(1, len(s2) + 1):
+        row[j] = row[j - 1] and s2[j - 1] == s3[j - 1]
+    for i in range(1, len(s1) + 1):
+        row[0] = row[0] and s1[i - 1] == s3[i - 1]
+        for j in range(1, len(s2) + 1):
+            c = s3[i + j - 1]
+            row[j] = (row[j] and s1[i - 1] == c) or (row[j - 1] and s2[j - 1] == c)
+    return row[-1]
 
 
 def generate(rng):
-    alpha = rng.choice(["a", "ab"])
-    s1 = random_string(rng, alpha, 100)
-    s2 = random_string(rng, alpha, 100)
-    picks = [0] * 100 + [1] * 100
-    rng.shuffle(picks)
-    out, i, j = [], 0, 0
-    for p in picks:
-        if p == 0:
-            out.append(s1[i])
-            i += 1
-        else:
-            out.append(s2[j])
-            j += 1
+    a, b = rng.sample(ascii_lowercase, 2)
     if rng.random() < 0.5:
-        k = rng.randrange(200)
-        out[k] = "b" if out[k] != "b" else "c"
-    return {"s1": s1, "s2": s2, "s3": "".join(out)}
+        # s3 needs s2's lone b before s2 has had time to reach it: every split dies there.
+        s1, s2 = a * N, a * (N - 1) + b
+        p = rng.randint(N - 8, N - 2)
+        s3 = a * p + b + a * (2 * N - 1 - p)
+        if rng.random() < 0.5:
+            s1, s2 = s2, s1
+        return {"s1": s1, "s2": s2, "s3": s3}
+    # Both strings are the same pattern and s3 doubles each letter, then the latest pair of
+    # letters whose swap (keeping the letter counts) leaves no valid split trade places.
+    s1 = s2 = "".join(rng.choice((a, b)) for _ in range(N))
+    out = [c for ch in s1 for c in (ch, ch)]
+    for k in range(2 * N - 2, -1, -1):
+        for k2 in range(k + 1, 2 * N):
+            if out[k] != out[k2]:
+                s3 = out[:]
+                s3[k], s3[k2] = s3[k2], s3[k]
+                if not interleaves(s1, s2, s3):
+                    return {"s1": s1, "s2": s2, "s3": "".join(s3)}
+    raise AssertionError("no false swap")

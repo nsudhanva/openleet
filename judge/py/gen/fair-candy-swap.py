@@ -1,8 +1,9 @@
-"""Fair Candy Swap with 10^4 boxes each and exactly one valid swap (values are multiples of 7
-apart from three planted boxes whose residues rule out every other pair), so the answer is
-unique and a quadratic pair scan does ~10^8 checks."""
+"""Fair Candy Swap with 10^4 boxes each and exactly one valid swap, its two boxes last (values are
+multiples of 7 apart from three planted boxes whose residues rule out every other pair), so a
+quadratic pair scan does all ~10^8 checks."""
 
 SEEDS = 2
+N = 10**4
 TOP = 99995  # largest multiple of 7 within 10^5
 
 
@@ -19,8 +20,7 @@ def adjust(values, delta):
 
 
 def generate(rng):
-    n = rng.choice([10**4, rng.randint(5000, 10**4)])
-    m = rng.choice([10**4, rng.randint(5000, 10**4)])
+    n = m = N
     y = 7 * rng.randint(1, 14000)
     x = y + 7 * rng.randint(-100, 100) + 1
     x = min(max(x, 1), 99996)
@@ -35,8 +35,16 @@ def generate(rng):
     # Raising Bob's total by diff, or lowering Alice's, balances the swap.
     if adjust(a_rest, -adjust(b_rest, diff)):
         raise ValueError("cannot balance")
-    alice = [*a_rest, x, w1, w2]
-    bob = [*b_rest, y]
+    # Bob's other boxes must not hold y, or a scan over Bob's boxes would meet it early.
+    for i, v in enumerate(b_rest):
+        if v == y:
+            step = 7 if y + 7 <= TOP else -7
+            j = next(
+                j for j, u in enumerate(b_rest) if j != i and 7 <= u - step <= TOP and u - step != y
+            )
+            b_rest[i] += step
+            b_rest[j] -= step
+    alice = [*a_rest, w1, w2]
     rng.shuffle(alice)
-    rng.shuffle(bob)
-    return {"aliceSizes": alice, "bobSizes": bob}
+    rng.shuffle(b_rest)
+    return {"aliceSizes": [*alice, x], "bobSizes": [*b_rest, y]}

@@ -1,13 +1,19 @@
-"""Find Bottom Left Tree Value with 10^4 nodes and full 32-bit values: a random tree, or a
-zigzag chain 10^4 deep whose bottom node is on the right side."""
+"""Find Bottom Left Tree Value with 10^4 nodes and full 32-bit values on a tree 2,000 to 10^4
+levels deep (a zigzag path, a thin tree or a skewed one), so one DFS per level is quadratic."""
 
-from _shapes import level_order, random_tree, zigzag_path
+from _shapes import level_order, pick_shape, skewed_tree, thin_tree, zigzag_path
 
-SEEDS = 2
+SEEDS = 3
 N = 10**4
 
 
 def generate(rng):
+    shape = pick_shape(rng)
     vals = [rng.randint(-(2**31), 2**31 - 1) for _ in range(N)]
-    left, right = zigzag_path(rng, N, -1) if rng.random() < 0.5 else random_tree(rng, N, -1)
+    if shape == 0:
+        left, right = zigzag_path(rng, N, -1)
+    elif shape == 1:
+        left, right = thin_tree(rng, N, 3, -1)
+    else:
+        left, right = skewed_tree(rng, N, -1)
     return {"root": level_order(vals, left, right, empty=-1)}

@@ -1,22 +1,18 @@
-"""Frog Jump with 2000 stones: densely packed stones (many reachable jump sizes per stone), or a
-reachable triangular path whose last stone may be just out of reach."""
+"""Frog Jump with 2000 stones packed densely (0..1998, or 0..~2200 with random gaps) and a last
+stone just out of reach or reachable only by speeding up the whole way, so a search that does
+not remember (stone, jump) pairs explores exponentially many paths."""
+
+from _shapes import pick_shape
 
 SEEDS = 3
 N = 2000
 
 
 def generate(rng):
-    shape = rng.randrange(3)
-    if shape == 0:
-        stones = [*range(N - 1), N - 2 + rng.choice([1, 60, 64])]
-    elif shape == 1:
-        stones = sorted({0, 1} | set(rng.sample(range(2, 3 * N), N - 2)))
-        while len(stones) < N:
-            stones.append(stones[-1] + 1)
+    shape = pick_shape(rng)
+    if shape == 1:
+        stones = [0, 1, *sorted(rng.sample(range(2, N * 11 // 10), N - 3))]
+        stones.append(stones[-1] + 80)
     else:
-        stones, k = [0, 1], 1
-        while len(stones) < N:
-            k = max(1, k + rng.choice([-1, 0, 1, 1]))
-            stones.append(stones[-1] + k)
-        stones[-1] += rng.choice([0, 3])
+        stones = [*range(N - 1), N - 2 + (64 if shape == 0 else 62)]
     return {"stones": stones}

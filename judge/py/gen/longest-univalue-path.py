@@ -1,44 +1,67 @@
-"""Longest Univalue Path on 10^4 nodes with depth at most 1000, values from a tiny set so
-long same-value paths form (one seed is all one value)."""
+"""Longest Univalue Path on the maximum 10^4 nodes, one value nearly everywhere, shaped so most
+nodes sit near the depth limit of 1000 (a spine with chains or a random tree hanging off its
+end): recomputing each node's downward path from scratch is ~9 * 10^6 calls."""
 
-from _shapes import level_order
+from _shapes import level_order, random_tree
 
 SEEDS = 2
 N = 10**4
 MAX_DEPTH = 1000
 
 
+def depths(left, right):
+    depth, stack = [1] * len(left), [0]
+    while stack:
+        node = stack.pop()
+        for child in (left[node], right[node]):
+            if child is not None:
+                depth[child] = depth[node] + 1
+                stack.append(child)
+    return depth
+
+
+def comb(rng):
+    """A spine to the depth limit; deep spine nodes each grow a chain down to the limit too."""
+    left, right = [None] * N, [None] * N
+    sides = (left, right)
+    for i in range(1, MAX_DEPTH):
+        sides[rng.randrange(2)][i - 1] = i
+    nxt, top = MAX_DEPTH, MAX_DEPTH - 1
+    while nxt < N:
+        top -= 1  # spine node top (depth top + 1) grows a chain of MAX_DEPTH - top - 1 nodes
+        parent, free = top, 0 if left[top] is None else 1
+        for _ in range(MAX_DEPTH - top - 1):
+            if nxt == N:
+                break
+            sides[free][parent] = nxt
+            parent, free, nxt = nxt, rng.randrange(2), nxt + 1
+    return left, right
+
+
+def hanging(rng):
+    """A random tree of most nodes hung below a spine that leaves it 64 levels."""
+    spine = MAX_DEPTH - 64
+    while True:
+        bl, br = random_tree(rng, N - spine)
+        if max(depths(bl, br)) <= MAX_DEPTH - spine:
+            break
+    left = [None] * spine + [None if c is None else c + spine for c in bl]
+    right = [None] * spine + [None if c is None else c + spine for c in br]
+    for i in range(1, spine + 1):
+        (left if rng.random() < 0.5 else right)[i - 1] = i
+    return left, right
+
+
 def generate(rng):
-    left, right, depth = [None] * N, [None] * N, [1] * N
-    # A spine reaching the depth limit, then random attachments that respect it.
-    spine = MAX_DEPTH
-    for i in range(1, spine):
-        if rng.random() < 0.5:
-            left[i - 1] = i
-        else:
-            right[i - 1] = i
-        depth[i] = i + 1
-    slots = []
-    for i in range(spine):
-        if depth[i] < MAX_DEPTH:
-            if left[i] is None:
-                slots.append((i, 0))
-            if right[i] is None:
-                slots.append((i, 1))
-    for i in range(spine, N):
-        j = rng.randrange(len(slots))
-        slots[j], slots[-1] = slots[-1], slots[j]
-        parent, side = slots.pop()
-        if side == 0:
-            left[parent] = i
-        else:
-            right[parent] = i
-        depth[i] = depth[parent] + 1
-        if depth[i] < MAX_DEPTH:
-            slots.append((i, 0))
-            slots.append((i, 1))
     if rng.random() < 0.5:
-        val = [rng.randint(-1000, 1000)] * N
+        left, right = comb(rng)
+        val = [rng.randint(-1000, 1000)] * len(left)
     else:
-        val = [rng.choice([1, 1, 1, 2]) for _ in range(N)]
+        left, right = hanging(rng)
+        v = rng.randint(-1000, 999)
+        # Leaves sometimes differ, which ends paths without cutting any long one.
+        val = [
+            v + 1 if left[i] is None and right[i] is None and rng.random() < 0.3 else v
+            for i in range(len(left))
+        ]
     return {"root": level_order(val, left, right)}

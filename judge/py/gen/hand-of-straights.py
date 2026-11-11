@@ -1,19 +1,20 @@
-"""Hand of Straights with 10^4 cards: overlapping consecutive runs that split exactly into
-groups, or the same hand with one card changed."""
+"""Hand of Straights with 10^4 cards in descending order, split into overlapping runs of 2, 10 or
+100 (one hand with its largest card raised, so it fails only at the end), so repeatedly taking
+the minimum and removing cards from a list does ~10^8 steps."""
+
+from _shapes import pick_shape
 
 SEEDS = 3
 N = 10**4
+SIZES = (2, 10, 100)
 
 
 def generate(rng):
-    size = rng.choice([1, 2, 10, 100, 5000])
-    groups = N // size
-    starts = []
-    base = rng.randint(0, 10**9 - 2 * N)
-    for _ in range(groups):
-        starts.append(base + rng.randint(0, rng.choice([5, 3000])))
-    hand = [s + j for s in starts for j in range(size)]
-    if size > 1 and rng.random() < 0.34:
-        hand[rng.randrange(len(hand))] += 1
-    rng.shuffle(hand)
+    shape = pick_shape(rng)
+    size = SIZES[shape]
+    base = rng.randint(0, 10**9 - 4000)
+    starts = [base + rng.randint(0, 3000) for _ in range(N // size)]
+    hand = sorted((s + j for s in starts for j in range(size)), reverse=True)
+    if shape == 1:
+        hand[0] += 1
     return {"hand": hand, "groupSize": size}
