@@ -506,6 +506,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-server"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2c55b0e6ae7c8951bc27682e97934423357c1a8208886305290a3adb1ce3c14"
+dependencies = [
+ "arc-swap",
+ "bytes",
+ "either",
+ "fs-err",
+ "http",
+ "http-body",
+ "hyper",
+ "hyper-util",
+ "pin-project-lite",
+ "rustls",
+ "rustls-pki-types",
+ "socket2",
+ "tokio",
+ "tokio-rustls",
+ "tower-service",
+]
+
+[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1638,8 +1661,8 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
- "axum-server",
- "base64 0.22.1",
+ "axum-server 0.9.0",
+ "base64 0.23.1",
  "brotli",
  "duckdb",
  "form_urlencoded",
@@ -1649,7 +1672,7 @@ dependencies = [
  "mimalloc",
  "openleet-proto",
  "parking_lot",
- "pem",
+ "pem 4.0.0",
  "rustls-acme",
  "sd-notify",
  "serde",
@@ -1724,6 +1747,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d30c53c26bc5b31a98cd02d20f25a7c8567146caf63ed593a9d87b2775291be"
 dependencies = [
  "base64 0.22.1",
+ "serde_core",
+]
+
+[[package]]
+name = "pem"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d354a98a3d1251555de99e8fdd8afda05573c31b82f59063a7b0a29b5527f120"
+dependencies = [
+ "base64 0.23.1",
  "serde_core",
 ]
 
@@ -1828,7 +1861,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75e669e5202259b5314d1ea5397316ad400819437857b90861765f24c4cf80a2"
 dependencies = [
  "aws-lc-rs",
- "pem",
+ "pem 3.0.6",
  "rustls-pki-types",
  "time",
  "yasna",
@@ -1934,7 +1967,7 @@ dependencies = [
  "async-trait",
  "async-web-client",
  "aws-lc-rs",
- "axum-server",
+ "axum-server 0.8.0",
  "base64 0.22.1",
  "blocking",
  "chrono",
@@ -1942,7 +1975,7 @@ dependencies = [
  "futures-rustls",
  "http",
  "log",
- "pem",
+ "pem 3.0.6",
  "rcgen",
  "serde",
  "serde_json",
