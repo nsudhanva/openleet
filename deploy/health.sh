@@ -5,7 +5,8 @@
 set -eu
 
 ENV_FILE=/etc/openleet.env
-FAILS=/run/openleet-health.fails
+# In openleet-health.service's RuntimeDirectory.
+FAILS=/run/openleet-health/fails
 CERT_WARN_DAYS=14
 
 site=$(sed -n 's/^SITE_ADDRESS=//p' "$ENV_FILE" | cut -d, -f1)

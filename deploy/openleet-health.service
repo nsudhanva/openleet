@@ -6,3 +6,33 @@ After=openleet.service
 [Service]
 Type=oneshot
 ExecStart=/opt/openleet/current/deploy/health.sh
+# The count of failed checks, kept between runs until reboot.
+RuntimeDirectory=openleet-health
+RuntimeDirectoryPreserve=yes
+
+# Root only so systemd takes its restart requests (over its private socket in /run/systemd,
+# which checks the caller's uid); it needs no capability for that, nor for reading
+# /etc/openleet.env, which root owns.
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectProc=invisible
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
