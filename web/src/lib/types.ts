@@ -1,7 +1,4 @@
-/**
- * Shapes of data/problems.json and of the JSON API (server/, see the README's API table).
- * The server computes everything; the UI only renders these.
- */
+/** Shapes of data/problems.json and of the JSON API (server/, endpoints in docs/api.md). */
 
 export const DIFFICULTIES = ["Easy", "Medium", "Hard"] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
@@ -54,7 +51,7 @@ export interface Company {
 /** One company's rank and frequency per period it asked a problem in. */
 export type CompanyAsked = Partial<Record<AskedPeriod, Asked>>;
 
-/** One problem of data/problems.json (built by `uv run google ingest`). */
+/** One problem of data/problems.json (built by `uv run openleet ingest`). */
 export interface Problem {
 	id: number;
 	slug: string;

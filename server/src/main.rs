@@ -497,8 +497,8 @@ mod tests {
             aliases: vec!["google.sudhanva.me".to_owned()].into(),
         };
         assert_eq!(
-            canonical.redirect("Google.sudhanva.me:443", "/study?set=due"),
-            Some("https://openleet.sudhanva.me/study?set=due".to_owned())
+            canonical.redirect("Google.sudhanva.me:443", "/problems?status=shaky"),
+            Some("https://openleet.sudhanva.me/problems?status=shaky".to_owned())
         );
         assert_eq!(canonical.redirect("openleet.sudhanva.me", "/"), None);
         assert_eq!(canonical.redirect("evil.example", "/"), None);

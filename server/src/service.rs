@@ -146,7 +146,7 @@ pub struct ProblemParams<'a> {
     pub difficulty: Option<&'a str>,
     /// Free-text search (the table only).
     pub q: Option<&'a str>,
-    /// Which problems still count: unsolved, untried or all.
+    /// Which problems still count: unsolved, untried, shaky or all.
     pub status: Option<&'a str>,
     /// The order: rank, number, easy-first or random.
     pub order: Option<&'a str>,
@@ -223,7 +223,7 @@ impl AttemptInput {
     /// # Errors
     /// When the slug is empty, more than [`MAX_GUESSED`] topics are guessed or more than
     /// [`MAX_HINTS`] hints are reported.
-    pub fn validate(&self) -> Result<(), InvalidInput> {
+    pub const fn validate(&self) -> Result<(), InvalidInput> {
         if self.slug.is_empty() {
             Err(InvalidInput("slug must not be empty"))
         } else if self.guessed.len() > MAX_GUESSED {

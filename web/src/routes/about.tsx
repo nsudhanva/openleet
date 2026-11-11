@@ -38,10 +38,6 @@ const SHORTCUTS: [string, string][] = [
 ];
 
 /**
- * One topic of the page. Sections off screen skip layout until scrolled near
- * (content-visibility), so the first paint lays out only what a phone shows.
- */
-/**
  * Key symbols the text fonts lack, drawn as icons: a glyph from a fallback font costs the
  * first layout about 10 ms (a phone's first screen shows them), an icon nothing.
  */
