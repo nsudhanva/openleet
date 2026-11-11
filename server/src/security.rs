@@ -15,8 +15,9 @@ static SCRIPT_HASHES: &[&str] = include!(concat!(env!("OUT_DIR"), "/script_hashe
 pub const MAX_IN_FLIGHT: usize = 256;
 /// How long a request may take, except running code.
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
-/// How long Run and Submit may take: queueing behind other jobs, then the judge's own limit.
-pub const JUDGE_TIMEOUT: Duration = Duration::from_secs(120);
+/// How long Run and Submit may take: the judge's own limit on a job (two runs on a slowed
+/// machine), plus a margin for the request around it. A full queue answers Busy at once.
+pub const JUDGE_TIMEOUT: Duration = Duration::from_secs(crate::judge::JOB_TIMEOUT.as_secs() + 10);
 /// How long a client may take to send a request's headers (HTTPS listeners).
 pub const HEADER_READ_TIMEOUT: Duration = Duration::from_secs(10);
 

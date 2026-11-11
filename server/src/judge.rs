@@ -123,7 +123,7 @@ pub struct Judge {
 
 /// The longest the daemon may take over one job: it runs a job at most twice, each run within
 /// its wall-clock limit at the most CPU it ever allows, with a calibration before each.
-const JOB_TIMEOUT: Duration = Duration::from_millis(2 * wall_limit_ms(MAX_RUN_CPU_MS) + 60_000);
+pub const JOB_TIMEOUT: Duration = Duration::from_millis(2 * wall_limit_ms(MAX_RUN_CPU_MS) + 60_000);
 
 impl Judge {
     /// Reads specs.json (a missing file means no problem can be judged).
