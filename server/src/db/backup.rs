@@ -9,8 +9,8 @@
 //! server's DuckDB has no Parquet extension, and needs none for this.
 //!
 //! Before migrating an existing database, a copy is taken the same way
-//! (`backups/pre-migration-<stamp>.duckdb`; never rotated), so even the unversioned shape
-//! remains at hand.
+//! (`backups/pre-migration-<stamp>.duckdb`, keeping the newest [`KEEP_PRE_MIGRATION`]), so even
+//! the unversioned shape remains at hand.
 
 use std::path::{Path, PathBuf};
 
@@ -22,6 +22,9 @@ use super::sql_string;
 
 /// Daily backups kept.
 pub const KEEP: usize = 14;
+/// Pre-migration copies kept.
+pub const KEEP_PRE_MIGRATION: usize = 3;
+const PRE_MIGRATION: &str = "pre-migration-";
 /// The prefix of a backup still being written.
 const PARTIAL: &str = ".partial-";
 const EXTENSION: &str = "duckdb";
@@ -48,10 +51,27 @@ pub fn daily(conn: &Connection, backups: &Path, day: Date) -> Result<Option<Back
     Ok(Some(Backup { file, bytes }))
 }
 
-/// Copies the database into `backups/pre-migration-<stamp>.duckdb`.
+/// Copies the database into `backups/pre-migration-<stamp>.duckdb` and removes the oldest
+/// such copies beyond [`KEEP_PRE_MIGRATION`]. Stamps sort in time order.
 pub fn before_migrating(conn: &Connection, backups: &Path, stamp: &str) -> Result<PathBuf> {
-    let file = backups.join(format!("pre-migration-{stamp}.{EXTENSION}"));
+    let file = backups.join(format!("{PRE_MIGRATION}{stamp}.{EXTENSION}"));
     copy(conn, &file)?;
+    let mut copies: Vec<PathBuf> = std::fs::read_dir(backups)?
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|path| {
+            path.extension().is_some_and(|e| e == EXTENSION)
+                && path
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with(PRE_MIGRATION))
+        })
+        .collect();
+    copies.sort();
+    let old = copies.len().saturating_sub(KEEP_PRE_MIGRATION);
+    for copy in &copies[..old] {
+        remove_with_wal(copy)?;
+        tracing::info!("backup: removed {}", copy.display());
+    }
     Ok(file)
 }
 
@@ -155,4 +175,35 @@ pub fn remove_with_wal(database: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::testing::TempDir;
+
+    #[test]
+    fn keeps_the_newest_pre_migration_copies_and_every_daily_backup() {
+        let dir = TempDir::new("backup-pre-migration");
+        let backups = dir.path("backups");
+        let conn = Connection::open_in_memory().unwrap();
+        daily(&conn, &backups, Date::new(2026, 11, 1).unwrap()).unwrap();
+        for day in 1..=5 {
+            before_migrating(&conn, &backups, &format!("202611{day:02}T000000Z")).unwrap();
+        }
+        let mut left: Vec<String> = std::fs::read_dir(&backups)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(
+            left,
+            [
+                "2026-11-01.duckdb",
+                "pre-migration-20261103T000000Z.duckdb",
+                "pre-migration-20261104T000000Z.duckdb",
+                "pre-migration-20261105T000000Z.duckdb",
+            ]
+        );
+    }
 }
