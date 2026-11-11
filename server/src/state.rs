@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use openleet::coding::CodingLog;
 use openleet::content::Content;
@@ -32,7 +32,7 @@ pub struct Progress {
     /// Practice plans used, as [`Store::plans`] lists them; replaced after every plan write.
     pub plans: Vec<SavedPlan>,
     /// Reports per company, computed on first read after the log changed.
-    reports: HashMap<CompanyFilter, ScoreReport>,
+    reports: HashMap<CompanyFilter, Arc<ScoreReport>>,
 }
 
 impl Progress {
@@ -82,10 +82,17 @@ impl Progress {
     }
 
     /// A company's report, computed only on the first read after the log changed.
-    pub fn report(&mut self, content: &Content, company: CompanyFilter, now: i64) -> &ScoreReport {
-        self.reports
-            .entry(company)
-            .or_insert_with(|| score_report(content, company, &self.attempts, &self.states, now))
+    fn report(&mut self, content: &Content, company: CompanyFilter, now: i64) -> Arc<ScoreReport> {
+        let report = self.reports.entry(company).or_insert_with(|| {
+            Arc::new(score_report(
+                content,
+                company,
+                &self.attempts,
+                &self.states,
+                now,
+            ))
+        });
+        Arc::clone(report)
     }
 }
 
@@ -159,6 +166,23 @@ impl AppState {
         .map_err(ApiError::Internal)
     }
 
+    /// A company's report and the progress it was computed from, read-locked. Only a report
+    /// missing from the cache takes the write lock, to compute it.
+    pub fn report(
+        &self,
+        company: CompanyFilter,
+        now: i64,
+    ) -> (RwLockReadGuard<'_, Progress>, Arc<ScoreReport>) {
+        let progress = self.progress.read();
+        if let Some(report) = progress.reports.get(&company).cloned() {
+            return (progress, report);
+        }
+        drop(progress);
+        let mut progress = self.progress.write();
+        let report = progress.report(&self.content, company, now);
+        (RwLockWriteGuard::downgrade(progress), report)
+    }
+
     /// Recomputes the default company's report and stores today's scores. Other companies'
     /// reports are recomputed when next read.
     pub async fn refresh_scores(self: &Arc<Self>) -> ApiResult<()> {
@@ -221,6 +245,19 @@ pub fn test_state_with(dir: &std::path::Path, judge: &str, content: Content) -> 
 mod tests {
     use super::*;
     use crate::db::testing::TempDir;
+
+    #[test]
+    fn cached_reports_are_read_without_the_write_lock() {
+        let dir = TempDir::new("progress-report");
+        let state = test_state(&dir.path(""), "tcp://127.0.0.1:1");
+        let company = state.content.default_company();
+        let (_, computed) = state.report(company, 0);
+        // Another reader holds the lock: a cached report must not wait for it.
+        let reader = state.progress.read();
+        let (_, cached) = state.report(company, 0);
+        drop(reader);
+        assert!(Arc::ptr_eq(&computed, &cached));
+    }
 
     #[tokio::test]
     async fn cancelled_updates_finish_and_publish_in_order() {

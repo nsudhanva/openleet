@@ -252,8 +252,7 @@ pub async fn report(State(state): State<Shared>, Query(params): Params) -> ApiRe
     let company = content.company_or_default(param(&params, "company"));
     let history = state.db(|store| store.daily_scores(HISTORY_DAYS)).await?;
     let now = now_ms();
-    let mut progress = state.progress.write();
-    let report = progress.report(content, company, now).clone();
+    let (progress, report) = state.report(company, now);
     let learner = Learner {
         attempts: &progress.attempts,
         states: &progress.states,
@@ -277,8 +276,7 @@ struct Readiness {
 /// `?company=` (default google): that company's readiness alone.
 pub async fn readiness(State(state): State<Shared>, Query(params): Params) -> Response {
     let company = state.content.company_or_default(param(&params, "company"));
-    let mut progress = state.progress.write();
-    let readiness = progress.report(&state.content, company, now_ms()).readiness;
+    let readiness = state.report(company, now_ms()).1.readiness;
     Json(Readiness { readiness }).into_response()
 }
 

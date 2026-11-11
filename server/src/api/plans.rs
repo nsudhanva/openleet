@@ -45,23 +45,19 @@ pub async fn next(State(state): State<Shared>, Query(params): Params) -> ApiResu
             q: None,
         },
     );
-    let mut progress = state.progress.write();
+    let (progress, report) = match current {
+        Some(_) => {
+            let (progress, report) = state.report(plan.list.company, now_ms());
+            (progress, Some(report))
+        }
+        None => (state.progress.read(), None),
+    };
     // Topics stay global in the report, so any company's names the same weakest one.
-    let weakest = current.and_then(|_| {
-        progress
-            .report(content, plan.list.company, now_ms())
-            .topics
-            .iter()
-            .find(|t| t.recall < 1.0)
-            .map(|t| t.topic.clone())
-    });
-    let page = plan::next_page(
-        content,
-        &plan,
-        current,
-        progress.marks(),
-        weakest.as_deref(),
-    );
+    let weakest = report
+        .as_ref()
+        .and_then(|r| r.topics.iter().find(|t| t.recall < 1.0))
+        .map(|t| t.topic.as_str());
+    let page = plan::next_page(content, &plan, current, progress.marks(), weakest);
     Ok(Json(&page).into_response())
 }
 
