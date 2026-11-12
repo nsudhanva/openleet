@@ -32,17 +32,17 @@ sd-notify = "0.5.0"
 socket2 = { version = "0.6.5", features = ["all"] }
 async-trait = "0.1.92"
 x509-parser = "0.18.1"
-pem = "3.0.6"
+pem = "4.0.0"
 tower = { version = "0.5.3", features = ["limit"] }
 hyper-util = { version = "0.1.21", features = ["tokio"] }
-base64 = "0.22.1"
+base64 = "0.23.1"
 
 [dev-dependencies]
 brotli = "9.1.1"
 zstd = "0.14.3"
 
 [build-dependencies]
-base64 = "0.22.1"
+base64 = "0.23.1"
 brotli = "9.1.1"
 # Without the workspace's extra features, so build scripts that share them (libduckdb-sys)
 # are not rebuilt over their cached output.

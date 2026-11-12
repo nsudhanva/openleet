@@ -6,7 +6,7 @@
 #   judge  the judge daemon (static) and the Python zygote on a trimmed python:slim
 # Both binaries are built natively for the build machine's architecture (amd64 or arm64).
 
-ARG RUST=1.99
+ARG RUST=1.100
 ARG PYTHON=3.15
 ARG BUN=1.4
 ARG ALPINE=3.24

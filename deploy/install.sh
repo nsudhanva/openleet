@@ -13,7 +13,7 @@ UNIT_DIR=/etc/systemd/system
 HERE=$(cd "$(dirname "$0")" && pwd)
 PYTHON=3.15
 # The installer at a fixed version's URL, not the moving latest one.
-UV_VERSION=0.13.7
+UV_VERSION=0.13.8
 
 # Every openleet* file next to this script is a unit; the ones with an [Install] section get
 # enabled, and sockets, timers and path units started.
