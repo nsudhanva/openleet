@@ -79,8 +79,17 @@ function inlineCss(): Plugin {
 	};
 }
 
-/** Where `vite` and `vite preview` send /api: the Rust server (server/) by default. */
-const proxy = { "/api": process.env.API_URL ?? "http://127.0.0.1:8080" };
+/**
+ * Where `vite` and `vite preview` send /api: the Rust server (server/) by default. The request
+ * carries the target's host name, so a name-based proxy such as the compose stack's Caddy
+ * (`API_URL=http://openleet.localhost`) answers it.
+ */
+const proxy = {
+	"/api": {
+		target: process.env.API_URL ?? "http://127.0.0.1:8080",
+		changeOrigin: true,
+	},
+};
 
 /** A static SPA in dist/: the Rust server (server/) serves it and the JSON API under /api. */
 export default defineConfig({

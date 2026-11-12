@@ -29,7 +29,8 @@ JUDGE_SOCKET=tcp://127.0.0.1:7777 cargo run --release -p openleet
 
 The first `cargo run --release` compiles DuckDB and takes a few minutes. The app is then at
 <http://localhost:8080>. `bun run dev` serves the web app with hot reload on
-<http://localhost:3000> and sends `/api` to the server on port 8080 (`API_URL` changes that).
+<http://localhost:3000> and sends `/api` to the server on port 8080; with
+`API_URL=http://openleet.localhost bun run dev` it uses the compose stack instead.
 
 Local progress goes to `data/openleet.duckdb`, with daily copies in `data/backups/`; both are
 ignored by git. Stop the server and delete them to start over. Stop the judge with
