@@ -6,17 +6,14 @@ import {
 	Outlet,
 	retainSearchParams,
 	stripSearchParams,
-	useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
-import { useLayoutEffect } from "react";
 import { SiteHeader } from "@/components/site-header";
 import { ThemeProvider } from "@/components/theme-provider";
 import { buttonVariants } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { DEFAULT_COMPANY, parseCompanySearch } from "@/lib/companies";
 import { pageTitle } from "@/lib/format";
-import { isWidePage } from "@/lib/layout";
 
 export const Route = createRootRoute({
 	// The company is the one filter every page shares, so it follows you between pages.
@@ -44,19 +41,12 @@ export const Route = createRootRoute({
 
 function Root() {
 	const { readiness } = Route.useLoaderData();
-	// The width follows the page on screen: the one being left stays as it was while the next loads.
-	const pathname = useRouterState({
-		select: (s) => (s.resolvedLocation ?? s.location).pathname,
-	});
-	useLayoutEffect(() => {
-		document.documentElement.toggleAttribute("data-wide", isWidePage(pathname));
-	}, [pathname]);
 	return (
 		<ThemeProvider>
 			<HeadContent />
 			<SiteHeader readiness={readiness} />
 			{/* On a fit: screen every page fits it below the 3rem header; elsewhere the document scrolls. */}
-			<main className="mx-auto flex w-full max-w-5xl wide:max-w-7xl flex-col px-3 py-3 sm:px-5 fit:h-[calc(100dvh-3rem)] fit:overflow-y-auto">
+			<main className="mx-auto flex w-full max-w-[96rem] flex-col px-3 py-3 sm:px-5 fit:h-[calc(100dvh-3rem)] fit:overflow-y-auto">
 				<Outlet />
 			</main>
 			<TanStackDevtools
