@@ -3,14 +3,19 @@ import { devtools } from "@tanstack/devtools-vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { widePageScript } from "./src/lib/layout.ts";
 import { themeScript } from "./src/lib/theme.ts";
 
-/** Puts the theme script in <head> so a stored dark theme never flashes light. */
+/**
+ * Puts the theme script in <head> so a stored dark theme never flashes light, and the page
+ * width script so the shell paints at the page's width (lib/layout.ts).
+ */
 function themeBeforePaint(): Plugin {
 	return {
 		name: "theme-before-paint",
 		transformIndexHtml: () => [
 			{ tag: "script", children: themeScript, injectTo: "head" },
+			{ tag: "script", children: widePageScript, injectTo: "head" },
 		],
 	};
 }

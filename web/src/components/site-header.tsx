@@ -22,7 +22,7 @@ export function SiteHeader({ readiness }: { readiness: Readiness | null }) {
 	const name = companyName(useCompanies(), company);
 	return (
 		<header className="sticky top-0 z-40 h-12 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-			<div className="mx-auto flex h-full max-w-7xl items-center gap-1 px-2 sm:gap-2 sm:px-5">
+			<div className="mx-auto flex h-full max-w-5xl wide:max-w-7xl items-center gap-1 px-2 sm:gap-2 sm:px-5">
 				<Link
 					to="/"
 					search={{}}

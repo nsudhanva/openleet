@@ -4,6 +4,9 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* `wide:` styles the pages that get the wide column (lib/layout.ts). */
+@custom-variant wide (&:is([data-wide] *));
+
 /*
  * `fit:` styles a screen big enough, and driven by a mouse or trackpad, for a page to fit it
  * whole: the study and code cards fill it and a long statement pages (← →) instead of
