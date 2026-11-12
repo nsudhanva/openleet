@@ -108,6 +108,8 @@ function describeList(
 }
 
 function statusText(row: ProblemRow): string {
+	// A skip leaves no grade, only a deferral; its row can still be cleared.
+	if (row.reviews === 0 && row.lastAt !== null) return "Skipped";
 	if (row.status === "new") return "";
 	if (row.status === "due" || row.due === null) return "Due now";
 	return `Due ${timeFrom(row.due)}`;
