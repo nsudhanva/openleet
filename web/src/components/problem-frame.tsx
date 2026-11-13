@@ -1,5 +1,11 @@
-import { type ReactNode, useEffect, useRef } from "react";
-import { PaneSplitter } from "@/components/pane-splitter";
+import {
+	type CSSProperties,
+	type ReactNode,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
+import { PaneSplitter, savedShare } from "@/components/pane-splitter";
 import { ProblemHeader } from "@/components/problem-header";
 import { ProblemStatement } from "@/components/problem-statement";
 import { Segmented } from "@/components/segmented";
@@ -72,6 +78,8 @@ export function ProblemCard({
 }) {
 	const panes = useRef<HTMLDivElement>(null);
 	const shownPane = useRef(pane);
+	// Set while rendering, so the statement fits its text to its final width the first time.
+	const [share] = useState(savedShare);
 	// A pane switched by an action (Show answer, Run) shows from its top, not from wherever
 	// the page had scrolled to in the other one.
 	useEffect(() => {
@@ -109,7 +117,10 @@ export function ProblemCard({
 					]}
 				/>
 				{/* From lg up the statement takes --share of the width (PaneSplitter sets it). */}
-				<div className="relative grid grid-cols-1 lg:grid-cols-[minmax(0,calc(var(--share)*100%))_minmax(0,1fr)] fit:min-h-0 fit:flex-1">
+				<div
+					style={{ "--share": share } as CSSProperties}
+					className="relative grid grid-cols-1 lg:grid-cols-[minmax(0,calc(var(--share)*100%))_minmax(0,1fr)] fit:min-h-0 fit:flex-1"
+				>
 					<section
 						aria-label="Statement"
 						className={cn(
@@ -131,6 +142,7 @@ export function ProblemCard({
 					</section>
 					<PaneSplitter
 						label={`Resize the statement and ${asideLabel.toLowerCase()}`}
+						initial={share}
 					/>
 				</div>
 			</div>

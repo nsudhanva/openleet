@@ -2,7 +2,6 @@ import {
 	type KeyboardEvent,
 	type PointerEvent,
 	useCallback,
-	useLayoutEffect,
 	useRef,
 	useState,
 } from "react";
@@ -20,7 +19,8 @@ function clampShare(share: number): number {
 	return Math.round(clamped * 1000) / 1000;
 }
 
-function storedShare(): number {
+/** The share the browser keeps, or the default. */
+export function savedShare(): number {
 	try {
 		const share = Number(localStorage.getItem(STORAGE_KEY));
 		return share > 0 ? clampShare(share) : DEFAULT_SHARE;
@@ -39,13 +39,19 @@ function storeShare(share: number) {
 /**
  * The handle between the statement and the other pane, from `lg` up: drag it, or focus it and
  * press ← → (Home, End), to give either pane more room; a double click puts it back. It goes
- * straight inside the panes' grid and sets `--share`, the statement's share of the width, on
- * it for the columns to read. The share
- * is the same on the study and code pages, so the statement keeps its width between them, and
- * the browser keeps it.
+ * straight inside the panes' grid, which renders with `--share: initial` (the statement's
+ * share of the width, for its columns to read; from `savedShare`), and moves `--share` on it.
+ * The share is the same on the study and code pages, so the statement keeps its width between
+ * them, and the browser keeps it.
  */
-export function PaneSplitter({ label }: { label: string }) {
-	const [share, setShare] = useState(storedShare);
+export function PaneSplitter({
+	label,
+	initial,
+}: {
+	label: string;
+	initial: number;
+}) {
+	const [share, setShare] = useState(initial);
 	const handle = useRef<HTMLHRElement>(null);
 	// The share on screen, ahead of `share` while a drag or held key moves it.
 	const current = useRef(share);
@@ -58,7 +64,6 @@ export function PaneSplitter({ label }: { label: string }) {
 			String(Math.round(next * 100)),
 		);
 	}, []);
-	useLayoutEffect(() => show(share), [show, share]);
 
 	const commit = (next: number) => {
 		const clamped = clampShare(next);
