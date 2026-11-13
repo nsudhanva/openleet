@@ -45,7 +45,9 @@ defaults:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # A cached build takes minutes; a cold one (new Rust toolchain, emptied cache) about 45:
+    # checks and tests 25 to 30, the release build another 15.
+    timeout-minutes: 75
     permissions:
       contents: read
     outputs:
