@@ -27,6 +27,7 @@ dev = [
     "shellcheck-py>=0.11.0.1",
     "ty>=0.0.100",
     { include-group = "judge" },
+    { include-group = "videos" },
 ]
 # The packages the judge's Python offers submissions beyond the standard library (see
 # judge/py/prelude.py). The judge (deploy/install.sh, the Dockerfile, `openleet judge`) installs
@@ -34,6 +35,10 @@ dev = [
 # group and uv.lock: change them here only.
 judge = [
     "sortedcontainers==2.4.0",
+]
+# `openleet videos` lists YouTube channels and searches with it.
+videos = [
+    "yt-dlp>=2026.10.26",
 ]
 
 [tool.ruff]

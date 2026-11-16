@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::lists::{ListEntry, ListId, Lists, ProblemFilter};
 use crate::model::{
     Approach, Asked, Companies, Company, CompanyAsked, CompanyFilter, Difficulty, MAX_TOPICS,
-    PERIOD_SLOTS, Problem, ProblemView, TopicId, TopicSet,
+    PERIOD_SLOTS, Problem, ProblemView, TopicId, TopicSet, Video,
 };
 use crate::search::{SearchHit, SearchIndex};
 
@@ -30,6 +30,8 @@ pub struct Content {
     pub companies: Companies,
     /// Worked approach per slug.
     pub approaches: HashMap<String, Approach>,
+    /// YouTube explanations per slug, in order of preference.
+    pub videos: HashMap<String, Vec<Video>>,
     /// Every topic, most common first (ties in order of first use). A topic's [`TopicId`] is
     /// its index here.
     pub topics: Vec<String>,
@@ -52,6 +54,12 @@ pub struct TopicCount<'a> {
     pub topic: &'a str,
     /// Problems of the list with it.
     pub problems: u32,
+}
+
+/// The shape of a videos file. `sources` is not needed at run time.
+#[derive(Deserialize)]
+struct VideosFile {
+    videos: HashMap<String, Vec<Video>>,
 }
 
 /// The shape of a problems file. `sources` is not needed at run time.
@@ -152,20 +160,23 @@ fn topics_by_count(problems: &[Problem]) -> Vec<String> {
 }
 
 impl Content {
-    /// Loads a problems file (`{"companies": [...], "problems": [...]}`) and an approaches
-    /// file. A missing file counts as empty. Companies a problem names but the table does not
+    /// Loads a problems file (`{"companies": [...], "problems": [...]}`), an approaches file
+    /// and a videos file (`{"videos": {slug: [...]}}`). A missing file counts as empty. Companies a problem names but the table does not
     /// are added at the end of the picker, named after their slug.
     ///
     /// # Errors
     /// When a file exists but cannot be read or parsed, names more than 255 companies or more
     /// than [`MAX_TOPICS`] topics.
-    pub fn load(problems: &Path, approaches: &Path) -> anyhow::Result<Self> {
+    pub fn load(problems: &Path, approaches: &Path, videos: &Path) -> anyhow::Result<Self> {
         let (companies, problems) = match read_json::<RawFile>(problems)? {
             Some(file) => compact(file)?,
             None => (Companies::default(), Vec::new()),
         };
         let approaches = read_json(approaches)?.unwrap_or_default();
-        let content = Self::new(companies, problems, approaches);
+        let mut content = Self::new(companies, problems, approaches);
+        content.videos = read_json::<VideosFile>(videos)?
+            .map(|file| file.videos)
+            .unwrap_or_default();
         anyhow::ensure!(
             content.topics.len() <= MAX_TOPICS,
             "{} topics, but at most {MAX_TOPICS} are supported",
@@ -222,6 +233,7 @@ impl Content {
             companies,
             problems,
             approaches,
+            videos: HashMap::new(),
             by_slug,
         }
     }
@@ -247,7 +259,10 @@ impl Content {
     /// A problem in its JSON shape, company ids resolved.
     #[must_use]
     pub fn view<'a>(&'a self, problem: &'a Problem) -> ProblemView<'a> {
-        problem.view(&self.companies)
+        ProblemView {
+            videos: self.videos.get(&problem.slug).map_or(&[], Vec::as_slice),
+            ..problem.view(&self.companies)
+        }
     }
 
     /// `[{"slug", "name", "problems"}]` in picker order, serialized at load.
@@ -367,7 +382,12 @@ pub(crate) mod testdata {
 
     /// The real problems and approaches.
     pub static CONTENT: LazyLock<Content> = LazyLock::new(|| {
-        Content::load(&data(PROBLEMS), &data("approaches.json")).expect("load the problems file")
+        Content::load(
+            &data(PROBLEMS),
+            &data("approaches.json"),
+            &data("videos.json"),
+        )
+        .expect("load the problems file")
     });
 
     /// Path of a file in `data/`.
@@ -487,7 +507,7 @@ mod tests {
     #[test]
     fn missing_files_load_empty() {
         let none = Path::new("/nonexistent/data/x.json");
-        let content = Content::load(none, none).expect("load");
+        let content = Content::load(none, none, none).expect("load");
         assert!(content.problems.is_empty() && content.topics.is_empty());
         assert_eq!(content.companies_json(), "[]");
     }
@@ -509,6 +529,11 @@ mod tests {
         let json = serde_json::to_value(content.view(classic)).expect("serialize");
         assert_eq!(json["companies"], serde_json::json!({}));
         assert!(content.approach("two-sum").is_some());
+        let videos = serde_json::to_value(content.view(two)).expect("serialize")["videos"].clone();
+        assert_eq!(
+            videos[0]["creator"], "NeetCode",
+            "two-sum has NeetCode's video first"
+        );
         let declared: serde_json::Value =
             serde_json::from_str(content.companies_json()).expect("companies json");
         assert_eq!(

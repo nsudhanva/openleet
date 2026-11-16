@@ -11,8 +11,8 @@ Instructions for coding agents working in this repository. People start with the
 | `judge/` | Rust judge daemon; `judge/py` is the Python zygote and sandbox | [architecture](docs/architecture.md#judging-a-submission) |
 | `proto/` | Types shared by server and judge | |
 | `web/` | React app (Vite, TanStack Router, Tailwind) | [development](docs/development.md) |
-| `src/openleet/` | Python data tools: `openleet ingest`, `check`, `judge`, `smoke` | [architecture](docs/architecture.md#where-the-tests-come-from) |
-| `data/` | Problems, approaches and judge specs (in git); `data/judge/tests.duckdb` comes from a release | |
+| `src/openleet/` | Python data tools: `openleet ingest`, `check`, `judge`, `videos`, `smoke` | [architecture](docs/architecture.md#where-the-tests-come-from) |
+| `data/` | Problems, approaches, videos and judge specs (in git); `data/judge/tests.duckdb` comes from a release | |
 | `deploy/` | systemd units, `install.sh`, `update.sh` | [deployment](docs/deployment.md) |
 | `tests/`, `deploy/test_*.py` | Python tests | |
 

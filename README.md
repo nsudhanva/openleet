@@ -19,6 +19,8 @@ reviews and a judge for the Python solutions you write in the browser.
 - Readiness for a company's 100 most-asked problems, weighted by how often it asks each: 60%
   for solving a problem cleanly in the judge, 40% for keeping its flashcard current. A daily
   trend, your streak and the topics you name least sit beside it.
+- Video explanations on YouTube for each problem that has one: NeetCode's first, then Greg
+  Hogg's, then the most viewed by anyone else.
 - Keyboard shortcuts, listed on the site's About page.
 - No account. Progress is stored on the server you run it on.
 
@@ -61,6 +63,10 @@ releases on its own. See [Deployment](docs/deployment.md#new-server).
   (Apache-2.0)
 - Accepted submissions used only to check tests at build time, never shipped:
   [Mercury](https://huggingface.co/datasets/Elfsong/Mercury) (CC BY-NC)
+- Video explanations: the video [neetcode.io](https://neetcode.io) links for each problem
+  ([neetcode-gh/leetcode](https://github.com/neetcode-gh/leetcode)), and YouTube channel uploads
+  and searches listed with [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`uv run openleet videos`
+  writes `data/videos.json`)
 - Approaches and hints were written by Claude agents and reviewed with Codex CLI
   (`data/approach-reviews.json`).
 

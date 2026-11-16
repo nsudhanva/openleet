@@ -132,7 +132,11 @@ fn database_path(state_dir: &Path) -> Result<PathBuf> {
 }
 
 fn load_state(config: &Config) -> Result<Shared> {
-    let content = Content::load(&config.problems, &config.data_dir.join("approaches.json"))?;
+    let content = Content::load(
+        &config.problems,
+        &config.data_dir.join("approaches.json"),
+        &config.data_dir.join("videos.json"),
+    )?;
     let (store, opening) = Store::open(
         &database_path(&config.state_dir)?,
         &config.data_dir.join("judge/tests.duckdb"),

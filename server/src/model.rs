@@ -404,6 +404,7 @@ impl Problem {
             topics: &self.topics,
             premium: self.premium,
             description: self.description.as_deref(),
+            videos: &[],
         }
     }
 
@@ -438,6 +439,8 @@ pub struct ProblemView<'a> {
     pub premium: bool,
     /// HTML statement.
     pub description: Option<&'a str>,
+    /// YouTube explanations, in order of preference.
+    pub videos: &'a [Video],
 }
 
 impl PartialEq for ProblemView<'_> {
@@ -502,6 +505,17 @@ impl Serialize for CompanySlugs<'_> {
                 .map(|c| self.table.get(c.company).slug.as_str()),
         )
     }
+}
+
+/// A YouTube explanation of a problem, from `data/videos.json`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Video {
+    /// Who made it: NeetCode, Greg Hogg, or the channel's name.
+    pub creator: String,
+    /// The YouTube video id.
+    pub id: String,
+    /// The video's title.
+    pub title: String,
 }
 
 /// One entry of `data/approaches.json`, written in ASD-STE100 Simplified Technical English.

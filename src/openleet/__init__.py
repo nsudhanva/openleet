@@ -21,6 +21,9 @@ def main() -> None:
     commands.add_parser(
         "check", parents=[problems], help="validate data/approaches.json against ASD-STE100 rules"
     )
+    commands.add_parser(
+        "videos", parents=[problems], help="find YouTube explanations (data/videos.json)"
+    )
     judge = commands.add_parser(
         "judge", parents=[problems], help="build the judge's specs and tests (data/judge)"
     )
@@ -64,6 +67,10 @@ def main() -> None:
         from openleet.ingest import ingest
 
         ingest(args.problems)
+    elif args.command == "videos":
+        from openleet.videos import build
+
+        build(args.problems)
     elif args.command == "judge":
         from openleet.judging.cli import run
 

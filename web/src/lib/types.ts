@@ -67,6 +67,17 @@ export interface Problem {
 	 * only when no source has one.
 	 */
 	description: string | null;
+	/** YouTube explanations, in order of preference: NeetCode, Greg Hogg, then the most viewed. */
+	videos: Video[];
+}
+
+/** A YouTube explanation of a problem, from data/videos.json. */
+export interface Video {
+	/** NeetCode, Greg Hogg, or the channel's name. */
+	creator: string;
+	/** The YouTube video id. */
+	id: string;
+	title: string;
 }
 
 /** One entry of data/approaches.json, written in ASD-STE100 Simplified Technical English. */

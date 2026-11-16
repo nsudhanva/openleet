@@ -18,6 +18,7 @@ on:
       - web/**
       - data/problems.json
       - data/approaches.json
+      - data/videos.json
       - data/judge/**
       - deploy/**
       - Cargo.toml
@@ -111,7 +112,7 @@ jobs:
           out=dist/openleet
           mkdir -p "$out/bin" "$out/data" "$out/judge"
           cp target/release/openleet target/release/openleet-judge "$out/bin/"
-          cp data/problems.json data/approaches.json "$out/data/"
+          cp data/problems.json data/approaches.json data/videos.json "$out/data/"
           cp -r data/judge "$out/data/judge"
           cp -r judge/py "$out/judge/py"
           cp -r deploy "$out/deploy"

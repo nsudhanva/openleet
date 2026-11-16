@@ -99,7 +99,7 @@ RUN echo "$REVISION" >/REVISION
 # App image
 FROM scratch AS app
 COPY --from=files /rootfs /
-COPY data/problems.json data/approaches.json /app/data/
+COPY data/problems.json data/approaches.json data/videos.json /app/data/
 COPY data/judge/specs.json /app/data/judge/
 COPY --from=revision /REVISION /app/REVISION
 COPY --from=app-build /src/target/release/openleet /usr/local/bin/openleet

@@ -7,7 +7,7 @@ All endpoints are under `/api` and return JSON.
 | `GET /companies` | Companies and their problem counts |
 | `GET /problems?company=&period=&topic=&difficulty=&status=&order=&q=` | A problem list with your progress |
 | `GET /topics?company=&period=&difficulty=` | The list's topics and counts, most first |
-| `GET /problems/:slug` | One card: statement, topics, companies, approach |
+| `GET /problems/:slug` | One card: statement, topics, companies, approach, videos |
 | `GET /deck?company=&period=&set=&topic=&difficulty=` | The next card to study |
 | `GET /search?q=` | Problems by number, title, topic or statement text |
 | `POST /attempts` `{slug, grade, guessed, hints}` | Grade or skip a card |

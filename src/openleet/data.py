@@ -8,6 +8,7 @@ DATA_DIR = Path("data")
 CACHE_DIR = DATA_DIR / ".cache"
 PROBLEMS_PATH = DATA_DIR / "problems.json"
 APPROACHES_PATH = DATA_DIR / "approaches.json"
+VIDEOS_PATH = DATA_DIR / "videos.json"
 DOWNLOAD_TIMEOUT_S = 60
 
 

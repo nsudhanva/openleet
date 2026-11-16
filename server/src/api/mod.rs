@@ -100,8 +100,12 @@ mod testing {
     /// A state over the real problems, a new database in `dir` and no judge.
     pub fn state(dir: &TempDir) -> Shared {
         let data = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
-        let content = Content::load(&data.join("problems.json"), &data.join("approaches.json"))
-            .expect("load the problems file");
+        let content = Content::load(
+            &data.join("problems.json"),
+            &data.join("approaches.json"),
+            &data.join("videos.json"),
+        )
+        .expect("load the problems file");
         test_state_with(dir.root(), "tcp://127.0.0.1:1", content)
     }
 

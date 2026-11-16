@@ -58,6 +58,6 @@ uv run openleet smoke --base-url http://localhost:8080 --allow-network
 ```text
 server/  Rust API and web server     judge/  judge daemon; judge/py is the Python sandbox
 proto/   types shared by both        web/    React app
-src/     Python data tools           data/   problems, approaches, judge specs
+src/     Python data tools           data/   problems, approaches, videos, judge specs
 deploy/  systemd units and scripts   docs/   these pages
 ```

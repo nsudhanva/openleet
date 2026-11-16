@@ -212,7 +212,11 @@ impl AppState {
 #[cfg(test)]
 pub fn test_state(dir: &std::path::Path, judge: &str) -> Shared {
     let none = dir.join("none.json");
-    test_state_with(dir, judge, Content::load(&none, &none).expect("content"))
+    test_state_with(
+        dir,
+        judge,
+        Content::load(&none, &none, &none).expect("content"),
+    )
 }
 
 /// [`test_state`] over the given content.

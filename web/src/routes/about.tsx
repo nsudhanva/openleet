@@ -194,7 +194,9 @@ function About() {
 							<a href="https://huggingface.co/datasets/newfacade/LeetCodeDataset">
 								LeetCodeDataset
 							</a>
-							, Apache-2.0, and the statements' examples.
+							, Apache-2.0, and the statements' examples. Videos: the ones{" "}
+							<a href="https://neetcode.io">neetcode.io</a> links, then Greg
+							Hogg's and the most viewed others on YouTube.
 						</p>
 					</Section>
 				</div>
