@@ -10,6 +10,7 @@
 !bun.lock
 !data/problems.json
 !data/approaches.json
+!data/videos.json
 !data/judge/specs.json
 !data/judge/corpus.json
 **/__pycache__
