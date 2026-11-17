@@ -31,10 +31,7 @@ const SHORTCUTS: [string, string][] = [
 	["/ or ⌘K", "Search by number, title, topic or text"],
 	["⌘↵", "Code page: run the examples or your test case"],
 	["⌘⇧↵", "Code page: submit against every test"],
-	[
-		"N",
-		"Code page, after an accepted submission: the next problem of your plan",
-	],
+	["N", "Code page: the next problem of your plan, solved or not"],
 ];
 
 /**
@@ -148,12 +145,13 @@ function About() {
 							replaced.
 						</p>
 						<p>
-							After an accepted submission, <strong>Next</strong> offers the
-							next problem of your practice plan: the list you came from, its
-							topic and difficulty, which problems still count (unsolved by
-							default) and an order. Change it with the plan chip on the code
-							page, or switch to a related plan under the result. The Problems
-							page lists the plans you used; pin the ones to keep.
+							<strong>Next</strong>, beside the plan chip, moves on to the next
+							problem of your practice plan, solved or not: the list you came
+							from, its topic and difficulty, which problems still count
+							(unsolved by default) and an order. Change it with the plan chip,
+							or after an accepted submission switch to a related plan under the
+							result. The Problems page lists the plans you used; pin the ones
+							to keep.
 						</p>
 					</Section>
 				</div>

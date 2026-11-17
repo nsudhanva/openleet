@@ -13,8 +13,9 @@ reviews and a judge for the Python solutions you write in the browser.
   repetition decides when each card comes back.
 - Run your solutions against the examples, hidden tests and large stress tests, with the same
   verdicts LeetCode gives.
-- After an accepted submission, a button offers the next problem in your practice plan: a list,
-  topic, difficulty and order you can change at any time. Recent plans are remembered, and you
+- Next moves to the next problem in your practice plan, with or without a solve; after an
+  accepted submission it also offers related plans. A plan is a list, topic, difficulty and
+  order you can change at any time. Recent plans are remembered, and you
   can pin the ones you want to keep.
 - Readiness for a company's 100 most-asked problems, weighted by how often it asks each: 60%
   for solving a problem cleanly in the judge, 40% for keeping its flashcard current. A daily

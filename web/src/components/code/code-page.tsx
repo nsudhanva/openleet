@@ -19,6 +19,7 @@ import type { CodeEditorHandle } from "@/components/code/code-editor";
 import { RunResultView, SubmitResultView } from "@/components/code/results";
 import { SubmissionChart } from "@/components/code/submission-chart";
 import { SubmissionList } from "@/components/code/submission-list";
+import { NextButton } from "@/components/plan/next-button";
 import { NextPanel } from "@/components/plan/next-panel";
 import { PlanChip } from "@/components/plan/plan-chip";
 import {
@@ -301,6 +302,7 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 				actions={
 					<>
 						<PlanChip plan={plan} onChange={changePlan} />
+						<NextButton plan={plan} slug={slug} />
 						{solved && (
 							<Badge className={cn("font-semibold", TONE.success)}>
 								<CheckIcon className="sm:hidden" aria-hidden />

@@ -1,12 +1,10 @@
-import { useNavigate } from "@tanstack/react-router";
 import { ArrowRightIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { KeyHint } from "@/components/action-button";
 import { DifficultyBadge } from "@/components/difficulty-badge";
-import { PlanLink, remember } from "@/components/plan/plan-link";
+import { PlanLink } from "@/components/plan/plan-link";
 import { ProgressBar } from "@/components/progress-bar";
 import { buttonVariants } from "@/components/ui/button";
-import { useHotkeys } from "@/hooks/use-hotkeys";
 import { useFitScreen } from "@/hooks/use-media";
 import { api } from "@/lib/api";
 import {
@@ -20,13 +18,13 @@ import type { NextPage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Shown under an accepted submission: the plan's next problem (N follows it) with how much of
- * the plan is solved, and other plans to switch to. It never moves on by itself. The next
- * problem's topics are never shown; the pivots may name the solved problem's.
+ * Shown under an accepted submission: the plan's next problem (where N and the header's Next
+ * go too) with how much of the plan is solved, and other plans to switch to. It never moves on
+ * by itself. The next problem's topics are never shown; the pivots may name the solved
+ * problem's.
  */
 export function NextPanel({ plan, slug }: { plan: Plan; slug: string }) {
 	const [page, setPage] = useState<NextPage | "error" | null>(null);
-	const navigate = useNavigate();
 	const key = JSON.stringify(plan);
 	const load = useEffectEvent((signal: AbortSignal) =>
 		api.next(plan, slug, signal),
@@ -53,22 +51,6 @@ export function NextPanel({ plan, slug }: { plan: Plan; slug: string }) {
 		if (ready && !fit)
 			section.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 	}, [ready, fit]);
-	useHotkeys(
-		ready && next
-			? {
-					n: () => {
-						const target = planOf(ready.plan);
-						remember(target);
-						navigate({
-							to: "/code/$slug",
-							params: { slug: next.slug },
-							search: target,
-						});
-					},
-				}
-			: {},
-	);
-
 	return (
 		<section
 			ref={section}

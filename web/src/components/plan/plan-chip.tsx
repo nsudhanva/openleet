@@ -23,7 +23,7 @@ export function PlanButton({
 			variant="outline"
 			size="xs"
 			aria-label={`Practice plan: ${label}`}
-			title="Practice plan: what Next offers after a solve"
+			title="Practice plan: where Next goes"
 			className={cn(
 				"min-w-0 max-w-full shrink bg-card font-normal text-foreground",
 				className,
