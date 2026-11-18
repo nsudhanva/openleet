@@ -10,7 +10,7 @@ a design problem) and asserts each constraint, with a message naming it.
 `uv run openleet judge check SLUG...` reports the tests each problem's constraints reject.
 `uv run openleet judge screen` drops them from data/judge/tests.duckdb and updates the test
 counts in specs.json. It refuses a constraints file that rejects one of the statement's own
-examples, since the file is wrong then, not the example.
+examples: a statement example is valid by definition, so such a file has a bug.
 """
 
 import importlib.util
