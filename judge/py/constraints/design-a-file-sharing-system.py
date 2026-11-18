@@ -1,0 +1,38 @@
+"""Design a File Sharing System: FileSharing(m), then join / leave / request calls."""
+
+import heapq
+
+
+def check(ops: list[str], args: list[list]) -> None:
+    assert len(ops) == len(args) and ops, "ops and args have the same non-zero length"
+    assert ops[0] == "FileSharing" and len(args[0]) == 1, "FileSharing(m) comes first"
+    m = args[0][0]
+    assert 1 <= m <= 10**5, "1 <= m <= 10^5"
+    assert len(ops) - 1 <= 10**4, "at most 10^4 calls to join, leave and request"
+    users: set[int] = set()
+    free: list[int] = []
+    next_id = 1
+    for op, a in zip(ops[1:], args[1:], strict=True):
+        if op == "join":
+            assert len(a) == 1 and isinstance(a[0], list), "join(ownedChunks)"
+            chunks = a[0]
+            assert len(chunks) <= min(100, m), "0 <= ownedChunks.length <= min(100, m)"
+            assert all(1 <= c <= m for c in chunks), "1 <= ownedChunks[i] <= m"
+            assert len(set(chunks)) == len(chunks), "values of ownedChunks are unique"
+            if free:
+                uid = heapq.heappop(free)
+            else:
+                uid = next_id
+                next_id += 1
+            users.add(uid)
+        elif op == "leave":
+            assert len(a) == 1, "leave(userID)"
+            assert a[0] in users, "each call to leave has a matching call for join"
+            users.remove(a[0])
+            heapq.heappush(free, a[0])
+        elif op == "request":
+            assert len(a) == 2, "request(userID, chunkID)"
+            assert a[0] in users, "userID is a user in the system"
+            assert 1 <= a[1] <= m, "1 <= chunkID <= m"
+        else:
+            raise AssertionError("ops are FileSharing, join, leave, request")

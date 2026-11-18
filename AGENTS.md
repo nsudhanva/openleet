@@ -8,7 +8,7 @@ Instructions for coding agents working in this repository. People start with the
 | Path | What it is | Docs |
 | --- | --- | --- |
 | `server/` | Rust API and web server; embeds `web/dist` | [architecture](docs/architecture.md) |
-| `judge/` | Rust judge daemon; `judge/py` is the Python zygote and sandbox | [architecture](docs/architecture.md#judging-a-submission) |
+| `judge/` | Rust judge daemon; `judge/py` is the Python zygote and sandbox, `judge/py/gen` the stress generators, `judge/py/constraints` each problem's input constraints | [architecture](docs/architecture.md#judging-a-submission) |
 | `proto/` | Types shared by server and judge | |
 | `web/` | React app (Vite, TanStack Router, Tailwind) | [development](docs/development.md) |
 | `src/openleet/` | Python data tools: `openleet ingest`, `check`, `judge`, `videos`, `smoke` | [architecture](docs/architecture.md#where-the-tests-come-from) |
@@ -60,6 +60,9 @@ mobile and desktop (`bunx lighthouse@12 URL --chrome-flags=--headless=new`, plus
   lists. Approaches and hints written by agents are reviewed with Codex CLI, and the review is
   recorded in `data/approach-reviews.json`; new ones get the same review.
 - Do not call LeetCode's API or scrape leetcode.com.
+- Every test's input keeps its statement's constraints: each judged problem has
+  `judge/py/constraints/<slug>.py`, and `uv run openleet judge screen` drops the tests it rejects.
+  A new problem gets its constraints file before its tests ship.
 - A time limit tests complexity, not machine speed: limits come from trusted reference
   solutions (`src/openleet/judging/limits.py`). After Accepted, the app offers the next problem
   but never moves on by itself.

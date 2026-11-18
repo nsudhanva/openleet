@@ -12,9 +12,10 @@ def generate(rng):
     values = rng.sample(range(-LIMIT // 2, LIMIT // 2), N - 2)
     values = [v * 2 + 1 for v in values]
     used = set(values)
+    # |a|, |b| < LIMIT / 2, so the target stays within the statement's -10^9 <= target <= 10^9.
     while True:
-        a = rng.randrange(-LIMIT // 2, LIMIT // 2) * 2
-        b = rng.randrange(-LIMIT // 2, LIMIT // 2) * 2
+        a = rng.randrange(-LIMIT // 4, LIMIT // 4) * 2
+        b = rng.randrange(-LIMIT // 4, LIMIT // 4) * 2
         if a != b and a not in used and b not in used:
             break
     target = a + b

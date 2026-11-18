@@ -1,0 +1,41 @@
+"""Design Log Storage System: LogSystem calls."""
+
+
+def _shape(ops, args, ctor, ctor_arity, sig):
+    assert isinstance(ops, list) and isinstance(args, list), "ops and args are lists"
+    assert len(ops) == len(args) >= 1, "ops and args have the same length"
+    assert ops[0] == ctor, "first operation is the constructor"
+    assert all(isinstance(a, list) for a in args), "each args[i] is a list"
+    assert len(args[0]) == ctor_arity, "constructor argument count"
+    for op, a in zip(ops[1:], args[1:]):
+        assert op in sig, "known method name"
+        assert len(a) == sig[op], "argument count of " + op
+
+
+def check(ops: list[str], args: list[list]) -> None:
+    _shape(ops, args, "LogSystem", 0, {"put": 2, "retrieve": 3})
+    import re
+
+    assert len(ops) - 1 <= 500, "at most 500 calls"
+
+    def stamp(s):
+        assert isinstance(s, str) and re.fullmatch(r"\d{4}(:\d{2}){5}", s), (
+            "timestamp is Year:Month:Day:Hour:Minute:Second"
+        )
+        y, mo, d, h, mi, sec = map(int, s.split(":"))
+        assert 2000 <= y <= 2017, "2000 <= Year <= 2017"
+        assert 1 <= mo <= 12, "1 <= Month <= 12"
+        assert 1 <= d <= 31, "1 <= Day <= 31"
+        assert 0 <= h <= 23, "0 <= Hour <= 23"
+        assert 0 <= mi <= 59 and 0 <= sec <= 59, "0 <= Minute, Second <= 59"
+
+    for op, a in zip(ops[1:], args[1:]):
+        if op == "put":
+            assert isinstance(a[0], int) and 1 <= a[0] <= 500, "1 <= id <= 500"
+            stamp(a[1])
+        else:
+            stamp(a[0])
+            stamp(a[1])
+            assert a[2] in ("Year", "Month", "Day", "Hour", "Minute", "Second"), (
+                "granularity is one of the six values"
+            )

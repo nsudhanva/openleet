@@ -1,0 +1,17 @@
+"""Design a Number Container System: NumberContainers(), then change / find calls."""
+
+
+def check(ops: list[str], args: list[list]) -> None:
+    assert len(ops) == len(args) and ops, "ops and args have the same non-zero length"
+    assert ops[0] == "NumberContainers" and args[0] == [], "NumberContainers() comes first"
+    assert len(ops) - 1 <= 10**5, "at most 10^5 calls to change and find"
+    for op, a in zip(ops[1:], args[1:]):
+        if op == "change":
+            assert len(a) == 2, "change(index, number)"
+            assert 1 <= a[0] <= 10**9, "1 <= index <= 10^9"
+            assert 1 <= a[1] <= 10**9, "1 <= number <= 10^9"
+        elif op == "find":
+            assert len(a) == 1, "find(number)"
+            assert 1 <= a[0] <= 10**9, "1 <= number <= 10^9"
+        else:
+            raise AssertionError("ops are NumberContainers, change, find")

@@ -7,6 +7,8 @@ Pipeline (`uv run openleet judge all`):
             data/judge/specs.json and data/judge/tests.duckdb
   stress    run the stress generators (judge/py/gen) and the qualified references on them
   final     assemble again, now with the stress tests
+  screen    drop the tests whose inputs break the statement's constraints
+            (judge/py/constraints, screen.py)
   time      submit every reference to running judge daemons (JUDGE_SOCKETS) on exactly the
             kept tests, and set each problem's time limit from the trusted ones' times
             (limits.py; `judge limits` sets them again from the cached times)

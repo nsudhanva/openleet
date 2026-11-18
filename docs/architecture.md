@@ -104,12 +104,20 @@ flowchart LR
     G["Stress generators<br/>judge/py/gen"] --> I
     I --> R{"Every reference<br/>runs every input"}
     R1["LeetCodeDataset solution<br/>doocs solutions<br/>Mercury accepted submissions<br/>(CC BY-NC, build only)"] --> R
-    R -- all agree --> K["Kept test<br/>tests.duckdb"]
+    R -- all agree --> C{"Input keeps the<br/>statement's constraints<br/>judge/py/constraints"}
     R -- any disagree --> X[Dropped]
+    C -- yes --> K["Kept test<br/>tests.duckdb"]
+    C -- no --> X
 ```
 
 A reference solution counts only if it reproduces the statement's example outputs. A test is kept
-only when every counted reference gives the same answer.
+only when every counted reference gives the same answer and its input keeps every constraint the
+statement states. `judge/py/constraints/<slug>.py` writes a problem's constraints as code: a
+`check` function that takes a test's input and asserts each size, range, character set and
+guarantee ("exactly one value is repeated", "the input is a valid tree"). References can agree on
+an input the problem never allows, so agreement alone does not make a test valid. `judge screen`
+drops the tests a check rejects; it refuses a check that rejects one of the statement's own
+examples, and `tests/test_screen.py` fails if the corpus holds a test its problem's check rejects.
 
 The `unordered` checker sorts the outer list by structural JSON order, with numbers sorted
 numerically; `unordered_nested` also sorts each inner list. When a problem returns floats, the
@@ -119,6 +127,8 @@ large exact stress answers store a digest instead. The writer checks that each p
 are unique and consecutive.
 
 ```bash
+uv run openleet judge check SLUG  # the tests a problem's constraints reject
+uv run openleet judge screen      # drop them from data/judge/tests.duckdb
 uv run openleet judge all       # rebuild data/judge/tests.duckdb
 uv run openleet judge publish   # upload it to the corpus release and pin it in corpus.json
 ```

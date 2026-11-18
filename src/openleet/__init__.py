@@ -35,17 +35,21 @@ def main() -> None:
             "assemble",
             "stress",
             "final",
+            "screen",
             "time",
             "limits",
             "all",
             "brief",
+            "check",
             "publish",
             "fetch",
             "migrate-corpus",
         ],
     )
     judge.add_argument(
-        "args", nargs="*", help="brief: problems to describe; migrate-corpus: IN OUT"
+        "args",
+        nargs="*",
+        help="brief, check: problems to describe or check; migrate-corpus: IN OUT",
     )
     smoke = commands.add_parser(
         "smoke", help="end-to-end judge and sandbox checks against a running server (HTTP only)"

@@ -1,0 +1,29 @@
+"""Design Exam Scores Tracker: ExamTracker calls."""
+
+
+def _shape(ops, args, ctor, ctor_arity, sig):
+    assert isinstance(ops, list) and isinstance(args, list), "ops and args are lists"
+    assert len(ops) == len(args) >= 1, "ops and args have the same length"
+    assert ops[0] == ctor, "first operation is the constructor"
+    assert all(isinstance(a, list) for a in args), "each args[i] is a list"
+    assert len(args[0]) == ctor_arity, "constructor argument count"
+    for op, a in zip(ops[1:], args[1:]):
+        assert op in sig, "known method name"
+        assert len(a) == sig[op], "argument count of " + op
+
+
+def check(ops: list[str], args: list[list]) -> None:
+    _shape(ops, args, "ExamTracker", 0, {"record": 2, "totalScore": 2})
+    assert len(ops) - 1 <= 10**5, "at most 10^5 calls"
+    assert len(ops) == 1 or ops[1] == "record", "the first call after the constructor is record()"
+    last = 0
+    for op, a in zip(ops[1:], args[1:]):
+        assert all(isinstance(x, int) for x in a), "integer arguments"
+        if op == "record":
+            t, score = a
+            assert 1 <= t <= 10**9, "1 <= time <= 10^9"
+            assert 1 <= score <= 10**9, "1 <= score <= 10^9"
+            assert t > last, "record() is called with strictly increasing time"
+            last = t
+        else:
+            assert 1 <= a[0] <= a[1] <= last, "1 <= startTime <= endTime <= t"

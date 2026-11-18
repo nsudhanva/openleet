@@ -1,0 +1,29 @@
+"""Design Browser History: BrowserHistory calls."""
+
+
+def _shape(ops, args, ctor, ctor_arity, sig):
+    assert isinstance(ops, list) and isinstance(args, list), "ops and args are lists"
+    assert len(ops) == len(args) >= 1, "ops and args have the same length"
+    assert ops[0] == ctor, "first operation is the constructor"
+    assert all(isinstance(a, list) for a in args), "each args[i] is a list"
+    assert len(args[0]) == ctor_arity, "constructor argument count"
+    for op, a in zip(ops[1:], args[1:]):
+        assert op in sig, "known method name"
+        assert len(a) == sig[op], "argument count of " + op
+
+
+def check(ops: list[str], args: list[list]) -> None:
+    _shape(ops, args, "BrowserHistory", 1, {"visit": 1, "back": 1, "forward": 1})
+    assert len(ops) - 1 <= 5000, "at most 5000 calls"
+
+    def ok(s):
+        return (
+            isinstance(s, str) and 1 <= len(s) <= 20 and all(c == "." or "a" <= c <= "z" for c in s)
+        )
+
+    assert ok(args[0][0]), "homepage is 1..20 characters of '.' or lowercase letters"
+    for op, a in zip(ops[1:], args[1:]):
+        if op == "visit":
+            assert ok(a[0]), "url is 1..20 characters of '.' or lowercase letters"
+        else:
+            assert isinstance(a[0], int) and 1 <= a[0] <= 100, "1 <= steps <= 100"

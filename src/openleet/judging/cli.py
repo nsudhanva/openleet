@@ -10,11 +10,12 @@ from openleet.judging.brief import brief
 from openleet.judging.corpus import fetch, publish
 from openleet.judging.limits import refresh_limits
 from openleet.judging.prepare import prepare
+from openleet.judging.screen import check, screen
 from openleet.judging.testdb import migrate
 from openleet.judging.timing import time_references
 
 # The stages `judge all` runs, in order.
-PIPELINE = ("prepare", "vote", "assemble", "stress", "final", "time")
+PIPELINE = ("prepare", "vote", "assemble", "stress", "final", "screen", "time")
 # The judge's own runtime, so references run exactly as submissions will.
 IMAGE = "openleet-judge-dev"
 # Built with HARNESS_DIR as the context, for requirements.txt (exported from pyproject.toml).
@@ -92,9 +93,11 @@ def run(stage: str, args: list[str], problems_path: Path) -> None:
         "assemble": assemble,
         "stress": stress,
         "final": assemble,
+        "screen": screen,
         "time": time_limits,
         "limits": refresh_limits,
         "brief": lambda: brief(args, problems_path),
+        "check": lambda: check(args),
         "publish": publish,
         "fetch": fetch,
         "migrate-corpus": lambda: migrate_corpus(args),

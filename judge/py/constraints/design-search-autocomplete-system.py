@@ -1,0 +1,36 @@
+"""Design Search Autocomplete System: AutocompleteSystem calls."""
+
+
+def _shape(ops, args, ctor, ctor_arity, sig):
+    assert isinstance(ops, list) and isinstance(args, list), "ops and args are lists"
+    assert len(ops) == len(args) >= 1, "ops and args have the same length"
+    assert ops[0] == ctor, "first operation is the constructor"
+    assert all(isinstance(a, list) for a in args), "each args[i] is a list"
+    assert len(args[0]) == ctor_arity, "constructor argument count"
+    for op, a in zip(ops[1:], args[1:], strict=True):
+        assert op in sig, "known method name"
+        assert len(a) == sig[op], "argument count of " + op
+
+
+def check(ops: list[str], args: list[list]) -> None:
+    _shape(ops, args, "AutocompleteSystem", 2, {"input": 1})
+    sentences, times = args[0]
+    assert isinstance(sentences, list) and isinstance(times, list), "sentences and times are lists"
+    assert len(sentences) == len(times), "n == sentences.length == times.length"
+    assert 1 <= len(sentences) <= 100, "1 <= n <= 100"
+    for s in sentences:
+        assert isinstance(s, str) and 1 <= len(s) <= 100, "1 <= sentences[i].length <= 100"
+    assert all(isinstance(t, int) and 1 <= t <= 50 for t in times), "1 <= times[i] <= 50"
+    assert len(ops) - 1 <= 5000, "at most 5000 calls to input"
+    cur = []
+    for a in args[1:]:
+        c = a[0]
+        assert isinstance(c, str) and len(c) == 1, "c is a single character"
+        assert c == "#" or c == " " or "a" <= c <= "z", "c is a lowercase letter, '#', or space"
+        if c == "#":
+            assert len(cur) <= 200, "each tested sentence has length in [1, 200]"
+            assert "  " not in "".join(cur), "words are separated by single spaces"
+            cur = []
+        else:
+            cur.append(c)
+    assert not cur, "each tested sentence ends with '#'"

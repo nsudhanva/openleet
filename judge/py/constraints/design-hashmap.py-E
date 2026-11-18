@@ -1,0 +1,19 @@
+"""Design HashMap: MyHashMap calls."""
+
+
+def _shape(ops, args, ctor, ctor_arity, sig):
+    assert isinstance(ops, list) and isinstance(args, list), "ops and args are lists"
+    assert len(ops) == len(args) >= 1, "ops and args have the same length"
+    assert ops[0] == ctor, "first operation is the constructor"
+    assert all(isinstance(a, list) for a in args), "each args[i] is a list"
+    assert len(args[0]) == ctor_arity, "constructor argument count"
+    for op, a in zip(ops[1:], args[1:]):
+        assert op in sig, "known method name"
+        assert len(a) == sig[op], "argument count of " + op
+
+
+def check(ops: list[str], args: list[list]) -> None:
+    _shape(ops, args, "MyHashMap", 0, {"put": 2, "get": 1, "remove": 1})
+    assert len(ops) - 1 <= 10**4, "at most 10^4 calls"
+    for a in args[1:]:
+        assert all(isinstance(x, int) and 0 <= x <= 10**6 for x in a), "0 <= key, value <= 10^6"

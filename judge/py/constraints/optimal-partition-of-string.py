@@ -1,0 +1,9 @@
+"""Optimal Partition of String: a lowercase string."""
+
+
+def check(s: str) -> None:
+    assert isinstance(s, str), "s is a string"
+    assert 1 <= len(s) <= 10**5, "1 <= s.length <= 10^5"
+    assert s.isascii() and s.isalpha() and s.islower(), (
+        "s consists of only English lowercase letters"
+    )
