@@ -42,6 +42,7 @@ async function pageLoads(page: string): Promise<string[]> {
 		await Promise.all([
 			api.problems(problemsQuery({ ...root, ...parseProblemsSearch(root) })),
 			api.plans(),
+			api.lists(),
 		]);
 	} else if (pathname === "/progress") {
 		await api.report(root.company);

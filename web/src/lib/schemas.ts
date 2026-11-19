@@ -44,6 +44,8 @@ export type StudySearch = ListFilters & {
  * order (left out: every problem, in list order), and a search within it.
  */
 export type ProblemsSearch = ListFilters & {
+	/** One of your lists (its id), shown instead of the company list. */
+	list?: number;
 	/** Only these problems; left out, every one ("all" is never in the URL). */
 	status?: Exclude<PlanStatus, "all">;
 	/** Left out, list order ("rank"). */
@@ -58,6 +60,8 @@ export type ProblemsSearch = ListFilters & {
  * the list the learner came from.
  */
 export type PlanSearch = ListFilters & {
+	/** One of your lists (its id), walked instead of the company list. */
+	list?: number;
 	status: PlanStatus;
 	order: PlanOrder;
 };
@@ -94,6 +98,13 @@ function text(value: unknown, max = Number.POSITIVE_INFINITY) {
 /** A search query as the table keeps it: trimmed, cut to {@link MAX_QUERY}, trimmed again. */
 export function cleanQuery(query: string): string {
 	return text(query, MAX_QUERY) ?? "";
+}
+
+/** A list id: the router reads `?list=3` as the number 3; anything else names no list. */
+function listId(value: unknown): number | undefined {
+	return Number.isSafeInteger(value) && (value as number) > 0
+		? (value as number)
+		: undefined;
 }
 
 /** Drops undefined keys, so the URL carries only what was chosen. */
@@ -138,6 +149,7 @@ export function parseProblemsSearch(
 	const raw: Record<string, unknown> = search;
 	return compact({
 		...parseListFilters(raw),
+		list: listId(raw.list),
 		status: oneOf(TABLE_STATUSES, raw.status),
 		order: oneOf(TABLE_ORDERS, raw.order),
 		q: text(raw.q, MAX_QUERY),
@@ -151,6 +163,7 @@ export function parsePlanSearch(
 	const raw: Record<string, unknown> = search;
 	return compact({
 		...parseListFilters(raw),
+		list: listId(raw.list),
 		status: oneOf(PLAN_STATUSES, raw.status) ?? PLAN_DEFAULTS.status,
 		order: oneOf(PLAN_ORDERS, raw.order) ?? PLAN_DEFAULTS.order,
 	});
@@ -175,15 +188,16 @@ export function deckQuery(search: object): StudySearch & CompanySearch {
 export function problemsQuery(search: object): ProblemsSearch & CompanySearch {
 	const raw = search as SearchSchemaInput;
 	const { company } = parseCompanySearch(raw);
-	const { period, topic, difficulty, status, order, q } =
+	const { period, list, topic, difficulty, status, order, q } =
 		parseProblemsSearch(raw);
-	return { company, period, topic, difficulty, status, order, q };
+	return { company, period, list, topic, difficulty, status, order, q };
 }
 
 /** A plan as GET /api/next and PUT /api/plans take it. */
 export function planQuery(search: object): PlanSearch & CompanySearch {
 	const raw = search as SearchSchemaInput;
 	const { company } = parseCompanySearch(raw);
-	const { period, topic, difficulty, status, order } = parsePlanSearch(raw);
-	return { company, period, topic, difficulty, status, order };
+	const { period, list, topic, difficulty, status, order } =
+		parsePlanSearch(raw);
+	return { company, period, list, topic, difficulty, status, order };
 }

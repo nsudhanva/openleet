@@ -244,6 +244,12 @@ impl Content {
         self.by_slug.get(slug).map(|&i| &self.problems[i])
     }
 
+    /// The index of the problem with this slug, as list entries hold it.
+    #[must_use]
+    pub fn problem_index(&self, slug: &str) -> Option<u32> {
+        self.by_slug.get(slug).and_then(|&i| u32::try_from(i).ok())
+    }
+
     /// The problem a list entry points at.
     #[must_use]
     pub fn problem_at(&self, entry: &ListEntry) -> &Problem {

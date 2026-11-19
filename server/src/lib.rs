@@ -13,3 +13,4 @@ pub mod scheduler;
 pub mod scorer;
 pub mod search;
 pub mod service;
+pub mod user_lists;

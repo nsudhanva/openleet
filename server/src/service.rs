@@ -14,6 +14,7 @@ use crate::scheduler::{
     CardList, CardState, CardStates, CardStatus, QueueFilter, card_status, queue_head,
 };
 use crate::scorer::score_topics;
+use crate::user_lists::UserLists;
 
 /// A slug that names no problem (HTTP 404).
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -140,6 +141,8 @@ pub struct ProblemParams<'a> {
     pub company: Option<&'a str>,
     /// Period.
     pub period: Option<&'a str>,
+    /// The id of one of the learner's lists, walked instead of the company list.
+    pub list: Option<&'a str>,
     /// Topic tag.
     pub topic: Option<&'a str>,
     /// Difficulty.
@@ -156,8 +159,10 @@ pub struct ProblemParams<'a> {
 /// optional status and an order, and an optional search.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProblemQuery<'a> {
-    /// Which list.
+    /// Which company list.
     pub list: ListId,
+    /// One of the learner's lists, walked instead of the company list.
+    pub user_list: Option<i64>,
     /// Which problems of it.
     pub filter: ProblemFilter,
     /// Only problems matching this search, best match first; `None` keeps the order.
@@ -175,6 +180,10 @@ impl<'a> ProblemQuery<'a> {
     pub fn parse(content: &Content, params: &ProblemParams<'a>) -> Self {
         Self {
             list: content.list_id(params.company, params.period),
+            user_list: params
+                .list
+                .and_then(|id| id.parse().ok())
+                .filter(|&id| id > 0),
             filter: content.problem_filter(params.topic, params.difficulty),
             q: params.q.filter(|q| !q.trim().is_empty()),
             status: params.status.and_then(|s| s.parse().ok()),
@@ -190,6 +199,7 @@ impl<'a> ProblemQuery<'a> {
     pub fn plan(&self) -> Plan {
         Plan {
             list: self.list,
+            user_list: self.user_list,
             filter: self.filter,
             status: self.status.unwrap_or_default(),
             order: self.order,
@@ -326,11 +336,13 @@ fn row<'a>(
     }
 }
 
-/// The problems of one list that pass the filter and the status (every problem without
-/// one), with their progress: in the query's order, or best match first with a search.
+/// The problems of one list (a company's, or one of the learner's `lists`) that pass the
+/// filter and the status (every problem without one), with their progress: in the query's
+/// order, or best match first with a search.
 #[must_use]
 pub fn problem_rows<'a>(
     content: &'a Content,
+    lists: &UserLists,
     query: &ProblemQuery<'_>,
     states: &CardStates,
     marks: Marks<'_>,
@@ -338,14 +350,14 @@ pub fn problem_rows<'a>(
 ) -> Vec<ProblemRow<'a>> {
     let status = query.status.unwrap_or(PlanStatus::All);
     let counts = |p: &Problem| status.keeps(&p.slug, marks);
-    let list = content.list(query.list);
+    let plan = Plan {
+        status,
+        ..query.plan()
+    };
+    let list = plan.source(content, lists);
     let Some(q) = query.q else {
-        let plan = Plan {
-            status,
-            ..query.plan()
-        };
         return plan
-            .entries(content)
+            .entries(content, lists)
             .into_iter()
             .filter(|entry| counts(content.problem_at(entry)))
             .map(|entry| row(content, entry, states, now, None))
@@ -526,6 +538,7 @@ mod tests {
     ) -> Vec<ProblemRow<'a>> {
         problem_rows(
             content,
+            &UserLists::default(),
             &ProblemQuery::parse(content, params),
             states,
             &CodingLog::default(),
@@ -552,8 +565,10 @@ mod tests {
         );
         let lc = super::problem_rows(
             &content,
+            &UserLists::default(),
             &ProblemQuery {
                 list: content.list_id(Some("any"), Some("lc1000")),
+                user_list: None,
                 filter: ProblemFilter::default(),
                 q: None,
                 status: None,
@@ -644,7 +659,7 @@ mod tests {
                 ..ProblemParams::default()
             };
             let query = ProblemQuery::parse(&content, &params);
-            problem_rows(&content, &query, &states, marks, T0)
+            problem_rows(&content, &UserLists::default(), &query, &states, marks, T0)
                 .iter()
                 .map(|r| r.id)
                 .collect::<Vec<_>>()

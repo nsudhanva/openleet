@@ -62,6 +62,12 @@ describe("parseProblemsSearch", () => {
 		expect(problems(search)).toEqual(search);
 	});
 
+	it("keeps one of your lists only by a positive whole id", () => {
+		expect(problems({ list: 3 })).toEqual({ period: "6m", list: 3 });
+		for (const list of [0, -2, 2.5, "3", "abc", Number.MAX_SAFE_INTEGER + 2])
+			expect(problems({ list })).toEqual({ period: "6m" });
+	});
+
 	it("reads a numeric query as its text, and drops blank or invalid ones", () => {
 		expect(problems({ q: 42 })).toEqual({ period: "6m", q: "42" });
 		expect(problems({ q: "  " })).toEqual({ period: "6m" });

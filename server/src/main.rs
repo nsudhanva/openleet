@@ -167,6 +167,7 @@ fn load_state(config: &Config) -> Result<Shared> {
         store.notes()?,
         store.coding_log()?,
         store.plans()?,
+        state::user_lists(&content, store.lists()?),
     );
     let companies = api::companies_response(&content);
     Ok(Arc::new(AppState {

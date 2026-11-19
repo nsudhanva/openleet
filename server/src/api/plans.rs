@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use openleet::content::Content;
 use openleet::plan::{self, Marks, NextProblem, Plan, PlanProgress, PlanView};
 use openleet::service::{ProblemParams, ProblemQuery};
+use openleet::user_lists::UserLists;
 
 use super::{Params, param};
 use crate::db::{Changed, MAX_PINNED_PLANS, PlanChange, PlanKey, SavedPlan};
@@ -18,6 +19,26 @@ use crate::state::{Shared, now_ms};
 
 /// Longest plan name, in characters.
 const MAX_NAME_CHARS: usize = 60;
+
+/// A plan's or list's name, trimmed.
+///
+/// # Errors
+/// When it is blank (the message then ends with `blank_hint`) or longer than
+/// [`MAX_NAME_CHARS`].
+pub(super) fn checked_name(name: &str, blank_hint: &str) -> ApiResult<String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(ApiError::BadRequest(format!(
+            "A name needs some text{blank_hint}"
+        )));
+    }
+    if name.chars().count() > MAX_NAME_CHARS {
+        return Err(ApiError::BadRequest(format!(
+            "Names are at most {MAX_NAME_CHARS} characters"
+        )));
+    }
+    Ok(name.to_owned())
+}
 
 /// A plan from query or body values, leniently (see [`ProblemQuery::parse`]).
 fn parse_plan(content: &Content, params: &ProblemParams<'_>) -> Plan {
@@ -38,6 +59,7 @@ pub async fn next(State(state): State<Shared>, Query(params): Params) -> ApiResu
         &ProblemParams {
             company: param(&params, "company"),
             period: param(&params, "period"),
+            list: param(&params, "list"),
             topic: param(&params, "topic"),
             difficulty: param(&params, "difficulty"),
             status: param(&params, "status"),
@@ -58,7 +80,14 @@ pub async fn next(State(state): State<Shared>, Query(params): Params) -> ApiResu
         .as_ref()
         .and_then(|r| r.topics.first())
         .map(|t| t.topic.as_str());
-    let page = plan::next_page(content, &plan, current, progress.marks(), weakest);
+    let page = plan::next_page(
+        content,
+        &progress.lists,
+        &plan,
+        current,
+        progress.marks(),
+        weakest,
+    );
     Ok(Json(&page).into_response())
 }
 
@@ -81,6 +110,7 @@ fn entry<'a>(content: &'a Content, saved: &'a SavedPlan, marks: Marks<'_>) -> Pl
         &ProblemParams {
             company: Some(&saved.company),
             period: Some(&saved.period),
+            list: None,
             topic: saved.topic.as_deref(),
             difficulty: saved.difficulty.as_deref(),
             status: Some(&saved.status),
@@ -88,12 +118,14 @@ fn entry<'a>(content: &'a Content, saved: &'a SavedPlan, marks: Marks<'_>) -> Pl
             q: None,
         },
     );
-    let walked = plan::walk(content, &plan, None, marks);
+    // A stored plan walks a company list, never one of the learner's own.
+    let none = UserLists::default();
+    let walked = plan::walk(content, &none, &plan, None, marks);
     PlanEntry {
         id: saved.id,
         name: saved.name.as_deref(),
         pinned: saved.pinned,
-        plan: plan.labeled(content),
+        plan: plan.labeled(content, &none),
         progress: walked.progress,
         next: walked.next,
     }
@@ -126,6 +158,7 @@ fn plan_response(state: &Shared, id: i64) -> ApiResult<Response> {
 pub struct PlanInput {
     company: Option<String>,
     period: Option<String>,
+    list: Option<serde_json::Value>,
     topic: Option<String>,
     difficulty: Option<String>,
     status: Option<String>,
@@ -133,16 +166,23 @@ pub struct PlanInput {
 }
 
 /// Records that a plan was used: the same plan keeps its row (and name and pin), a new one
-/// joins the recent plans, the oldest of which may go. Returns the plan.
+/// joins the recent plans, the oldest of which may go. Returns the plan. A plan over one of the
+/// learner's own lists is not recorded: the list itself is kept.
 pub async fn use_plan(
     State(state): State<Shared>,
     Json(input): Json<PlanInput>,
 ) -> ApiResult<Response> {
+    if input.list.as_ref().is_some_and(|list| !list.is_null()) {
+        return Err(ApiError::BadRequest(
+            "Plans over your own lists are not remembered; the list is".into(),
+        ));
+    }
     let plan = parse_plan(
         &state.content,
         &ProblemParams {
             company: input.company.as_deref(),
             period: input.period.as_deref(),
+            list: None,
             topic: input.topic.as_deref(),
             difficulty: input.difficulty.as_deref(),
             status: input.status.as_deref(),
@@ -186,20 +226,7 @@ impl PlanEdit {
     /// When the name is blank or longer than [`MAX_NAME_CHARS`].
     fn change(self) -> ApiResult<PlanChange> {
         let name = match self.name {
-            Some(Some(name)) => {
-                let name = name.trim();
-                if name.is_empty() {
-                    return Err(ApiError::BadRequest(
-                        "A name needs some text; use null to drop it".into(),
-                    ));
-                }
-                if name.chars().count() > MAX_NAME_CHARS {
-                    return Err(ApiError::BadRequest(format!(
-                        "Names are at most {MAX_NAME_CHARS} characters"
-                    )));
-                }
-                Some(Some(name.to_owned()))
-            }
+            Some(Some(name)) => Some(Some(checked_name(&name, "; use null to drop it")?)),
             other => other,
         };
         Ok(PlanChange {
@@ -324,6 +351,7 @@ mod tests {
         PlanInput {
             company: Some("meta".into()),
             period: Some("3m".into()),
+            list: None,
             topic: topic.map(str::to_owned),
             difficulty: None,
             status: None,

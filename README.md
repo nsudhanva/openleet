@@ -17,6 +17,9 @@ reviews and a judge for the Python solutions you write in the browser.
   accepted submission it also offers related plans. A plan is a list, topic, difficulty and
   order you can change at any time. The app remembers your recent plans, and you can pin the
   ones you want to keep.
+- Your own lists: tick problems, or use Add to list on a problem, to put them in a named list.
+  Next, progress and the plan filters work on your list as on a company list. You can rename a
+  list, remove problems from it, or delete it.
 - Readiness for a company's 100 most-asked problems, weighted by how often it asks each: 60%
   for solving a problem cleanly in the judge, 40% for keeping its flashcard current. A daily
   trend, your streak and the topics you name least sit beside it.

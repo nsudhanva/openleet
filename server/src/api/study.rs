@@ -191,6 +191,7 @@ pub async fn problems(State(state): State<Shared>, Query(params): Params) -> Res
         &ProblemParams {
             company: param(&params, "company"),
             period: param(&params, "period"),
+            list: param(&params, "list"),
             topic: param(&params, "topic"),
             difficulty: param(&params, "difficulty"),
             q: param(&params, "q"),
@@ -201,6 +202,7 @@ pub async fn problems(State(state): State<Shared>, Query(params): Params) -> Res
     let progress = state.progress.read();
     let rows = service::problem_rows(
         &state.content,
+        &progress.lists,
         &query,
         &progress.states,
         progress.marks(),

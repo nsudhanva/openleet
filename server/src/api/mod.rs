@@ -4,6 +4,7 @@
 //! never through `json!` / `serde_json::Value`, which would widen 93.2 to 93.19999694824219.
 
 mod code;
+mod lists;
 mod plans;
 mod study;
 
@@ -45,6 +46,11 @@ pub fn routes() -> Router<Shared> {
         .route(
             "/plans/{id}",
             patch(plans::edit_plan).delete(plans::delete_plan),
+        )
+        .route("/lists", get(lists::lists).post(lists::create_list))
+        .route(
+            "/lists/{id}",
+            patch(lists::edit_list).delete(lists::delete_list),
         )
         .route("/code/{slug}", get(code::code_info))
         .route("/drafts", put(code::save_draft))

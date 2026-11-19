@@ -22,6 +22,7 @@ import { SubmissionList } from "@/components/code/submission-list";
 import { NextButton } from "@/components/plan/next-button";
 import { NextPanel } from "@/components/plan/next-panel";
 import { PlanChip } from "@/components/plan/plan-chip";
+import { savePlan } from "@/components/plan/plan-link";
 import {
 	type Pane,
 	ProblemCard,
@@ -152,10 +153,7 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 	const plan: Plan = route.useSearch();
 	const navigate = route.useNavigate();
 	// The plan is remembered once the learner settles on a change, not on every pick.
-	const planSave = useAutosave(
-		(next: Plan) => api.rememberPlan(next).then(() => undefined),
-		1500,
-	);
+	const planSave = useAutosave(savePlan, 1500);
 	const changePlan = (next: Plan) => {
 		navigate({
 			search: (prev) => ({ ...prev, ...next }),

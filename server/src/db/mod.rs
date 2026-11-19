@@ -12,6 +12,7 @@
 
 pub mod backup;
 mod corpus;
+mod lists;
 pub mod migrate;
 mod plans;
 
@@ -32,6 +33,7 @@ use openleet::model::{Attempt, Grade};
 pub use backup::Backup;
 use corpus::Corpus;
 pub use corpus::{TestRow, Tests};
+pub use lists::{ListWrite, MAX_LIST_PROBLEMS, MAX_LISTS, StoredList};
 use migrate::{Migrated, Shape};
 pub use plans::{Changed, MAX_PINNED_PLANS, PlanChange, PlanKey, SavedPlan};
 

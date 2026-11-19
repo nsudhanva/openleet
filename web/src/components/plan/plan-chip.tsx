@@ -5,6 +5,7 @@ import { useCompanies } from "@/hooks/use-companies";
 import { useLoadOnUse } from "@/hooks/use-load-on-use";
 import { companyName } from "@/lib/companies";
 import { type Plan, planChipLabel } from "@/lib/plan";
+import { listNameOf, useUserLists } from "@/lib/user-lists";
 import { cn } from "@/lib/utils";
 
 const loadEditor = () => import("@/components/plan/plan-editor");
@@ -52,7 +53,12 @@ export function PlanChip({
 	onChange: (plan: Plan) => void;
 }) {
 	const companies = useCompanies();
-	const label = planChipLabel(plan, (slug) => companyName(companies, slug));
+	const lists = useUserLists(plan.list !== undefined);
+	const label = planChipLabel(
+		plan,
+		(slug) => companyName(companies, slug),
+		listNameOf(lists),
+	);
 	const { used, use, prefetchProps } = useLoadOnUse(loadEditor);
 	const button = <PlanButton label={label} {...prefetchProps} onClick={use} />;
 	if (!used) return button;

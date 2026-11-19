@@ -2,6 +2,7 @@ import { ExternalLinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { CompanyTags } from "@/components/company-tags";
 import { DifficultyBadge } from "@/components/difficulty-badge";
+import { AddToListButton } from "@/components/lists/add-to-list";
 import { PremiumBadge } from "@/components/premium-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { VideosButton } from "@/components/videos-button";
@@ -10,8 +11,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * The card's heading over the red rule: the title, then difficulty, company tags in the space
- * left (one line that never wraps), `children` (progress, actions), the video explanations and
- * the LeetCode link. From `lg` it is one line, so the header keeps its height; below, the line
+ * left (one line that never wraps), `children` (progress, actions), the menu of your lists, the
+ * video explanations and the LeetCode link. From `lg` it is one line, so the header keeps its height; below, the line
  * goes under the title and `children` wrap onto a line of their own when the tags would get
  * too little room (on the left on a phone, on the right from sm).
  */
@@ -22,7 +23,14 @@ export function ProblemHeader({
 }: {
 	problem: Pick<
 		Problem,
-		"id" | "title" | "difficulty" | "premium" | "companies" | "url" | "videos"
+		| "id"
+		| "slug"
+		| "title"
+		| "difficulty"
+		| "premium"
+		| "companies"
+		| "url"
+		| "videos"
 	>;
 	/** The list whose ranks the company tags show. */
 	period: AskedPeriod;
@@ -48,6 +56,7 @@ export function ProblemHeader({
 				</div>
 				<div className="flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1 sm:ml-auto sm:justify-end sm:gap-x-3 lg:flex-nowrap lg:whitespace-nowrap">
 					{children}
+					<AddToListButton slugs={[problem.slug]} />
 					<VideosButton videos={problem.videos} />
 					<a
 						href={problem.url}

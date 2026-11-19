@@ -14,12 +14,23 @@ use openleet::plan::Marks;
 use openleet::scheduler::{CardStates, card_states, record_attempt};
 use openleet::scorer::{ScoreReport, local_zone, score_report};
 use openleet::service;
+use openleet::user_lists::{UserList, UserLists};
 use openleet_proto::Verdict;
 
 use crate::acme::CertificateSlot;
-use crate::db::{SavedPlan, Store};
+use crate::db::{SavedPlan, Store, StoredList};
 use crate::error::{ApiError, ApiResult};
 use crate::judge::Judge;
+
+/// The stored lists, resolved against the content.
+pub fn user_lists(content: &Content, stored: Vec<StoredList>) -> UserLists {
+    UserLists::new(
+        stored
+            .into_iter()
+            .map(|list| UserList::new(content, list.id, list.name, list.slugs))
+            .collect(),
+    )
+}
 
 /// Everything derived from the attempt log, kept in memory so reads never touch the disk.
 pub struct Progress {
@@ -33,6 +44,9 @@ pub struct Progress {
     pub coding: CodingLog,
     /// Practice plans used, as [`Store::plans`] lists them; replaced after every plan write.
     pub plans: Vec<SavedPlan>,
+    /// The learner's own lists, as [`Store::lists`] lists them; replaced after every list
+    /// write.
+    pub lists: UserLists,
     /// Reports per company, computed on first read after the log changed.
     reports: HashMap<CompanyFilter, Arc<ScoreReport>>,
 }
@@ -44,6 +58,7 @@ impl Progress {
         notes: HashMap<String, String>,
         coding: CodingLog,
         plans: Vec<SavedPlan>,
+        lists: UserLists,
     ) -> Self {
         let states = card_states(&attempts);
         Self {
@@ -52,6 +67,7 @@ impl Progress {
             notes,
             coding,
             plans,
+            lists,
             reports: HashMap::new(),
         }
     }
@@ -238,6 +254,7 @@ pub fn test_state_with(dir: &std::path::Path, judge: &str, content: Content) -> 
             HashMap::new(),
             CodingLog::default(),
             Vec::new(),
+            UserLists::default(),
         )),
         progress_updates: Mutex::new(()),
         certificate: CertificateSlot::default(),

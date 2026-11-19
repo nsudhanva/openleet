@@ -1,6 +1,6 @@
-//! Practice plans: a problem list, a filter over it, which of its problems still count (the
-//! status) and an order. A plan is never curated: it is built on the fly from the content
-//! (company lists, topics, difficulty) and the learner's submissions, and names the next
+//! Practice plans: a problem list (a company's, or one of the learner's own), a filter over
+//! it, which of its problems still count (the status) and an order. A plan is built on the fly
+//! from the lists, topics, difficulty and the learner's submissions, and names the next
 //! problem to solve.
 //!
 //! Topics stay hidden unless asked for: a plan's next problem carries no topics, and only the
@@ -14,6 +14,7 @@ use crate::content::{ANY_COMPANY, Content};
 use crate::fingerprint::fnv1a;
 use crate::lists::{ListEntry, ListId, ProblemFilter};
 use crate::model::{CompanyFilter, Difficulty, Period, Problem, TopicId, wire_enum};
+use crate::user_lists::UserLists;
 
 wire_enum! {
     /// Which problems of a plan are still to do.
@@ -128,8 +129,10 @@ const fn mix(mut x: u64) -> u64 {
 /// A practice plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Plan {
-    /// Which list.
+    /// Which company list; also whose report names the weakest topic.
     pub list: ListId,
+    /// One of the learner's own lists, walked instead of the company list.
+    pub user_list: Option<i64>,
     /// Which problems of it.
     pub filter: ProblemFilter,
     /// Which of those are still to do.
@@ -139,11 +142,21 @@ pub struct Plan {
 }
 
 impl Plan {
+    /// The list the plan walks: one of the learner's (none when it is gone), else the
+    /// company list.
+    #[must_use]
+    pub fn source<'a>(&self, content: &'a Content, lists: &'a UserLists) -> &'a [ListEntry] {
+        match self.user_list {
+            Some(id) => lists.entries(id),
+            None => content.list(self.list),
+        }
+    }
+
     /// The plan's problems (status ignored), in its order.
     #[must_use]
-    pub fn entries<'a>(&self, content: &'a Content) -> Vec<&'a ListEntry> {
-        let mut entries: Vec<&ListEntry> = content
-            .list(self.list)
+    pub fn entries<'a>(&self, content: &'a Content, lists: &'a UserLists) -> Vec<&'a ListEntry> {
+        let mut entries: Vec<&ListEntry> = self
+            .source(content, lists)
             .iter()
             .filter(|e| self.filter.matches(content.problem_at(e)))
             .collect();
@@ -164,12 +177,14 @@ impl Plan {
     /// The shuffle's seed: the list and filter, so changing the status keeps the order.
     fn seed(&self, content: &Content) -> u64 {
         let view = self.view(content);
+        let list = match self.user_list {
+            Some(id) => format!("list {id}"),
+            None => format!("{}|{}", view.company, view.period),
+        };
         // FNV-1a is the same on every build and platform, so the order is too.
         fnv1a(
             format!(
-                "{}|{}|{}|{}",
-                view.company,
-                view.period,
+                "{list}|{}|{}",
                 view.topic.unwrap_or_default(),
                 view.difficulty.map_or("", Difficulty::as_str),
             )
@@ -177,17 +192,22 @@ impl Plan {
         )
     }
 
-    /// "Google · 6 months · Two Pointers · Unsolved": what the plan holds, defaults left out.
+    /// "Google · 6 months · Two Pointers · Unsolved" (or "Blind spots · Unsolved" for one of
+    /// the learner's lists): what the plan holds, defaults left out.
     #[must_use]
-    pub fn label(&self, content: &Content) -> String {
+    pub fn label(&self, content: &Content, lists: &UserLists) -> String {
         let mut parts: Vec<&str> = Vec::new();
-        if self.list.period != Period::Lc1000 {
+        if let Some(id) = self.user_list {
+            parts.push(lists.get(id).map_or("A deleted list", |list| &list.name));
+        } else if self.list.period != Period::Lc1000 {
             parts.push(match self.list.company {
                 CompanyFilter::Any => "Any company",
                 CompanyFilter::Company(id) => &content.companies.get(id).name,
             });
         }
-        parts.push(self.list.period.label());
+        if self.user_list.is_none() {
+            parts.push(self.list.period.label());
+        }
         if let Some(topic) = self.topic_name(content) {
             parts.push(topic);
         }
@@ -212,6 +232,7 @@ impl Plan {
                 CompanyFilter::Company(id) => &content.companies.get(id).slug,
             },
             period: self.list.period,
+            list: self.user_list,
             topic: self.topic_name(content),
             difficulty: self.filter.difficulty,
             status: self.status,
@@ -222,9 +243,9 @@ impl Plan {
 
     /// [`Plan::view`] with the label filled in.
     #[must_use]
-    pub fn labeled<'a>(&self, content: &'a Content) -> PlanView<'a> {
+    pub fn labeled<'a>(&self, content: &'a Content, lists: &UserLists) -> PlanView<'a> {
         PlanView {
-            label: self.label(content),
+            label: self.label(content, lists),
             ..self.view(content)
         }
     }
@@ -248,6 +269,9 @@ pub struct PlanView<'a> {
     pub company: &'a str,
     /// The list's period.
     pub period: Period,
+    /// One of the learner's lists, walked instead of the company list.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub list: Option<i64>,
     /// The topic filter, by name.
     pub topic: Option<&'a str>,
     /// The difficulty filter.
@@ -315,11 +339,12 @@ pub struct Walk<'a> {
 #[must_use]
 pub fn walk<'a>(
     content: &'a Content,
+    lists: &UserLists,
     plan: &Plan,
     after: Option<&str>,
     marks: Marks<'_>,
 ) -> Walk<'a> {
-    let entries = plan.entries(content);
+    let entries = plan.entries(content, lists);
     let solved = entries
         .iter()
         .filter(|e| marks.solved(&content.problem_at(e).slug))
@@ -378,18 +403,19 @@ pub struct NextPage<'a> {
 #[must_use]
 pub fn next_page<'a>(
     content: &'a Content,
+    lists: &UserLists,
     plan: &Plan,
     current: Option<&Problem>,
     marks: Marks<'_>,
     weakest: Option<&str>,
 ) -> NextPage<'a> {
     let after = current.map(|p| p.slug.as_str());
-    let main = walk(content, plan, after, marks);
+    let main = walk(content, lists, plan, after, marks);
     let pivots = current.map_or_else(Vec::new, |problem| {
-        pivots(content, plan, problem, main.next, marks, weakest)
+        pivots(content, lists, plan, problem, main.next, marks, weakest)
     });
     NextPage {
-        plan: plan.labeled(content),
+        plan: plan.labeled(content, lists),
         next: main.next,
         progress: main.progress,
         pivots,
@@ -398,6 +424,7 @@ pub fn next_page<'a>(
 
 fn pivots<'a>(
     content: &'a Content,
+    lists: &UserLists,
     plan: &Plan,
     current: &Problem,
     main: Option<NextProblem<'a>>,
@@ -427,10 +454,10 @@ fn pivots<'a>(
             return None;
         }
         seen.push(candidate);
-        let next = walk(content, &candidate, Some(&current.slug), marks).next?;
+        let next = walk(content, lists, &candidate, Some(&current.slug), marks).next?;
         (main.is_none_or(|m| m.slug != next.slug)).then(|| Pivot {
             kind,
-            plan: candidate.labeled(content),
+            plan: candidate.labeled(content, lists),
             next,
         })
     };
@@ -482,6 +509,7 @@ mod tests {
     fn plan(content: &Content, order: PlanOrder) -> Plan {
         Plan {
             list: content.list_id(Some("google"), Some("6m")),
+            user_list: None,
             filter: ProblemFilter::default(),
             status: PlanStatus::Unsolved,
             order,
@@ -489,10 +517,58 @@ mod tests {
     }
 
     fn slugs(content: &Content, plan: &Plan) -> Vec<String> {
-        plan.entries(content)
+        plan.entries(content, &UserLists::default())
             .iter()
             .map(|e| content.problem_at(e).slug.clone())
             .collect()
+    }
+
+    #[test]
+    fn walks_a_learners_list_in_its_order_with_the_plans_filters() {
+        use crate::user_lists::UserList;
+
+        let content = content();
+        let mine = UserList::new(
+            &content,
+            9,
+            "Mine".into(),
+            ["p3", "p1", "p4"].map(String::from).to_vec(),
+        );
+        let lists = UserLists::new(vec![mine]);
+        let plan = Plan {
+            user_list: Some(9),
+            ..plan(&content, PlanOrder::Rank)
+        };
+        let walked = |plan: &Plan| -> Vec<String> {
+            plan.entries(&content, &lists)
+                .iter()
+                .map(|e| content.problem_at(e).slug.clone())
+                .collect()
+        };
+        assert_eq!(walked(&plan), ["p3", "p1", "p4"]);
+        let easy = plan.with_filter(None, Some(Difficulty::Easy));
+        assert_eq!(walked(&easy), ["p1", "p4"]);
+        assert_eq!(easy.label(&content, &lists), "Mine · Easy · Unsolved");
+        assert_eq!(plan.labeled(&content, &lists).list, Some(9));
+
+        let marks = &log_of(&["p3"], &[]);
+        let walk = walk(&content, &lists, &plan, None, marks);
+        assert_eq!(walk.next.map(|n| (n.slug, n.rank)), Some(("p1", 2)));
+        assert_eq!(
+            walk.progress,
+            PlanProgress {
+                solved: 1,
+                total: 3
+            }
+        );
+
+        // A deleted list walks nothing.
+        let gone = Plan {
+            user_list: Some(10),
+            ..plan
+        };
+        assert!(walked(&gone).is_empty());
+        assert_eq!(gone.label(&content, &lists), "A deleted list · Unsolved");
     }
 
     #[test]
@@ -525,7 +601,9 @@ mod tests {
                 status,
                 ..plan(&content, PlanOrder::Rank)
             };
-            walk(&content, &plan, after, marks).next.map(|n| n.slug)
+            walk(&content, &UserLists::default(), &plan, after, marks)
+                .next
+                .map(|n| n.slug)
         };
         assert_eq!(next(PlanStatus::Unsolved, None), Some("p1"));
         assert_eq!(next(PlanStatus::Unsolved, Some("p1")), Some("p4"));
@@ -537,7 +615,14 @@ mod tests {
         // A problem outside the plan starts it from the top.
         assert_eq!(next(PlanStatus::Untried, Some("nope")), Some("p1"));
 
-        let progress = walk(&content, &plan(&content, PlanOrder::Rank), None, marks).progress;
+        let progress = walk(
+            &content,
+            &UserLists::default(),
+            &plan(&content, PlanOrder::Rank),
+            None,
+            marks,
+        )
+        .progress;
         assert_eq!(
             progress,
             PlanProgress {
@@ -568,11 +653,17 @@ mod tests {
             status: PlanStatus::Shaky,
             ..plan(&content, PlanOrder::Rank)
         };
-        assert_eq!(shaky.label(&content), "Google · 6 months · Shaky solves");
-        let walked = walk(&content, &shaky, None, &log);
+        assert_eq!(
+            shaky.label(&content, &UserLists::default()),
+            "Google · 6 months · Shaky solves"
+        );
+        let walked = walk(&content, &UserLists::default(), &shaky, None, &log);
         assert_eq!(walked.next.map(|n| n.slug), Some("p2"));
         // p2 is the only one: from it, nothing else to offer.
-        assert_eq!(walk(&content, &shaky, Some("p2"), &log).next, None);
+        assert_eq!(
+            walk(&content, &UserLists::default(), &shaky, Some("p2"), &log).next,
+            None
+        );
         assert_eq!("shaky".parse(), Ok(PlanStatus::Shaky));
     }
 
@@ -582,14 +673,24 @@ mod tests {
         let log = log_of(&["p1", "p2", "p3", "p4", "p5"], &[]);
         let marks = &log;
         let plan = plan(&content, PlanOrder::Rank);
-        let walked = walk(&content, &plan, Some("p3"), marks);
+        let walked = walk(&content, &UserLists::default(), &plan, Some("p3"), marks);
         assert_eq!(walked.next, None);
         assert_eq!(walked.progress.solved, 5);
         // Only the current problem left: still nothing to offer.
         let almost = log_of(&["p1", "p2", "p4", "p5"], &[]);
         let marks = &almost;
-        assert_eq!(walk(&content, &plan, Some("p3"), marks).next, None);
-        let page = next_page(&content, &plan, content.problem("p3"), marks, None);
+        assert_eq!(
+            walk(&content, &UserLists::default(), &plan, Some("p3"), marks).next,
+            None
+        );
+        let page = next_page(
+            &content,
+            &UserLists::default(),
+            &plan,
+            content.problem("p3"),
+            marks,
+            None,
+        );
         assert_eq!((page.next, page.progress.total), (None, 5));
     }
 
@@ -597,28 +698,41 @@ mod tests {
     fn labels_plans_without_their_defaults() {
         let content = content();
         let mut plan = plan(&content, PlanOrder::Rank);
-        assert_eq!(plan.label(&content), "Google · 6 months · Unsolved");
+        assert_eq!(
+            plan.label(&content, &UserLists::default()),
+            "Google · 6 months · Unsolved"
+        );
         plan.filter = content.problem_filter(Some("Graph"), Some("Hard"));
         plan.status = PlanStatus::All;
         plan.order = PlanOrder::EasyFirst;
         assert_eq!(
-            plan.label(&content),
+            plan.label(&content, &UserLists::default()),
             "Google · 6 months · Graph · Hard · Easy first"
         );
         plan.list = content.list_id(Some("meta"), Some("lc1000"));
         assert_eq!(
-            plan.label(&content),
+            plan.label(&content, &UserLists::default()),
             "LC 1–1000 · Graph · Hard · Easy first"
         );
-        let view = serde_json::to_value(plan.labeled(&content)).expect("json");
+        let view =
+            serde_json::to_value(plan.labeled(&content, &UserLists::default())).expect("json");
         assert_eq!(
             view,
             serde_json::json!({"company": "meta", "period": "lc1000", "topic": "Graph",
                 "difficulty": "Hard", "status": "all", "order": "easy-first",
                 "label": "LC 1–1000 · Graph · Hard · Easy first"})
         );
-        let next = serde_json::to_value(walk(&content, &plan, None, &CodingLog::default()).next)
-            .expect("json");
+        let next = serde_json::to_value(
+            walk(
+                &content,
+                &UserLists::default(),
+                &plan,
+                None,
+                &CodingLog::default(),
+            )
+            .next,
+        )
+        .expect("json");
         assert!(next.get("topics").is_none(), "{next}");
     }
 
@@ -631,7 +745,14 @@ mod tests {
             filter: content.problem_filter(Some("Graph"), None),
             ..plan(&content, PlanOrder::Rank)
         };
-        let page = next_page(&content, &graph, content.problem("p2"), marks, Some("Tree"));
+        let page = next_page(
+            &content,
+            &UserLists::default(),
+            &graph,
+            content.problem("p2"),
+            marks,
+            Some("Tree"),
+        );
         assert_eq!(page.next.map(|n| n.slug), Some("p5"));
         let pivots: Vec<_> = page
             .pivots
@@ -655,7 +776,14 @@ mod tests {
         // start at p3, the plan's next anyway.
         let rank = plan(&content, PlanOrder::Rank);
         let kinds = |slug| {
-            let page = next_page(&content, &rank, content.problem(slug), marks, None);
+            let page = next_page(
+                &content,
+                &UserLists::default(),
+                &rank,
+                content.problem(slug),
+                marks,
+                None,
+            );
             let pivots: Vec<_> = page
                 .pivots
                 .iter()
@@ -677,7 +805,7 @@ mod tests {
         );
         // No current problem, no pivots.
         assert!(
-            next_page(&content, &rank, None, marks, None)
+            next_page(&content, &UserLists::default(), &rank, None, marks, None)
                 .pivots
                 .is_empty()
         );
@@ -713,7 +841,14 @@ mod tests {
             filter: content.problem_filter(Some("A"), None),
             ..plan(&content, PlanOrder::Rank)
         };
-        let page = next_page(&content, &a, content.problem("p1"), marks, Some("W"));
+        let page = next_page(
+            &content,
+            &UserLists::default(),
+            &a,
+            content.problem("p1"),
+            marks,
+            Some("W"),
+        );
         assert_eq!(page.next.map(|n| n.slug), Some("p3"));
         let pivots: Vec<_> = page
             .pivots

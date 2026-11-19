@@ -5,7 +5,13 @@ import {
 	useRouter,
 	useRouterState,
 } from "@tanstack/react-router";
-import { CodeXmlIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
+import {
+	ArrowLeftIcon,
+	CodeXmlIcon,
+	ListMinusIcon,
+	RotateCcwIcon,
+	SearchIcon,
+} from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { CompanyPicker } from "@/components/company-picker";
 import { CompanyChip } from "@/components/company-tags";
@@ -13,6 +19,8 @@ import { ConfirmClear } from "@/components/confirm-clear";
 import { DifficultyBadge } from "@/components/difficulty-badge";
 import { DifficultyFilter } from "@/components/difficulty-filter";
 import { ListBadge } from "@/components/list-badge";
+import { AddToListButton } from "@/components/lists/add-to-list";
+import { YourLists } from "@/components/lists/your-lists";
 import { PageHeader } from "@/components/page-header";
 import { PagerControls } from "@/components/pager";
 import { OrderPicker, StatusFilter } from "@/components/plan/plan-filters";
@@ -56,6 +64,7 @@ import {
 	type PlanOrder,
 	type ProblemRow,
 } from "@/lib/types";
+import { removeFromList, setUserLists } from "@/lib/user-lists";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/problems")({
@@ -66,11 +75,13 @@ export const Route = createFileRoute("/problems")({
 	head: () => ({ meta: [{ title: pageTitle("Problems") }] }),
 	loader: async ({ deps, abortController }) => {
 		const { signal } = abortController;
-		const [rows, plans] = await Promise.all([
+		const [rows, plans, lists] = await Promise.all([
 			api.problems(deps, signal),
 			api.plans(signal),
+			api.lists(signal),
 		]);
-		return { rows, plans };
+		setUserLists(lists);
+		return { rows, plans, lists };
 	},
 	component: Problems,
 });
@@ -116,9 +127,12 @@ function statusText(row: ProblemRow): string {
 }
 
 function Problems() {
-	const { rows, plans } = Route.useLoaderData();
+	const { rows, plans, lists } = Route.useLoaderData();
 	const search = Route.useSearch();
-	const { company, period, topic, difficulty, status, order, q } = search;
+	const { company, period, list, topic, difficulty, status, order, q } = search;
+	// One of your lists, shown instead of a company list.
+	const shown =
+		list === undefined ? undefined : lists.find((l) => l.id === list);
 	const plan = tablePlan(search);
 	const navigate = Route.useNavigate();
 	const companies = useCompanies();
@@ -141,11 +155,31 @@ function Problems() {
 		});
 
 	// Any change of filter, however it came (a control, Back), starts again at page 1.
-	const pager = usePager(
-		Math.ceil(rows.length / pageSize),
-		true,
-		JSON.stringify([company, period, topic, difficulty, status, order, q]),
-	);
+	const filters = JSON.stringify([
+		company,
+		period,
+		list,
+		topic,
+		difficulty,
+		status,
+		order,
+		q,
+	]);
+	const pager = usePager(Math.ceil(rows.length / pageSize), true, filters);
+	// Ticked rows, for adding them to a list or taking them off the one shown. Other filters
+	// start with none ticked.
+	const [ticked, setTicked] = useState({ filters, slugs: new Set<string>() });
+	const selected =
+		ticked.filters === filters ? ticked.slugs : new Set<string>();
+	const select = (slugs: string[], on: boolean) => {
+		const next = new Set(selected);
+		for (const slug of slugs) {
+			if (on) next.add(slug);
+			else next.delete(slug);
+		}
+		setTicked({ filters, slugs: next });
+	};
+	const clearSelection = () => setTicked({ filters, slugs: new Set() });
 	const first = pager.page * pageSize;
 	const visible = rows.slice(first, first + pageSize);
 
@@ -164,34 +198,63 @@ function Problems() {
 		await router.invalidate();
 	}
 
+	const reload = () => router.invalidate();
+	async function removeSelected() {
+		if (!shown) return;
+		await removeFromList(shown, [...selected]);
+		clearSelection();
+		await reload();
+	}
+	const allVisible =
+		visible.length > 0 && visible.every((row) => selected.has(row.slug));
+
 	return (
 		<div className="flex flex-col fit:h-full fit:min-h-0">
-			<PageHeader title="Problems">
-				{describeList(companyName(companies, company), period, order)} Topics
-				stay hidden unless you filter or search by one.
+			<PageHeader title={shown ? shown.name : "Problems"}>
+				{list === undefined
+					? describeList(companyName(companies, company), period, order)
+					: shown
+						? `Your list: ${shown.slugs.length} problems you picked, ${order ? ORDER_PHRASE[order] : "in the order you added them"}.`
+						: "This list no longer exists."}{" "}
+				Topics stay hidden unless you filter or search by one.
 			</PageHeader>
-			<SavedPlans plans={plans} onChange={() => router.invalidate()} />
+			<YourLists lists={lists} onChange={reload} />
+			<SavedPlans plans={plans} onChange={reload} />
 			{/* Two to a row on a phone, the search first; one wrapping row from sm. */}
 			<div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-				<CompanyPicker
-					value={company}
-					disabled={!isAskedPeriod(period)}
-					onChange={(next) => choose({ company: next })}
-				/>
-				<SelectPicker<Period>
-					label="Problem list"
-					value={period}
-					items={PERIOD_OPTIONS}
-					onChange={(next) => choose({ period: next })}
-					className="sm:hidden"
-				/>
-				<Segmented
-					label="Problem list"
-					value={period}
-					options={PERIOD_OPTIONS}
-					onChange={(next) => choose({ period: next })}
-					className="flex-wrap max-sm:hidden"
-				/>
+				{list === undefined ? (
+					<>
+						<CompanyPicker
+							value={company}
+							disabled={!isAskedPeriod(period)}
+							onChange={(next) => choose({ company: next })}
+						/>
+						<SelectPicker<Period>
+							label="Problem list"
+							value={period}
+							items={PERIOD_OPTIONS}
+							onChange={(next) => choose({ period: next })}
+							className="sm:hidden"
+						/>
+						<Segmented
+							label="Problem list"
+							value={period}
+							options={PERIOD_OPTIONS}
+							onChange={(next) => choose({ period: next })}
+							className="flex-wrap max-sm:hidden"
+						/>
+					</>
+				) : (
+					<Button
+						variant="outline"
+						size="sm"
+						className="bg-card max-sm:col-span-2"
+						onClick={() => choose({ list: undefined })}
+					>
+						<ArrowLeftIcon data-icon="inline-start" />
+						Company lists
+					</Button>
+				)}
 				<TopicFilter
 					value={topic}
 					list={{ company, period, difficulty }}
@@ -224,6 +287,39 @@ function Problems() {
 				<SearchBox value={q} onChange={(next) => choose({ q: next }, true)} />
 			</div>
 
+			{selected.size > 0 && (
+				<div
+					role="toolbar"
+					aria-label="Ticked problems"
+					className="mb-2 flex flex-wrap items-center gap-2 rounded-sm bg-card px-3 py-1.5 text-sm shadow-[0_1px_0_var(--border)]"
+				>
+					<span className="tabular-nums">
+						{selected.size} {selected.size === 1 ? "problem" : "problems"}{" "}
+						ticked
+					</span>
+					<AddToListButton slugs={[...selected]} onChange={reload} />
+					{shown && (
+						<Button
+							variant="ghost"
+							size="xs"
+							className="text-muted-foreground"
+							onClick={() => void removeSelected()}
+						>
+							<ListMinusIcon data-icon="inline-start" />
+							Remove from this list
+						</Button>
+					)}
+					<Button
+						variant="link"
+						size="xs"
+						className="ml-auto px-0"
+						onClick={clearSelection}
+					>
+						Untick all
+					</Button>
+				</div>
+			)}
+
 			<div
 				ref={tableArea}
 				aria-busy={loading}
@@ -235,9 +331,28 @@ function Problems() {
 				<Table>
 					<TableHeader>
 						<TableRow>
-							<TableHead className="w-12 text-right">Rank</TableHead>
+							<TableHead className="w-8">
+								<input
+									type="checkbox"
+									aria-label="Tick every problem on this page"
+									checked={allVisible}
+									onChange={(event) =>
+										select(
+											visible.map((row) => row.slug),
+											event.target.checked,
+										)
+									}
+									className="size-4 accent-primary"
+								/>
+							</TableHead>
+							<TableHead className="w-12 text-right">
+								{list === undefined ? "Rank" : "#"}
+							</TableHead>
 							<TableHead
-								className="hidden w-14 text-right sm:table-cell"
+								className={cn(
+									"hidden w-14 text-right",
+									list === undefined && "sm:table-cell",
+								)}
 								title="LeetCode's frequency score, 100 = most asked"
 							>
 								Freq.
@@ -268,10 +383,26 @@ function Problems() {
 								// As tall as the icon buttons, so every row is the same height.
 								className="h-10"
 							>
+								<TableCell>
+									<input
+										type="checkbox"
+										aria-label={`Tick ${row.title}`}
+										checked={selected.has(row.slug)}
+										onChange={(event) =>
+											select([row.slug], event.target.checked)
+										}
+										className="size-4 accent-primary"
+									/>
+								</TableCell>
 								<TableCell className="text-right text-muted-foreground tabular-nums">
 									{row.rank}
 								</TableCell>
-								<TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">
+								<TableCell
+									className={cn(
+										"hidden text-right text-muted-foreground tabular-nums",
+										list === undefined && "sm:table-cell",
+									)}
+								>
 									{formatFrequency(row)}
 								</TableCell>
 								<TableCell className="text-muted-foreground tabular-nums">
@@ -364,7 +495,9 @@ function Problems() {
 					<p className="px-4 py-8 text-center text-muted-foreground">
 						{q
 							? `No problem in this list matches “${q}”.`
-							: "No problem in this list has this topic and difficulty."}
+							: shown && shown.slugs.length === 0
+								? "This list is empty. Add problems to it with Add to list, on any problem or on ticked rows."
+								: "No problem in this list has this topic and difficulty."}
 					</p>
 				)}
 			</div>

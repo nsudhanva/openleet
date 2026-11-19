@@ -46,6 +46,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "submissions_kept",
         sql: include_str!("migrations/0005_submissions_kept.sql"),
     },
+    Migration {
+        version: 6,
+        name: "user_lists",
+        sql: include_str!("migrations/0006_user_lists.sql"),
+    },
 ];
 
 /// The version this build migrates databases to.
@@ -291,7 +296,8 @@ mod tests {
                 "plans",
                 "shaky_plans",
                 "metric_comments",
-                "submissions_kept"
+                "submissions_kept",
+                "user_lists"
             ]
         );
         // Migration 4 changes only comments: the daily scores stay, described as kept data.

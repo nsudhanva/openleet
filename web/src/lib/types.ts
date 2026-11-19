@@ -427,6 +427,8 @@ export type PlanOrder = (typeof PLAN_ORDERS)[number];
 export interface PlanView {
 	company: string;
 	period: Period;
+	/** One of your lists, walked instead of the company list. */
+	list?: number;
 	topic: string | null;
 	difficulty: Difficulty | null;
 	status: PlanStatus;
@@ -468,6 +470,18 @@ export interface NextPage {
 }
 
 /** A practice plan the learner used (GET /api/plans): pinned, or recent. */
+/** GET /api/lists: one of your lists, with the plan that walks it (its unsolved problems). */
+export interface UserList {
+	id: number;
+	name: string;
+	/** Its problems, in list order. */
+	slugs: string[];
+	plan: PlanView;
+	progress: PlanProgress;
+	/** The first problem still to do; null when none is left. */
+	next: NextProblem | null;
+}
+
 export interface SavedPlan {
 	id: number;
 	/** The learner's name; null shows the plan's label. */

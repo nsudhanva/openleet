@@ -41,16 +41,24 @@ const PERIOD_SHORT: Record<Period, string> = {
 export type Plan = CompanySearch & PlanSearch;
 
 /**
- * "Google · 6m · Two Pointers · Unsolved": the plan chip's label, defaults (rank order, any
- * difficulty) left out. `companyName` names a company slug.
+ * "Google · 6m · Two Pointers · Unsolved" (or "Graphs · Unsolved" for one of your lists): the
+ * plan chip's label, defaults (rank order, any difficulty) left out. `companyName` names a
+ * company slug, `listName` one of your lists (undefined while unknown).
  */
 export function planChipLabel(
 	plan: Plan,
 	companyName: (slug: string) => string,
+	listName: (id: number) => string | undefined,
 ): string {
+	const list =
+		plan.list === undefined
+			? [
+					plan.period === "lc1000" ? undefined : companyName(plan.company),
+					PERIOD_SHORT[plan.period],
+				]
+			: [listName(plan.list) ?? "Your list"];
 	return [
-		plan.period === "lc1000" ? undefined : companyName(plan.company),
-		PERIOD_SHORT[plan.period],
+		...list,
 		plan.topic,
 		plan.difficulty,
 		STATUS_LABEL[plan.status],
@@ -65,6 +73,7 @@ export function planOf(view: PlanView): Plan {
 	return {
 		company: view.company,
 		period: view.period,
+		list: view.list,
 		topic: view.topic ?? undefined,
 		difficulty: view.difficulty ?? undefined,
 		status: view.status,
@@ -80,6 +89,7 @@ export function tablePlan(search: CompanySearch & ProblemsSearch): Plan {
 	return {
 		company: search.company,
 		period: search.period,
+		list: search.list,
 		topic: search.topic,
 		difficulty: search.difficulty,
 		status: search.status ?? PLAN_DEFAULTS.status,

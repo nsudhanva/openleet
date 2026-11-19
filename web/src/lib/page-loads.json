@@ -133,7 +133,8 @@
 			"/api/readiness?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m",
-			"/api/plans"
+			"/api/plans",
+			"/api/lists"
 		]
 	},
 	{
@@ -142,7 +143,8 @@
 			"/api/readiness?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m&topic=Trie&status=unsolved&order=easy-first",
-			"/api/plans"
+			"/api/plans",
+			"/api/lists"
 		]
 	},
 	{
@@ -151,7 +153,8 @@
 			"/api/readiness?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m",
-			"/api/plans"
+			"/api/plans",
+			"/api/lists"
 		]
 	},
 	{
@@ -160,7 +163,8 @@
 			"/api/readiness?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m",
-			"/api/plans"
+			"/api/plans",
+			"/api/lists"
 		]
 	},
 	{
@@ -169,7 +173,8 @@
 			"/api/readiness?company=amazon",
 			"/api/companies",
 			"/api/problems?company=amazon&period=lc1000&q=two+sum",
-			"/api/plans"
+			"/api/plans",
+			"/api/lists"
 		]
 	},
 	{
@@ -178,7 +183,8 @@
 			"/api/readiness?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m&topic=Heap+%28Priority+Queue%29&q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			"/api/plans"
+			"/api/plans",
+			"/api/lists"
 		]
 	},
 	{
@@ -216,5 +222,45 @@
 	{
 		"page": "/no-such-page",
 		"fetches": ["/api/readiness?company=google", "/api/companies"]
+	},
+	{
+		"page": "/problems?list=3&topic=Stack&period=nope",
+		"fetches": [
+			"/api/readiness?company=google",
+			"/api/companies",
+			"/api/problems?company=google&period=6m&list=3&topic=Stack",
+			"/api/plans",
+			"/api/lists"
+		]
+	},
+	{
+		"page": "/problems?list=-2&company=meta",
+		"fetches": [
+			"/api/readiness?company=meta",
+			"/api/companies",
+			"/api/problems?company=meta&period=6m",
+			"/api/plans",
+			"/api/lists"
+		]
+	},
+	{
+		"page": "/problems?list=2.5",
+		"fetches": [
+			"/api/readiness?company=google",
+			"/api/companies",
+			"/api/problems?company=google&period=6m",
+			"/api/plans",
+			"/api/lists"
+		]
+	},
+	{
+		"page": "/problems?list=abc",
+		"fetches": [
+			"/api/readiness?company=google",
+			"/api/companies",
+			"/api/problems?company=google&period=6m",
+			"/api/plans",
+			"/api/lists"
+		]
 	}
 ]

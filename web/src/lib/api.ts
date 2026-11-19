@@ -21,6 +21,7 @@ import type {
 	SubmissionSummary,
 	SubmitResult,
 	TopicCount,
+	UserList,
 } from "@/lib/types";
 
 /** A non-2xx answer from the API, carrying the server's `error` message. */
@@ -209,6 +210,16 @@ export const api = {
 	editPlan: (id: number, change: { name?: string | null; pinned?: boolean }) =>
 		json<SavedPlan>("PATCH", `/api/plans/${id}`, { body: change }),
 	deletePlan: (id: number) => empty("DELETE", `/api/plans/${id}`),
+
+	/** Your lists, newest first. */
+	lists: (signal?: AbortSignal) =>
+		json<UserList[]>("GET", "/api/lists", { signal }),
+	createList: (name: string, slugs: string[] = []) =>
+		json<UserList>("POST", "/api/lists", { body: { name, slugs } }),
+	/** A new name, the problems in their new order, or both. */
+	editList: (id: number, change: { name?: string; slugs?: string[] }) =>
+		json<UserList>("PATCH", `/api/lists/${id}`, { body: change }),
+	deleteList: (id: number) => empty("DELETE", `/api/lists/${id}`),
 };
 
 /** For route loaders: an unknown problem (404) shows the not-found page. */

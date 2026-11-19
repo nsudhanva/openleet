@@ -68,6 +68,7 @@ pub fn urls(path: &str, query: Option<&str>) -> Vec<String> {
         "/problems" => {
             urls.extend(params.problems(company));
             urls.push("/api/plans".to_owned());
+            urls.push("/api/lists".to_owned());
         }
         "/progress" => urls.push(api("/api/report", &[("company", Some(company))])),
         _ => {
@@ -282,6 +283,7 @@ impl Params {
             &[
                 ("company", Some(company)),
                 ("period", Some(self.period())),
+                ("list", self.list()),
                 ("topic", self.text("topic", MAX_TOPIC).ok()?),
                 ("difficulty", self.difficulty()),
                 ("status", status.map(|s| s.to_string())),
@@ -289,6 +291,17 @@ impl Params {
                 ("q", self.text("q", MAX_QUERY).ok()?),
             ],
         ))
+    }
+
+    /// `listId()` in schemas.ts: the router reads `?list=3` as the number 3, and only a
+    /// positive safe integer names a list.
+    fn list(&self) -> Option<String> {
+        match self.get("list") {
+            Some(Value::Number(Some(text))) if text.parse::<i64>().is_ok_and(|id| id > 0) => {
+                Some(text.clone())
+            }
+            _ => None,
+        }
     }
 
     fn period(&self) -> String {
@@ -339,18 +352,21 @@ mod tests {
             urls(path, query)
         }
         // Numbers JavaScript prints its own way, and JSON serde_json refuses.
-        // The problem table's plans need no query, so they are preloaded all the same.
+        // The problem table's plans and lists need no query, so they are preloaded all the same.
         for value in ["1.5", "1e21", "1e400", "%5B%5B", "%22%5Cud800%22"] {
             assert_eq!(page(&format!("/?topic={value}")).len(), 2, "{value}");
             assert_eq!(
                 page(&format!("/problems?q={value}"))[2..],
-                ["/api/plans"],
+                ["/api/plans", "/api/lists"],
                 "{value}"
             );
         }
         // Half of a surrogate pair at the cut.
         let q = format!("{}%F0%9F%98%80", "a".repeat(MAX_QUERY - 1));
-        assert_eq!(page(&format!("/problems?q={q}"))[2..], ["/api/plans"]);
+        assert_eq!(
+            page(&format!("/problems?q={q}"))[2..],
+            ["/api/plans", "/api/lists"]
+        );
         // Such values are no company, set or period either way.
         assert_eq!(
             page("/progress?company=1.5"),

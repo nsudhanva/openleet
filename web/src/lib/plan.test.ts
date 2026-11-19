@@ -110,9 +110,13 @@ const plan: Plan = {
 	order: "rank",
 };
 
+const listName = (id: number) => (id === 3 ? "Calculators" : undefined);
+
 describe("plan labels", () => {
 	it("name the plan in a few words, defaults left out", () => {
-		expect(planChipLabel(plan, companyName)).toBe("Google · 6m · Unsolved");
+		expect(planChipLabel(plan, companyName, listName)).toBe(
+			"Google · 6m · Unsolved",
+		);
 		expect(
 			planChipLabel(
 				{
@@ -125,11 +129,23 @@ describe("plan labels", () => {
 					order: "random",
 				},
 				companyName,
+				listName,
 			),
 		).toBe("Meta · All time · Two Pointers · Medium · All problems · Shuffled");
 		// LC 1–1000 is the same list for every company.
-		expect(planChipLabel({ ...plan, period: "lc1000" }, companyName)).toBe(
-			"LC 1–1000 · Unsolved",
+		expect(
+			planChipLabel({ ...plan, period: "lc1000" }, companyName, listName),
+		).toBe("LC 1–1000 · Unsolved");
+		// One of your lists goes by its name, or "Your list" until the names arrive.
+		expect(
+			planChipLabel(
+				{ ...plan, list: 3, topic: "Stack" },
+				companyName,
+				listName,
+			),
+		).toBe("Calculators · Stack · Unsolved");
+		expect(planChipLabel({ ...plan, list: 4 }, companyName, listName)).toBe(
+			"Your list · Unsolved",
 		);
 	});
 

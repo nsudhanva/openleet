@@ -22,12 +22,19 @@ import { useMedia } from "@/hooks/use-media";
 import type { Plan } from "@/lib/plan";
 import { SM_SCREEN } from "@/lib/screen";
 import { isAskedPeriod, PERIOD_OPTIONS, type Period } from "@/lib/types";
+import { useUserLists } from "@/lib/user-lists";
 
 const TITLE = "Practice plan";
 const DESCRIPTION =
 	"Which problems Next offers after an accepted submission, and in what order.";
 
-/** The plan's controls: the list, its filters, which problems still count and the order. */
+/** The choice of a company list rather than one of your lists. */
+const COMPANY_LISTS = "company";
+
+/**
+ * The plan's controls: the list (a company's, or one of yours), its filters, which problems
+ * still count and the order.
+ */
 function PlanControls({
 	plan,
 	onChange,
@@ -36,21 +43,44 @@ function PlanControls({
 	onChange: (plan: Plan) => void;
 }) {
 	const change = (next: Partial<Plan>) => onChange({ ...plan, ...next });
+	const lists = useUserLists();
+	const source = plan.list === undefined ? COMPANY_LISTS : String(plan.list);
 	return (
 		<div className="grid grid-cols-2 gap-2">
-			<CompanyPicker
-				value={plan.company}
-				disabled={!isAskedPeriod(plan.period)}
-				onChange={(company) => change({ company })}
-				className="w-full"
-			/>
-			<SelectPicker<Period>
-				label="Problem list"
-				value={plan.period}
-				items={PERIOD_OPTIONS}
-				onChange={(period) => change({ period })}
-				className="w-full"
-			/>
+			{lists && lists.length > 0 && (
+				<SelectPicker<string>
+					label="Walk"
+					value={source}
+					items={[
+						{ value: COMPANY_LISTS, label: "A company list" },
+						...lists.map((list) => ({
+							value: String(list.id),
+							label: `Your list: ${list.name}`,
+						})),
+					]}
+					onChange={(next) =>
+						change({ list: next === COMPANY_LISTS ? undefined : Number(next) })
+					}
+					className="col-span-2 w-full"
+				/>
+			)}
+			{plan.list === undefined && (
+				<>
+					<CompanyPicker
+						value={plan.company}
+						disabled={!isAskedPeriod(plan.period)}
+						onChange={(company) => change({ company })}
+						className="w-full"
+					/>
+					<SelectPicker<Period>
+						label="Problem list"
+						value={plan.period}
+						items={PERIOD_OPTIONS}
+						onChange={(period) => change({ period })}
+						className="w-full"
+					/>
+				</>
+			)}
 			<TopicFilter
 				value={plan.topic}
 				list={plan}
