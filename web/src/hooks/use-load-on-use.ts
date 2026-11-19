@@ -15,30 +15,47 @@ function preload<M>(load: () => Promise<M>): Promise<M> {
 	});
 }
 
-/** Runs `run` once the browser is idle after the page has loaded; returns a cancel. */
-function afterLoadWhenIdle(run: () => void): () => void {
-	let cancel = () => {};
-	const schedule = () => {
-		if ("requestIdleCallback" in window) {
-			const id = requestIdleCallback(run, { timeout: 4000 });
-			cancel = () => cancelIdleCallback(id);
-		} else {
-			const timer = setTimeout(run, 2000);
-			cancel = () => clearTimeout(timer);
-		}
+/** What a person does before they open a menu; a page load alone does none of these. */
+const FIRST_SIGNS = [
+	"pointermove",
+	"pointerdown",
+	"touchstart",
+	"keydown",
+	"scroll",
+];
+
+/**
+ * Runs `run` when the browser is next idle after the first sign of a person on the page, so
+ * the page load itself never pays for it. Returns a cancel.
+ */
+function onFirstSign(run: () => void): () => void {
+	// Safari has no requestIdleCallback; a short timeout stands in.
+	const idle = typeof requestIdleCallback === "function";
+	let pending: number | undefined;
+	const stop = () => {
+		for (const sign of FIRST_SIGNS) window.removeEventListener(sign, start);
 	};
-	if (document.readyState === "complete") schedule();
-	else window.addEventListener("load", schedule, { once: true });
+	function start() {
+		stop();
+		pending = idle
+			? requestIdleCallback(run, { timeout: 500 })
+			: window.setTimeout(run, 50);
+	}
+	for (const sign of FIRST_SIGNS)
+		window.addEventListener(sign, start, { once: true, passive: true });
 	return () => {
-		window.removeEventListener("load", schedule);
-		cancel();
+		stop();
+		if (pending === undefined) return;
+		if (idle) cancelIdleCallback(pending);
+		else window.clearTimeout(pending);
 	};
 }
 
 /**
  * For a control whose code (and data) load on demand, to keep them off the first page load.
- * `load` runs once the page is idle, and again (from its cache) when pointing at or focusing
- * the placeholder (spread `prefetchProps` on it). Call `use` when the control is activated:
+ * `load` runs at the first sign of a person on the page (a pointer move, a touch, a key, a
+ * scroll), and again (from its cache) when pointing at or focusing the placeholder (spread
+ * `prefetchProps` on it). Call `use` when the control is activated:
  * `loaded` is then what `load` gave, at once when it is already in, else as soon as it
  * arrives. The control renders it directly, never through Suspense, whose reveal React holds
  * back for up to 300 ms.
@@ -49,7 +66,7 @@ export function useLoadOnUse<M>(load: () => Promise<M>) {
 	const whenIdle = useEffectEvent(() => {
 		preload(load).catch(logFailure);
 	});
-	useEffect(() => afterLoadWhenIdle(whenIdle), []);
+	useEffect(() => onFirstSign(whenIdle), []);
 	const fetch = useEffectEvent((live: () => boolean) =>
 		preload(load).then((m) => live() && setModule(() => m), logFailure),
 	);
