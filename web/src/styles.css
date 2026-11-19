@@ -106,9 +106,10 @@
 	--card-margin: #dc4f64;
 	--ruled: 1.7em;
 
-	/* Code editor (CodeMirror reads these, see components/code/editor-theme.ts). */
+	/* Code editor (CodeMirror reads these, see components/code/editor-theme.ts). The active
+	   line is see-through because CodeMirror draws the selection beneath it. */
 	--code-selection: #cddbf0;
-	--code-active-line: #f1f4f8;
+	--code-active-line: rgb(26 54 102 / 0.06);
 	--syntax-keyword: #2b3f9e;
 	--syntax-string: #17784d;
 	--syntax-number: #a35f00;
@@ -145,8 +146,8 @@
 	--card-rule: #223149;
 	--card-margin: #e0607a;
 
-	--code-selection: #2a3d5c;
-	--code-active-line: #1c2531;
+	--code-selection: #34507e;
+	--code-active-line: rgb(230 235 242 / 0.035);
 	--syntax-keyword: #a4b4ff;
 	--syntax-string: #4cc38a;
 	--syntax-number: #f0a84a;

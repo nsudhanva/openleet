@@ -19,6 +19,11 @@ const chrome = EditorView.theme({
 	".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--primary)" },
 	"&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
 		{ backgroundColor: "var(--code-selection)" },
+	// Other copies of the selected text: fainter than the selection itself.
+	".cm-selectionMatch": {
+		backgroundColor:
+			"color-mix(in srgb, var(--code-selection) 50%, transparent)",
+	},
 	".cm-gutters": {
 		backgroundColor: "var(--card)",
 		color: "var(--muted-foreground)",
