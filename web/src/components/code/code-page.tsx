@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import {
 	type ComponentProps,
+	type CSSProperties,
 	lazy,
 	type ReactNode,
 	Suspense,
@@ -19,6 +20,11 @@ import type { CodeEditorHandle } from "@/components/code/code-editor";
 import { RunResultView, SubmitResultView } from "@/components/code/results";
 import { SubmissionChart } from "@/components/code/submission-chart";
 import { SubmissionList } from "@/components/code/submission-list";
+import {
+	EDITOR_SPLIT,
+	PaneSplitter,
+	savedShare,
+} from "@/components/pane-splitter";
 import { NextButton } from "@/components/plan/next-button";
 import { NextPanel } from "@/components/plan/next-panel";
 import { PlanChip } from "@/components/plan/plan-chip";
@@ -176,6 +182,7 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 	const [testcase, setTestcase] = useState(examples);
 	const custom = testcase.trim() !== examples.trim();
 
+	const [editorShare] = useState(() => savedShare(EDITOR_SPLIT));
 	const [tab, setTab] = useState<Tab>("testcase");
 	const [pane, setPane] = useState<Pane>("problem");
 	const [busy, setBusy] = useState<Job | null>(null);
@@ -326,17 +333,27 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 				onPaneChange={setPane}
 				asideLabel="Code"
 				aside={
-					<>
+					// On a `fit:` screen the editor and the test panel share the height:
+					// --editor-share of it goes to the editor (EDITOR_SPLIT's handle moves it).
+					<div
+						style={{ "--editor-share": editorShare } as CSSProperties}
+						className="flex flex-col fit:min-h-0 fit:flex-1"
+					>
 						<DeferredCodeEditor
 							ref={editor}
 							initial={source.current}
 							onChange={edit}
 							label="Python 3 solution"
-							className="h-[50svh] min-h-64 fit:h-auto fit:min-h-0 fit:flex-[3]"
+							className="h-[50svh] min-h-64 fit:h-auto fit:min-h-0 fit:flex-[var(--editor-share)_1_0%]"
+						/>
+						<PaneSplitter
+							split={EDITOR_SPLIT}
+							label="Resize the editor and the test panel"
+							initial={editorShare}
 						/>
 						<div
 							ref={panel}
-							className="flex scroll-mt-16 scroll-mb-16 flex-col gap-2 border-t border-dashed px-4 py-2 sm:px-6 fit:min-h-0 fit:flex-[2]"
+							className="flex scroll-mt-16 scroll-mb-16 flex-col gap-2 border-t border-dashed px-4 py-2 sm:px-6 fit:min-h-0 fit:flex-[calc(1-var(--editor-share))_1_0%]"
 						>
 							<Segmented
 								label="Panel"
@@ -387,7 +404,7 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 								)}
 							</div>
 						</div>
-					</>
+					</div>
 				}
 				footer={
 					<div className="flex items-center gap-1 sm:gap-2">

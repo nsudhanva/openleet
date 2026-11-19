@@ -5,7 +5,11 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { PaneSplitter, savedShare } from "@/components/pane-splitter";
+import {
+	PaneSplitter,
+	STATEMENT_SPLIT,
+	savedShare,
+} from "@/components/pane-splitter";
 import { ProblemHeader } from "@/components/problem-header";
 import { ProblemStatement } from "@/components/problem-statement";
 import { Segmented } from "@/components/segmented";
@@ -79,7 +83,7 @@ export function ProblemCard({
 	const panes = useRef<HTMLDivElement>(null);
 	const shownPane = useRef(pane);
 	// Set while rendering, so the statement fits its text to its final width the first time.
-	const [share] = useState(savedShare);
+	const [share] = useState(() => savedShare(STATEMENT_SPLIT));
 	// A pane switched by an action (Show answer, Run) shows from its top, not from wherever
 	// the page had scrolled to in the other one.
 	useEffect(() => {
@@ -141,6 +145,7 @@ export function ProblemCard({
 						{aside}
 					</section>
 					<PaneSplitter
+						split={STATEMENT_SPLIT}
 						label={`Resize the statement and ${asideLabel.toLowerCase()}`}
 						initial={share}
 					/>
