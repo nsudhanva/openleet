@@ -409,28 +409,32 @@ function Problems() {
 									{row.id}
 								</TableCell>
 								<TableCell className="w-full max-w-0">
-									<Link
-										to="/"
-										// Studying from here keeps the table's list and filters.
-										search={{
-											set: "all",
-											period,
-											topic,
-											difficulty,
-											slug: row.slug,
-										}}
-										className="flex items-baseline gap-2 font-medium hover:text-primary hover:underline max-sm:flex-wrap"
-									>
-										<span className="max-w-full shrink-0 truncate max-sm:shrink max-sm:whitespace-normal">
-											{row.title}
-										</span>
-										{row.premium && <PremiumBadge />}
-										{row.snippet && (
-											<span className="hidden min-w-0 truncate text-xs font-normal text-muted-foreground md:inline">
-												{row.snippet}
-											</span>
-										)}
-									</Link>
+									{list === undefined ? (
+										<Link
+											to="/"
+											// Studying from here keeps the table's list and filters.
+											search={{
+												set: "all",
+												period,
+												topic,
+												difficulty,
+												slug: row.slug,
+											}}
+											className={TITLE_LINK}
+										>
+											<RowTitle row={row} />
+										</Link>
+									) : (
+										// The study queue walks company lists only: a title in one of
+										// your lists opens the problem in the list.
+										<PlanLink
+											plan={plan}
+											slug={row.slug}
+											className={TITLE_LINK}
+										>
+											<RowTitle row={row} />
+										</PlanLink>
+									)}
 									{/* A phone has no room for these columns: they go under the title. */}
 									<div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
 										<DifficultyBadge difficulty={row.difficulty} />
@@ -594,5 +598,25 @@ function RowCompanies({
 				</span>
 			)}
 		</div>
+	);
+}
+
+const TITLE_LINK =
+	"flex items-baseline gap-2 font-medium hover:text-primary hover:underline max-sm:flex-wrap";
+
+/** A row's title, with its premium badge and the search match. */
+function RowTitle({ row }: { row: ProblemRow }) {
+	return (
+		<>
+			<span className="max-w-full shrink-0 truncate max-sm:shrink max-sm:whitespace-normal">
+				{row.title}
+			</span>
+			{row.premium && <PremiumBadge />}
+			{row.snippet && (
+				<span className="hidden min-w-0 truncate text-xs font-normal text-muted-foreground md:inline">
+					{row.snippet}
+				</span>
+			)}
+		</>
 	);
 }
