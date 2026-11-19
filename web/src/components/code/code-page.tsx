@@ -40,14 +40,14 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAfterPaint } from "@/hooks/use-after-paint";
 import { type SaveStatus, useAutosave } from "@/hooks/use-autosave";
-import { useCompanies, useCompany } from "@/hooks/use-companies";
+import { useCompanies } from "@/hooks/use-companies";
 import { useModKeys } from "@/hooks/use-hotkeys";
 import { useFitScreen } from "@/hooks/use-media";
 import { useShown } from "@/hooks/use-shown";
 import { api, messageOf } from "@/lib/api";
 import { companyName } from "@/lib/companies";
 import { cpuTime } from "@/lib/format";
-import type { Plan } from "@/lib/plan";
+import { type Plan, planTitle, problemsOf } from "@/lib/plan";
 import { TONE } from "@/lib/tones";
 import type {
 	CodeInfo,
@@ -56,6 +56,7 @@ import type {
 	SubmissionSummary,
 	SubmitResult,
 } from "@/lib/types";
+import { listNameOf, useUserLists } from "@/lib/user-lists";
 import { cn } from "@/lib/utils";
 
 export interface CodePageData {
@@ -154,9 +155,9 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 	const supported = code.judge.supported;
 
 	const companies = useCompanies();
-	const company = useCompany();
 	// The root route's company and the page's own plan params.
 	const plan: Plan = route.useSearch();
+	const lists = useUserLists(plan.list !== undefined);
 	const navigate = route.useNavigate();
 	// The plan is remembered once the learner settles on a change, not on every pick.
 	const planSave = useAutosave(savePlan, 1500);
@@ -286,15 +287,20 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 			toolbar={
 				<>
 					<Link
-						to="/"
+						to="/problems"
+						search={problemsOf(plan)}
 						className={cn(
 							buttonVariants({ variant: "ghost", size: "sm" }),
 							"justify-self-start text-muted-foreground max-sm:col-span-2",
 						)}
-						title="Back to the study queue"
+						title="Back to the plan's problems"
 					>
 						<ArrowLeftIcon data-icon="inline-start" />
-						Study · {companyName(companies, company)}
+						{planTitle(
+							plan,
+							(slug) => companyName(companies, slug),
+							listNameOf(lists),
+						)}
 					</Link>
 					<span className="text-sm text-muted-foreground max-sm:col-span-2">
 						Python 3{supported && ` · ${judgeSummary(code.judge)}`}

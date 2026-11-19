@@ -4,6 +4,7 @@ import {
 	pivotText,
 	planChipLabel,
 	planOf,
+	planTitle,
 	problemsOf,
 	progressShare,
 	progressText,
@@ -148,6 +149,17 @@ describe("plan labels", () => {
 		expect(planChipLabel({ ...plan, list: 4 }, companyName, listName)).toBe(
 			"Your list · Unsolved",
 		);
+		// The title is what the plan walks, without its status and order.
+		expect(
+			planTitle(
+				{ ...plan, topic: "Two Pointers", status: "shaky", order: "random" },
+				companyName,
+				listName,
+			),
+		).toBe("Google · 6m · Two Pointers");
+		expect(planTitle({ ...plan, list: 3 }, companyName, listName)).toBe(
+			"Calculators",
+		);
 	});
 
 	it("rebuild a plan the server sent", () => {
@@ -206,7 +218,7 @@ describe("the next panel's text", () => {
 });
 
 describe("problemsOf", () => {
-	it("opens a plan's problems in the table, the table's defaults left out", () => {
+	it("opens all of a plan's problems in the table, the table's defaults left out", () => {
 		const search = {
 			company: "google",
 			period: "6m",
@@ -219,14 +231,16 @@ describe("problemsOf", () => {
 			list: undefined,
 			topic: undefined,
 			difficulty: undefined,
-			status: "unsolved",
 			order: undefined,
 		});
 		expect(
-			problemsOf({ ...search, list: 4, status: "all", order: "random" }),
-		).toMatchObject({
+			problemsOf({ ...search, list: 4, status: "shaky", order: "random" }),
+		).toEqual({
+			company: "google",
+			period: "6m",
 			list: 4,
-			status: undefined,
+			topic: undefined,
+			difficulty: undefined,
 			order: "random",
 		});
 		expect(tablePlan(problemsOf(search))).toEqual({

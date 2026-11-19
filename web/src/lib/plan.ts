@@ -41,11 +41,11 @@ const PERIOD_SHORT: Record<Period, string> = {
 export type Plan = CompanySearch & PlanSearch;
 
 /**
- * "Google · 6m · Two Pointers · Unsolved" (or "Graphs · Unsolved" for one of your lists): the
- * plan chip's label, defaults (rank order, any difficulty) left out. `companyName` names a
- * company slug, `listName` one of your lists (undefined while unknown).
+ * "Google · 6m · Two Pointers" (or "Graphs" for one of your lists): what a plan walks, its
+ * status and order left out. `companyName` names a company slug, `listName` one of your lists
+ * (undefined while unknown).
  */
-export function planChipLabel(
+export function planTitle(
 	plan: Plan,
 	companyName: (slug: string) => string,
 	listName: (id: number) => string | undefined,
@@ -57,10 +57,20 @@ export function planChipLabel(
 					PERIOD_SHORT[plan.period],
 				]
 			: [listName(plan.list) ?? "Your list"];
+	return [...list, plan.topic, plan.difficulty].filter(Boolean).join(" · ");
+}
+
+/**
+ * "Google · 6m · Two Pointers · Unsolved": the plan chip's label, the {@link planTitle} with
+ * the status and any order but rank.
+ */
+export function planChipLabel(
+	plan: Plan,
+	companyName: (slug: string) => string,
+	listName: (id: number) => string | undefined,
+): string {
 	return [
-		...list,
-		plan.topic,
-		plan.difficulty,
+		planTitle(plan, companyName, listName),
 		STATUS_LABEL[plan.status],
 		plan.order === PLAN_DEFAULTS.order ? undefined : ORDER_LABEL[plan.order],
 	]
@@ -98,8 +108,8 @@ export function tablePlan(search: CompanySearch & ProblemsSearch): Plan {
 }
 
 /**
- * The problem table's search params for a plan's problems: the inverse of {@link tablePlan}
- * (the table leaves out the "all" status and the "rank" order).
+ * The problem table's search params for every problem a plan walks, solved ones too, in the
+ * plan's order (the table leaves out the "rank" order).
  */
 export function problemsOf(
 	plan: Plan,
@@ -110,7 +120,6 @@ export function problemsOf(
 		list: plan.list,
 		topic: plan.topic,
 		difficulty: plan.difficulty,
-		status: plan.status === "all" ? undefined : plan.status,
 		order: plan.order === "rank" ? undefined : plan.order,
 	};
 }
