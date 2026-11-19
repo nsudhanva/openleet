@@ -242,13 +242,11 @@ impl Companies {
         &self.list
     }
 
-    /// Number of companies.
     #[must_use]
     pub const fn len(&self) -> usize {
         self.list.len()
     }
 
-    /// Whether the table is empty.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.list.is_empty()
@@ -316,7 +314,6 @@ pub struct Problem {
     pub id: u32,
     /// LeetCode slug, unique.
     pub slug: String,
-    /// Display title.
     pub title: String,
     /// LeetCode difficulty.
     pub difficulty: Difficulty,
@@ -423,17 +420,13 @@ impl Problem {
 pub struct ProblemView<'a> {
     /// LeetCode problem number.
     pub id: u32,
-    /// Slug.
     pub slug: &'a str,
-    /// Title.
     pub title: &'a str,
-    /// Difficulty.
     pub difficulty: Difficulty,
     /// `{"google": {"30d": {"rank", "frequency"}, ...}, ...}`.
     pub companies: CompaniesJson<'a>,
     /// LeetCode link.
     pub url: &'a str,
-    /// Topic tags.
     pub topics: &'a [String],
     /// Premium only.
     pub premium: bool,
@@ -538,7 +531,6 @@ pub struct Approach {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Attempt {
-    /// The problem answered.
     pub slug: String,
     /// When, in Unix milliseconds.
     pub at: i64,

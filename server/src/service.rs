@@ -55,13 +55,9 @@ pub struct StudyDeck<'a> {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProblemRow<'a> {
-    /// LeetCode number.
     pub id: u32,
-    /// Slug.
     pub slug: &'a str,
-    /// Title.
     pub title: &'a str,
-    /// Difficulty.
     pub difficulty: Difficulty,
     /// Whether it needs LeetCode Premium.
     pub premium: bool,
@@ -91,15 +87,11 @@ pub struct ProblemRow<'a> {
 /// Raw query-string values of the deck endpoint.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DeckParams<'a> {
-    /// Study set.
     pub set: Option<&'a str>,
     /// Company slug or "any".
     pub company: Option<&'a str>,
-    /// Period.
     pub period: Option<&'a str>,
-    /// Topic tag.
     pub topic: Option<&'a str>,
-    /// Difficulty.
     pub difficulty: Option<&'a str>,
     /// Pinned problem.
     pub slug: Option<&'a str>,
@@ -108,7 +100,6 @@ pub struct DeckParams<'a> {
 /// Query of the deck endpoint: a list, a filter over it and an optional pinned problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeckQuery {
-    /// Which list.
     pub list: ListId,
     /// Which cards of it.
     pub filter: QueueFilter,
@@ -139,13 +130,10 @@ impl DeckQuery {
 pub struct ProblemParams<'a> {
     /// Company slug or "any".
     pub company: Option<&'a str>,
-    /// Period.
     pub period: Option<&'a str>,
     /// The id of one of the learner's lists, walked instead of the company list.
     pub list: Option<&'a str>,
-    /// Topic tag.
     pub topic: Option<&'a str>,
-    /// Difficulty.
     pub difficulty: Option<&'a str>,
     /// Free-text search (the table only).
     pub q: Option<&'a str>,
@@ -210,14 +198,11 @@ impl<'a> ProblemQuery<'a> {
 /// Body of `POST /api/attempts`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AttemptInput {
-    /// The problem answered.
     pub slug: String,
     /// The learner's grade.
     pub grade: Grade,
-    /// Topics guessed.
     #[serde(default)]
     pub guessed: Vec<String>,
-    /// Hints opened.
     #[serde(default)]
     pub hints: u32,
 }

@@ -469,7 +469,6 @@ export interface NextPage {
 	pivots: Pivot[];
 }
 
-/** A practice plan the learner used (GET /api/plans): pinned, or recent. */
 /** GET /api/lists: one of your lists, with the plan that walks it (its unsolved problems). */
 export interface UserList {
 	id: number;
@@ -482,6 +481,7 @@ export interface UserList {
 	next: NextProblem | null;
 }
 
+/** A practice plan the learner used (GET /api/plans): pinned, or recent. */
 export interface SavedPlan {
 	id: number;
 	/** The learner's name; null shows the plan's label. */

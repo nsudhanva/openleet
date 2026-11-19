@@ -25,15 +25,11 @@ pub enum SearchField {
 /// One search result.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SearchHit<'a> {
-    /// Problem slug.
     pub slug: &'a str,
-    /// LeetCode number.
     pub id: u32,
     /// Best 6-month rank across companies, or `100000 + id` when no company asked it then.
     pub rank: u32,
-    /// Display title.
     pub title: &'a str,
-    /// Difficulty.
     pub difficulty: Difficulty,
     /// The weakest field a query word matched.
     pub field: SearchField,

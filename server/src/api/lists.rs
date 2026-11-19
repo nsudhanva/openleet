@@ -123,7 +123,6 @@ pub struct NewList {
     slugs: Vec<String>,
 }
 
-/// Makes a list.
 pub async fn create_list(
     State(state): State<Shared>,
     Json(input): Json<NewList>,
@@ -180,7 +179,6 @@ pub async fn edit_list(
     list_response(&state, id, StatusCode::OK)
 }
 
-/// Deletes a list.
 pub async fn delete_list(
     State(state): State<Shared>,
     Path(id): Path<i64>,

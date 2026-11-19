@@ -262,7 +262,6 @@ pub async fn edit_plan(
     }
 }
 
-/// Forgets a plan.
 pub async fn delete_plan(
     State(state): State<Shared>,
     Path(id): Path<i64>,

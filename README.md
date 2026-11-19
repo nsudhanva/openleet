@@ -48,8 +48,7 @@ sudo SITE_ADDRESS=openleet.example.com deploy/install.sh
 ```
 
 The server serves <https://openleet.example.com> with a certificate from Let's Encrypt. It
-installs new releases automatically. For more information, see
-[Deployment](docs/deployment.md#new-server).
+installs new releases automatically. See [Deployment](docs/deployment.md#new-server).
 
 ## Documentation
 

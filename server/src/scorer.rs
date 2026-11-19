@@ -88,7 +88,6 @@ pub struct Counts {
 /// How many cards of one difficulty were graded, over the selected company's 6-month list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct DifficultyCoverage {
-    /// The difficulty.
     pub difficulty: Difficulty,
     /// Problems graded at least once.
     pub seen: usize,

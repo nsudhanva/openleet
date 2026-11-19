@@ -210,9 +210,8 @@ def judge_problem(item: dict, votes: dict) -> tuple[dict, list[dict]]:
         "floats": floats,
         "voters": sorted(voters),
         "cpuMs": cpu,
-        # Runs custom inputs for the expected answer. Mercury's submissions are used offline
-        # only (CC BY-NC), so they are never shipped.
-        # The fastest trusted reference answers custom inputs (Mercury is never shipped).
+        # The fastest trusted reference answers custom inputs. Mercury's submissions are used
+        # offline only (CC BY-NC), so they are never shipped.
         "reference": next(
             (
                 item["voters"][n]

@@ -39,7 +39,6 @@ wire_enum! {
         /// List order: the company's rank, or the number for LC 1–1000 (the default).
         #[default]
         Rank = "rank",
-        /// LeetCode number.
         Number = "number",
         /// Easy, then Medium, then Hard; list order within each.
         EasyFirst = "easy-first",
@@ -288,13 +287,9 @@ pub struct PlanView<'a> {
 /// The problem a plan offers next. No topics: they would give away the guess.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct NextProblem<'a> {
-    /// LeetCode number.
     pub id: u32,
-    /// Slug.
     pub slug: &'a str,
-    /// Title.
     pub title: &'a str,
-    /// Difficulty.
     pub difficulty: Difficulty,
     /// Rank in the plan's list.
     pub rank: u32,

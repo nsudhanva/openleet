@@ -1,6 +1,6 @@
 /** Shared by the theme provider and the script that runs before first paint (vite.config.ts). */
 export const THEME_STORAGE_KEY = "openleet:theme";
-/** Where the theme lived before the rename; the script moves it once. */
+/** The key an earlier version stored the theme under; the script moves it once. */
 const LEGACY_THEME_KEY = "leetcode-cards:theme";
 
 export type Theme = "light" | "dark" | "system";
