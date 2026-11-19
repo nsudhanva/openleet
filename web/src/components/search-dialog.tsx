@@ -1,14 +1,11 @@
 import { SearchIcon } from "lucide-react";
-import { lazy, Suspense, useState } from "react";
+import { useState } from "react";
 import { KeyHint } from "@/components/action-button";
 import { Button } from "@/components/ui/button";
 import { useHotkeys, useModKeys } from "@/hooks/use-hotkeys";
 import { useLoadOnUse } from "@/hooks/use-load-on-use";
 
 const loadPalette = () => import("@/components/search-palette");
-const SearchPalette = lazy(async () => ({
-	default: (await loadPalette()).SearchPalette,
-}));
 
 /**
  * Jump to any problem by LeetCode number, title, topic or statement text (⌘K or /). The
@@ -17,7 +14,7 @@ const SearchPalette = lazy(async () => ({
 export function SearchDialog() {
 	const [open, setOpen] = useState(false);
 	// Once loaded it stays mounted, so closing can animate.
-	const { used, use, prefetchProps } = useLoadOnUse(loadPalette);
+	const { loaded, use, prefetchProps } = useLoadOnUse(loadPalette);
 	const toggle = (next: (open: boolean) => boolean) => {
 		use();
 		setOpen(next);
@@ -41,11 +38,7 @@ export function SearchDialog() {
 				<span className="max-sm:sr-only">Search problems</span>
 				<KeyHint className="ml-auto">⌘K</KeyHint>
 			</Button>
-			{used && (
-				<Suspense fallback={null}>
-					<SearchPalette open={open} onOpenChange={setOpen} />
-				</Suspense>
-			)}
+			{loaded && <loaded.SearchPalette open={open} onOpenChange={setOpen} />}
 		</>
 	);
 }

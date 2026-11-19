@@ -17,7 +17,7 @@ use openleet::plan::{
 use openleet::user_lists::{UserList, UserLists};
 
 use super::plans::checked_name;
-use crate::db::{ListWrite, MAX_LIST_PROBLEMS, MAX_LISTS};
+use crate::db::{MAX_LIST_PROBLEMS, MAX_LISTS};
 use crate::error::{ApiError, ApiResult};
 use crate::state::{AppState, Shared, now_ms, user_lists};
 
@@ -130,22 +130,18 @@ pub async fn create_list(
 ) -> ApiResult<Response> {
     let name = checked_name(&input.name, "")?;
     let slugs = checked_slugs(&state.content, input.slugs)?;
-    let written = state
+    let created = state
         .update_progress(move |state| {
-            let written = state.store.create_list(&name, &slugs, now_ms())?;
-            if matches!(written, ListWrite::Done(_)) {
+            let created = state.store.create_list(&name, &slugs, now_ms())?;
+            if created.is_some() {
                 reload(state)?;
             }
-            Ok(written)
+            Ok(created)
         })
         .await?;
-    match written {
-        ListWrite::Done(id) => list_response(&state, id, StatusCode::CREATED),
-        ListWrite::TooMany => Err(ApiError::BadRequest(format!(
-            "You can keep at most {MAX_LISTS} lists"
-        ))),
-        ListWrite::Missing => Err(ApiError::NotFound("No such list".into())),
-    }
+    let id = created
+        .ok_or_else(|| ApiError::BadRequest(format!("You can keep at most {MAX_LISTS} lists")))?;
+    list_response(&state, id, StatusCode::CREATED)
 }
 
 /// Body of `PATCH /api/lists/{id}`: a new name, the problems in their new order, or both.
@@ -166,22 +162,22 @@ pub async fn edit_list(
         .slugs
         .map(|s| checked_slugs(&state.content, s))
         .transpose()?;
-    let written = state
+    let changed = state
         .update_progress(move |state| {
-            let written =
+            let changed =
                 state
                     .store
                     .change_list(id, name.as_deref(), slugs.as_deref(), now_ms())?;
-            if matches!(written, ListWrite::Done(_)) {
+            if changed {
                 reload(state)?;
             }
-            Ok(written)
+            Ok(changed)
         })
         .await?;
-    match written {
-        ListWrite::Done(id) => list_response(&state, id, StatusCode::OK),
-        ListWrite::Missing | ListWrite::TooMany => Err(ApiError::NotFound(format!("No list {id}"))),
+    if !changed {
+        return Err(ApiError::NotFound(format!("No list {id}")));
     }
+    list_response(&state, id, StatusCode::OK)
 }
 
 /// Deletes a list.

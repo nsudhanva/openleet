@@ -97,6 +97,24 @@ export function tablePlan(search: CompanySearch & ProblemsSearch): Plan {
 	};
 }
 
+/**
+ * The problem table's search params for a plan's problems: the inverse of {@link tablePlan}
+ * (the table leaves out the "all" status and the "rank" order).
+ */
+export function problemsOf(
+	plan: Plan,
+): ProblemsSearch & Pick<CompanySearch, "company"> {
+	return {
+		company: plan.company,
+		period: plan.period,
+		list: plan.list,
+		topic: plan.topic,
+		difficulty: plan.difficulty,
+		status: plan.status === "all" ? undefined : plan.status,
+		order: plan.order === "rank" ? undefined : plan.order,
+	};
+}
+
 /** "12 of 48 solved", or "All 48 solved" when nothing is left. */
 export function progressText({ solved, total }: PlanProgress): string {
 	if (total > 0 && solved >= total) return `All ${total} solved`;

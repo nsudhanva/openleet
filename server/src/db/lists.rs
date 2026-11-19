@@ -20,16 +20,6 @@ pub struct StoredList {
     pub slugs: Vec<String>,
 }
 
-/// What a list write did.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ListWrite {
-    Done(i64),
-    /// No list has the id.
-    Missing,
-    /// Another list would pass [`MAX_LISTS`].
-    TooMany,
-}
-
 impl Store {
     /// Every list, newest first, with its problems in order.
     pub fn lists(&self) -> Result<Vec<StoredList>> {
@@ -61,13 +51,14 @@ impl Store {
         })
     }
 
-    /// Makes a list of `slugs` (checked by the caller: known, each once) at `at`.
-    pub fn create_list(&self, name: &str, slugs: &[String], at: i64) -> Result<ListWrite> {
+    /// Makes a list of `slugs` (checked by the caller: known, each once) at `at`. Returns its
+    /// id, or `None` when there are [`MAX_LISTS`] lists already.
+    pub fn create_list(&self, name: &str, slugs: &[String], at: i64) -> Result<Option<i64>> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
         let count: i64 = tx.query_row("SELECT count(*) FROM user_lists", [], |r| r.get(0))?;
         if usize::try_from(count).unwrap_or(usize::MAX) >= MAX_LISTS {
-            return Ok(ListWrite::TooMany);
+            return Ok(None);
         }
         let id: i64 = tx
             .prepare_cached(
@@ -77,17 +68,18 @@ impl Store {
             .query_row(params![name, at], |r| r.get(0))?;
         insert_problems(&tx, id, slugs)?;
         tx.commit()?;
-        Ok(ListWrite::Done(id))
+        Ok(Some(id))
     }
 
-    /// Renames a list, replaces its problems (in the new order), or both.
+    /// Renames a list, replaces its problems (in the new order), or both; `false` when no
+    /// list has the id.
     pub fn change_list(
         &self,
         id: i64,
         name: Option<&str>,
         slugs: Option<&[String]>,
         at: i64,
-    ) -> Result<ListWrite> {
+    ) -> Result<bool> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
         let found: i64 =
@@ -95,7 +87,7 @@ impl Store {
                 r.get(0)
             })?;
         if found == 0 {
-            return Ok(ListWrite::Missing);
+            return Ok(false);
         }
         if let Some(name) = name {
             tx.prepare_cached("UPDATE user_lists SET name = ? WHERE id = ?")?
@@ -111,7 +103,7 @@ impl Store {
         )?
         .execute(params![at, id])?;
         tx.commit()?;
-        Ok(ListWrite::Done(id))
+        Ok(true)
     }
 
     /// Deletes a list and its problems; `false` when no list has the id.
@@ -157,15 +149,14 @@ mod tests {
     #[test]
     fn creates_renames_reorders_and_deletes_lists() {
         let (store, _dir) = store();
-        let ListWrite::Done(first) = store
+        let first = store
             .create_list("Graphs", &slugs(&["b", "a"]), 1_000)
             .unwrap()
-        else {
-            panic!("created");
-        };
-        let ListWrite::Done(second) = store.create_list("Empty", &[], 2_000).unwrap() else {
-            panic!("created");
-        };
+            .expect("created");
+        let second = store
+            .create_list("Empty", &[], 2_000)
+            .unwrap()
+            .expect("created");
         let lists = store.lists().unwrap();
         assert_eq!(
             lists,
@@ -184,16 +175,12 @@ mod tests {
         );
 
         let reordered = slugs(&["a", "c", "b"]);
-        assert_eq!(
+        assert!(
             store
                 .change_list(first, Some("Graph drills"), Some(&reordered), 3_000)
-                .unwrap(),
-            ListWrite::Done(first)
+                .unwrap()
         );
-        assert_eq!(
-            store.change_list(99, Some("x"), None, 3_000).unwrap(),
-            ListWrite::Missing
-        );
+        assert!(!store.change_list(99, Some("x"), None, 3_000).unwrap());
         let changed = store
             .lists()
             .unwrap()
@@ -216,9 +203,6 @@ mod tests {
         for i in 0..MAX_LISTS {
             store.create_list(&format!("List {i}"), &[], 1_000).unwrap();
         }
-        assert_eq!(
-            store.create_list("One more", &[], 2_000).unwrap(),
-            ListWrite::TooMany
-        );
+        assert_eq!(store.create_list("One more", &[], 2_000).unwrap(), None);
     }
 }

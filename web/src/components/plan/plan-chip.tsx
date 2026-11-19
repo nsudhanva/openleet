@@ -1,5 +1,5 @@
 import { ChevronDownIcon, ListChecksIcon } from "lucide-react";
-import { type ComponentProps, lazy, Suspense } from "react";
+import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 import { useCompanies } from "@/hooks/use-companies";
 import { useLoadOnUse } from "@/hooks/use-load-on-use";
@@ -9,9 +9,6 @@ import { listNameOf, useUserLists } from "@/lib/user-lists";
 import { cn } from "@/lib/utils";
 
 const loadEditor = () => import("@/components/plan/plan-editor");
-const PlanEditor = lazy(async () => ({
-	default: (await loadEditor()).PlanEditor,
-}));
 
 /** The chip's button: the plan in a few words. */
 export function PlanButton({
@@ -59,12 +56,15 @@ export function PlanChip({
 		(slug) => companyName(companies, slug),
 		listNameOf(lists),
 	);
-	const { used, use, prefetchProps } = useLoadOnUse(loadEditor);
-	const button = <PlanButton label={label} {...prefetchProps} onClick={use} />;
-	if (!used) return button;
+	const { loaded, use, prefetchProps } = useLoadOnUse(loadEditor);
+	if (!loaded)
+		return <PlanButton label={label} {...prefetchProps} onClick={use} />;
 	return (
-		<Suspense fallback={button}>
-			<PlanEditor plan={plan} label={label} onChange={onChange} defaultOpen />
-		</Suspense>
+		<loaded.PlanEditor
+			plan={plan}
+			label={label}
+			onChange={onChange}
+			defaultOpen
+		/>
 	);
 }

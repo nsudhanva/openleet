@@ -1,13 +1,10 @@
 import { ChevronDownIcon, ListPlusIcon } from "lucide-react";
-import { type ComponentProps, lazy, Suspense } from "react";
+import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 import { useLoadOnUse } from "@/hooks/use-load-on-use";
 import { cn } from "@/lib/utils";
 
 const loadMenu = () => import("@/components/lists/add-to-list-menu");
-const AddToListMenu = lazy(async () => ({
-	default: (await loadMenu()).AddToListMenu,
-}));
 
 /** The button that opens the menu of your lists. */
 export function AddToListTrigger({
@@ -41,8 +38,8 @@ export function AddToListButton({
 	onChange?: () => void;
 	className?: string;
 }) {
-	const { used, use, prefetchProps } = useLoadOnUse(loadMenu);
-	if (!used)
+	const { loaded, use, prefetchProps } = useLoadOnUse(loadMenu);
+	if (!loaded)
 		return (
 			<AddToListTrigger
 				className={className}
@@ -51,13 +48,11 @@ export function AddToListButton({
 			/>
 		);
 	return (
-		<Suspense fallback={<AddToListTrigger className={className} disabled />}>
-			<AddToListMenu
-				slugs={slugs}
-				onChange={onChange}
-				className={className}
-				defaultOpen
-			/>
-		</Suspense>
+		<loaded.AddToListMenu
+			slugs={slugs}
+			onChange={onChange}
+			className={className}
+			defaultOpen
+		/>
 	);
 }

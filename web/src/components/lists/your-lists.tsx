@@ -1,25 +1,18 @@
 import { PlusIcon } from "lucide-react";
-import { lazy, Suspense, useState } from "react";
-import { PlanLink } from "@/components/plan/plan-link";
+import { useState } from "react";
+import { PlanCard } from "@/components/plan/plan-card";
 import { PlanMenuButton } from "@/components/plan/saved-plans";
-import { ProgressBar } from "@/components/progress-bar";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { useLoadOnUse } from "@/hooks/use-load-on-use";
-import { planOf, progressShare } from "@/lib/plan";
 import type { UserList } from "@/lib/types";
 import { createList } from "@/lib/user-lists";
-import { cn } from "@/lib/utils";
 
 const loadMenu = () => import("@/components/lists/list-menu");
-const ListMenu = lazy(async () => ({ default: (await loadMenu()).ListMenu }));
 const loadDialogs = () => import("@/components/lists/list-dialogs");
-const NameListDialog = lazy(async () => ({
-	default: (await loadDialogs()).NameListDialog,
-}));
 
 /**
- * Your own lists, newest first: each with its progress, Continue (its next problem) and a
- * menu to show, rename or delete it, and a button to make a new one. `onChange` reloads
+ * Your own lists, newest first: each with its progress, its problems, Continue (its next
+ * problem) and a menu to rename or delete it, and a button to make a new one. `onChange` reloads
  * them after an edit.
  */
 export function YourLists({
@@ -63,17 +56,15 @@ export function YourLists({
 					))}
 				</ul>
 			)}
-			{naming && (
-				<Suspense fallback={null}>
-					<NameListDialog
-						open
-						onOpenChange={setNaming}
-						title="New list"
-						description="Name the list, then add problems with Add to list."
-						action="Create list"
-						onSave={(name) => createList(name).then(onChange)}
-					/>
-				</Suspense>
+			{naming && dialogs.loaded && (
+				<dialogs.loaded.NameListDialog
+					open
+					onOpenChange={setNaming}
+					title="New list"
+					description="Name the list, then add problems with Add to list."
+					action="Create list"
+					onSave={(name) => createList(name).then(onChange)}
+				/>
 			)}
 		</section>
 	);
@@ -86,54 +77,23 @@ function ListRow({
 	list: UserList;
 	onChange: () => Promise<void>;
 }) {
-	const { used, use, prefetchProps } = useLoadOnUse(loadMenu);
-	const { solved, total } = list.progress;
+	const { loaded, use, prefetchProps } = useLoadOnUse(loadMenu);
 	const menuButton = (
 		<PlanMenuButton name={list.name} {...prefetchProps} onClick={use} />
 	);
 	return (
-		<li className="flex min-w-0 items-center gap-2 rounded-sm bg-card py-2 pr-1.5 pl-3 shadow-[0_1px_0_var(--border)]">
-			<div className="min-w-0 flex-1">
-				<p className="truncate text-sm font-medium">{list.name}</p>
-				<div className="mt-1 flex items-center gap-2">
-					<ProgressBar
-						value={progressShare(list.progress)}
-						className="h-1.5 flex-1"
-					/>
-					<span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-						{solved} of {total}
-					</span>
-				</div>
-			</div>
-			{list.next ? (
-				<PlanLink
-					plan={planOf(list.plan)}
-					slug={list.next.slug}
-					title={`Next: ${list.next.title}`}
-					className={cn(
-						buttonVariants({ variant: "outline", size: "sm" }),
-						"shrink-0 bg-card",
-					)}
-				>
-					Continue
-				</PlanLink>
-			) : (
-				<span
-					className={cn(
-						"shrink-0 px-2 text-xs",
-						total ? "text-success" : "text-muted-foreground",
-					)}
-				>
-					{total ? "All solved" : "Empty"}
-				</span>
-			)}
-			{used ? (
-				<Suspense fallback={menuButton}>
-					<ListMenu list={list} onChange={onChange} defaultOpen />
-				</Suspense>
-			) : (
-				menuButton
-			)}
-		</li>
+		<PlanCard
+			title={<p className="truncate text-sm font-medium">{list.name}</p>}
+			plan={list.plan}
+			progress={list.progress}
+			next={list.next}
+			menu={
+				loaded ? (
+					<loaded.ListMenu list={list} onChange={onChange} defaultOpen />
+				) : (
+					menuButton
+				)
+			}
+		/>
 	);
 }

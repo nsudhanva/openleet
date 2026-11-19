@@ -1,5 +1,4 @@
 import { ChevronDownIcon } from "lucide-react";
-import { lazy, Suspense } from "react";
 import { selectTriggerClassName } from "@/components/ui/select-trigger";
 import { useLoadOnUse } from "@/hooks/use-load-on-use";
 import { cn } from "@/lib/utils";
@@ -24,9 +23,6 @@ export function pickerName<T extends string | null>(
 }
 
 const loadMenu = () => import("@/components/select-picker-menu");
-const SelectPickerMenu = lazy(async () => ({
-	default: (await loadMenu()).SelectPickerMenu,
-})) as typeof import("@/components/select-picker-menu").SelectPickerMenu;
 
 export interface SelectPickerProps<T extends string | null> {
 	label: string;
@@ -44,7 +40,7 @@ export interface SelectPickerProps<T extends string | null> {
 export function SelectPicker<T extends string | null>(
 	props: SelectPickerProps<T>,
 ) {
-	const { used, use, prefetchProps } = useLoadOnUse(loadMenu);
+	const { loaded, use, prefetchProps } = useLoadOnUse(loadMenu);
 	const placeholder = (
 		<button
 			type="button"
@@ -60,10 +56,6 @@ export function SelectPicker<T extends string | null>(
 			<ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" />
 		</button>
 	);
-	if (!used) return placeholder;
-	return (
-		<Suspense fallback={placeholder}>
-			<SelectPickerMenu {...props} defaultOpen />
-		</Suspense>
-	);
+	if (!loaded) return placeholder;
+	return <loaded.SelectPickerMenu {...props} defaultOpen />;
 }

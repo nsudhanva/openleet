@@ -157,8 +157,9 @@ function About() {
 							<strong>Your lists</strong> hold the problems you pick. Use{" "}
 							<strong>Add to list</strong> on a problem, or tick rows on the
 							Problems page. A list keeps the order in which you add problems,
-							and Next goes through it in that order. Use the menu of a list to
-							show, rename or delete it.
+							and Next goes through it in that order. Use{" "}
+							<strong>Problems</strong> on a list to see its problems. Use the
+							menu of a list to rename or delete it.
 						</p>
 					</Section>
 				</div>

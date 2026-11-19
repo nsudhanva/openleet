@@ -1,5 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
-import { ListIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { PencilIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import {
 	DeleteListDialog,
@@ -15,7 +14,7 @@ import {
 import type { UserList } from "@/lib/types";
 import { deleteList, renameList } from "@/lib/user-lists";
 
-/** A list's menu, loaded on first use (see `YourLists`): show, rename or delete it. */
+/** A list's menu, loaded on first use (see `YourLists`): rename or delete it. */
 export function ListMenu({
 	list,
 	onChange,
@@ -25,7 +24,6 @@ export function ListMenu({
 	onChange: () => Promise<void>;
 	defaultOpen: boolean;
 }) {
-	const navigate = useNavigate();
 	const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
 	const close = (open: boolean) => {
 		if (!open) setDialog(null);
@@ -35,14 +33,6 @@ export function ListMenu({
 			<DropdownMenu defaultOpen={defaultOpen}>
 				<DropdownMenuTrigger render={<PlanMenuButton name={list.name} />} />
 				<DropdownMenuContent align="end" className="w-44">
-					<DropdownMenuItem
-						onClick={() =>
-							navigate({ to: "/problems", search: { list: list.id } })
-						}
-					>
-						<ListIcon />
-						Show its problems
-					</DropdownMenuItem>
 					<DropdownMenuItem onClick={() => setDialog("rename")}>
 						<PencilIcon />
 						Rename

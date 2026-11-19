@@ -19,14 +19,16 @@ import {
 type Loaded = FilterOption[] | "error" | null;
 
 /**
- * The choices: given, or loaded for the current `key`. While a new key loads, the last
- * choices stay, so the open list does not flash empty; an answer for an old key is dropped.
+ * The choices: given, or loaded for the current `key` (starting from `initial`, the choices
+ * loaded with the picker's code). While a new key loads, the last choices stay, so the open
+ * list does not flash empty; an answer for an old key is dropped.
  */
 function useOptions(
 	options: FilterPickerProps["options"],
 	key: string | undefined,
+	initial: FilterOption[] | null,
 ): Loaded {
-	const [loaded, setLoaded] = useState<Loaded>(null);
+	const [loaded, setLoaded] = useState<Loaded>(initial);
 	const load = useEffectEvent(() =>
 		typeof options === "function" ? options() : null,
 	);
@@ -62,8 +64,12 @@ export function FilterCombobox({
 	disabled = false,
 	className,
 	defaultOpen = false,
-}: FilterPickerProps & { defaultOpen?: boolean }) {
-	const loaded = useOptions(options, optionsKey);
+	initialOptions = null,
+}: FilterPickerProps & {
+	defaultOpen?: boolean;
+	initialOptions?: FilterOption[] | null;
+}) {
+	const loaded = useOptions(options, optionsKey, initialOptions);
 	const items = Array.isArray(loaded) ? loaded : [];
 	const selected = items.find((o) => o.value === value) ?? {
 		value,

@@ -1,12 +1,5 @@
 import { ListIcon } from "lucide-react";
-import {
-	lazy,
-	Suspense,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useCompanies, useCompany } from "@/hooks/use-companies";
@@ -21,9 +14,6 @@ import type { AskedPeriod, Problem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const loadDialog = () => import("@/components/companies-dialog");
-const CompaniesDialog = lazy(async () => ({
-	default: (await loadDialog()).CompaniesDialog,
-}));
 
 /** Space between chips, px (Tailwind gap-1). */
 const GAP = 4;
@@ -64,7 +54,7 @@ export function CompanyTags({
 		() => rankCompanies(asked, companies, selected, period),
 		[asked, companies, selected, period],
 	);
-	const { used, use, prefetchProps } = useLoadOnUse(loadDialog);
+	const { loaded, use, prefetchProps } = useLoadOnUse(loadDialog);
 	const [open, setOpen] = useState(false);
 	const show = () => {
 		use();
@@ -83,16 +73,14 @@ export function CompanyTags({
 				onOverflow={show}
 				prefetchProps={prefetchProps}
 			/>
-			{used && (
-				<Suspense fallback={null}>
-					<CompaniesDialog
-						open={open}
-						onOpenChange={setOpen}
-						ranked={ranked}
-						period={period}
-						selected={selected}
-					/>
-				</Suspense>
+			{loaded && (
+				<loaded.CompaniesDialog
+					open={open}
+					onOpenChange={setOpen}
+					ranked={ranked}
+					period={period}
+					selected={selected}
+				/>
 			)}
 		</div>
 	);

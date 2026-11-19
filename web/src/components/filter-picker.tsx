@@ -1,13 +1,10 @@
 import { ChevronDownIcon } from "lucide-react";
-import { type ComponentProps, lazy, Suspense } from "react";
+import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 import { useLoadOnUse } from "@/hooks/use-load-on-use";
 import { cn } from "@/lib/utils";
 
 const loadCombobox = () => import("@/components/filter-combobox");
-const FilterCombobox = lazy(async () => ({
-	default: (await loadCombobox()).FilterCombobox,
-}));
 
 /** One choice of a filter: its URL value, its text, and its problem count (null: none shown). */
 export interface FilterOption {
@@ -72,7 +69,7 @@ export function FilterButtonText({ children }: { children: React.ReactNode }) {
  */
 export function FilterPicker(props: FilterPickerProps) {
 	const { options } = props;
-	const { used, use, prefetchProps } = useLoadOnUse(() =>
+	const { loaded, use, prefetchProps } = useLoadOnUse(() =>
 		Promise.all([
 			loadCombobox(),
 			typeof options === "function" ? options().catch(() => null) : null,
@@ -90,10 +87,7 @@ export function FilterPicker(props: FilterPickerProps) {
 			<FilterButtonText>{props.valueLabel}</FilterButtonText>
 		</FilterButton>
 	);
-	if (!used) return placeholder;
-	return (
-		<Suspense fallback={placeholder}>
-			<FilterCombobox {...props} defaultOpen />
-		</Suspense>
-	);
+	if (!loaded) return placeholder;
+	const [{ FilterCombobox }, choices] = loaded;
+	return <FilterCombobox {...props} initialOptions={choices} defaultOpen />;
 }

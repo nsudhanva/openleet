@@ -4,6 +4,7 @@ import {
 	pivotText,
 	planChipLabel,
 	planOf,
+	problemsOf,
 	progressShare,
 	progressText,
 	tablePlan,
@@ -201,5 +202,38 @@ describe("the next panel's text", () => {
 		expect(pivotText({ kind: "weakest", plan: view("Graph", null) })).toBe(
 			"Weakest: Graph",
 		);
+	});
+});
+
+describe("problemsOf", () => {
+	it("opens a plan's problems in the table, the table's defaults left out", () => {
+		const search = {
+			company: "google",
+			period: "6m",
+			status: "unsolved",
+			order: "rank",
+		} as const;
+		expect(problemsOf(search)).toEqual({
+			company: "google",
+			period: "6m",
+			list: undefined,
+			topic: undefined,
+			difficulty: undefined,
+			status: "unsolved",
+			order: undefined,
+		});
+		expect(
+			problemsOf({ ...search, list: 4, status: "all", order: "random" }),
+		).toMatchObject({
+			list: 4,
+			status: undefined,
+			order: "random",
+		});
+		expect(tablePlan(problemsOf(search))).toEqual({
+			...search,
+			list: undefined,
+			topic: undefined,
+			difficulty: undefined,
+		});
 	});
 });

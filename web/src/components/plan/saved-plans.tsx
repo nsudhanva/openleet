@@ -1,25 +1,15 @@
 import { EllipsisIcon, PinIcon } from "lucide-react";
-import {
-	type ComponentProps,
-	type KeyboardEvent,
-	lazy,
-	Suspense,
-	useState,
-} from "react";
-import { PlanLink } from "@/components/plan/plan-link";
-import { ProgressBar } from "@/components/progress-bar";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { type ComponentProps, type KeyboardEvent, useState } from "react";
+import { PlanCard } from "@/components/plan/plan-card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLoadOnUse } from "@/hooks/use-load-on-use";
 import { useMedia } from "@/hooks/use-media";
 import { api, messageOf } from "@/lib/api";
-import { planOf, progressShare } from "@/lib/plan";
 import { SM_SCREEN } from "@/lib/screen";
 import type { SavedPlan } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 const loadMenu = () => import("@/components/plan/plan-menu");
-const PlanMenu = lazy(async () => ({ default: (await loadMenu()).PlanMenu }));
 
 /** Plans shown before "Show all" (pinned ones come first): two rows of the grid. */
 const SHOWN = { wide: 6, phone: 3 };
@@ -114,9 +104,8 @@ function PlanRow({
 	run: (change: Promise<unknown>) => Promise<void>;
 }) {
 	const [renaming, setRenaming] = useState(false);
-	const { used, use, prefetchProps } = useLoadOnUse(loadMenu);
+	const { loaded, use, prefetchProps } = useLoadOnUse(loadMenu);
 	const title = plan.name ?? plan.plan.label;
-	const { solved, total } = plan.progress;
 
 	const rename = (text: string) => {
 		setRenaming(false);
@@ -128,9 +117,9 @@ function PlanRow({
 	);
 
 	return (
-		<li className="flex min-w-0 items-center gap-2 rounded-sm bg-card py-2 pr-1.5 pl-3 shadow-[0_1px_0_var(--border)]">
-			<div className="min-w-0 flex-1">
-				{renaming ? (
+		<PlanCard
+			title={
+				renaming ? (
 					<NameInput
 						initial={plan.name ?? ""}
 						placeholder={plan.plan.label}
@@ -149,35 +138,14 @@ function PlanRow({
 							{title}
 						</span>
 					</p>
-				)}
-				<div className="mt-1 flex items-center gap-2">
-					<ProgressBar
-						value={progressShare(plan.progress)}
-						className="h-1.5 flex-1"
-					/>
-					<span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-						{solved} of {total}
-					</span>
-				</div>
-			</div>
-			{plan.next ? (
-				<PlanLink
-					plan={planOf(plan.plan)}
-					slug={plan.next.slug}
-					title={`Next: ${plan.next.title}`}
-					className={cn(
-						buttonVariants({ variant: "outline", size: "sm" }),
-						"shrink-0 bg-card",
-					)}
-				>
-					Continue
-				</PlanLink>
-			) : (
-				<span className="shrink-0 px-2 text-xs text-success">All solved</span>
-			)}
-			{used ? (
-				<Suspense fallback={menuButton}>
-					<PlanMenu
+				)
+			}
+			plan={plan.plan}
+			progress={plan.progress}
+			next={plan.next}
+			menu={
+				loaded ? (
+					<loaded.PlanMenu
 						name={title}
 						pinned={plan.pinned}
 						onPin={() =>
@@ -187,11 +155,11 @@ function PlanRow({
 						onRemove={() => void run(api.deletePlan(plan.id))}
 						defaultOpen
 					/>
-				</Suspense>
-			) : (
-				menuButton
-			)}
-		</li>
+				) : (
+					menuButton
+				)
+			}
+		/>
 	);
 }
 
