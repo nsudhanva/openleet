@@ -1,112 +1,134 @@
 # API
 
-All endpoints are under `/api` and return JSON.
+All endpoints live under `/api` and return JSON.
 
-| Endpoint | Returns or does |
+## Endpoints
+
+### Problems & flashcards
+
+| Endpoint | Description |
 | --- | --- |
-| `GET /companies` | Companies and their problem counts |
-| `GET /problems?company=&period=&list=&topic=&difficulty=&status=&order=&q=` | A problem list with your progress |
-| `GET /topics?company=&period=&difficulty=` | The list's topics and counts, most first |
-| `GET /problems/:slug` | One card: statement, topics, companies, approach, videos |
-| `GET /deck?company=&period=&set=&topic=&difficulty=` | The next card to study |
-| `GET /search?q=` | Problems by number, title, topic or statement text |
-| `POST /attempts` `{slug, grade, guessed, hints}` | Grade or skip a card |
-| `PUT /notes` `{slug, text}` | Save your own answer |
-| `DELETE /progress?slug=` or `?all=true` | Clear progress |
-| `GET /report?company=` | Readiness and its trend, study counts, streak and the topics you name least; coding progress, shaky solves, the topic map and the activity calendar |
-| `GET /readiness?company=` | Readiness alone, for the page header |
-| `GET /code/:slug` | Starter code, your draft, the time limit and the examples, each as the Testcase box takes it (one JSON value per line) |
-| `PUT /drafts`, `POST /drafts/reset`, `POST /drafts/restore` | Save, reset or restore code |
-| `POST /run` `{slug, code, input?}` | Run the examples or your own input |
-| `POST /submit` `{slug, code}` | Run every test: verdict, CPU time against the limit, the intended complexity |
-| `GET /submissions?slug=` | Your submissions for a problem |
-| `GET /submissions/:id` | One submission with its code and result |
-| `GET /next?slug=&company=&period=&list=&topic=&difficulty=&status=&order=` | The plan's next problem after `slug`, the plan's progress, and up to four related plans |
-| `GET /plans` | Your pinned plans, then your recent ones, each with its progress and next problem |
-| `PUT /plans` `{company, period, topic, difficulty, status, order}` | Remember a plan that you used; returns it |
-| `PATCH /plans/:id` `{name?, pinned?}` | Rename (`null` drops the name) or pin a plan |
-| `DELETE /plans/:id` | Forget a plan |
-| `GET /lists` | Your lists, newest first, each with its problems, progress and next problem |
-| `POST /lists` `{name, slugs?}` | Make a list |
-| `PATCH /lists/:id` `{name?, slugs?}` | Rename a list, or replace its problems (`slugs` in the new order) |
-| `DELETE /lists/:id` | Delete a list. Its problems and your progress stay. |
-| `GET /health` | Database, judge and certificate status; 503 when the database is down |
-| `GET /version` | The running revision |
+| `GET /companies` | Companies and problem counts |
+| `GET /problems?company=&period=&list=&topic=&difficulty=&status=&order=&q=` | Filtered problem list with user progress |
+| `GET /topics?company=&period=&difficulty=` | Topics in the filtered list with counts, most frequent first |
+| `GET /problems/:slug` | Problem details: statement, topics, companies, approach, videos |
+| `GET /deck?company=&period=&set=&topic=&difficulty=` | Next flashcard to review |
+| `GET /search?q=` | Search by problem number, title, topic, or statement text |
+| `POST /attempts` `{slug, grade, guessed, hints}` | Grade or skip a flashcard |
+| `PUT /notes` `{slug, text}` | Save personal notes for a problem |
+| `DELETE /progress?slug=` or `?all=true` | Clear progress for one problem or everything |
 
-`period` is `30d`, `3m`, `6m`, `all` or `lc1000`. `difficulty` is `Easy`, `Medium` or `Hard`.
-`status` is `unsolved` (no accepted submission), `untried` (no submission), `shaky` (a shaky
-solve, as [the report](#the-report) defines it) or `all`. A plan without a status uses
-`unsolved`. A problem list without a status shows every problem. `order` is `rank` (list order,
-the default), `number`, `easy-first` or `random` (a shuffle that is the same on every request).
-The server ignores unknown filter values.
+### Coding & judge
 
-A practice plan is a list, its filters, a status and an order. `/next` never returns the topics
-of the next problem, so it cannot give away the answer of a flashcard. The server keeps the 8
-most recently used unpinned plans and up to 50 pinned plans. A plan name is 1 to 60 characters.
+| Endpoint | Description |
+| --- | --- |
+| `GET /code/:slug` | Starter code, saved draft, time limit, and examples (one JSON value per line) |
+| `PUT /drafts`, `POST /drafts/reset`, `POST /drafts/restore` | Save, reset, or restore editor code |
+| `POST /run` `{slug, code, input?}` | Run against examples or custom input |
+| `POST /submit` `{slug, code}` | Run full test suite; returns verdict, CPU time vs. limit, and intended complexity |
+| `GET /submissions?slug=` | Submission list for a problem |
+| `GET /submissions/:id` | Single submission with code and result (kept for newest 100 per problem plus latest Accepted) |
 
-`list` is the id of one of your lists. With `list`, `/problems` and `/next` use that list
-instead of the company list. In your list, `rank` is the order in which you added the problems.
-The server does not keep a plan over one of your lists in `/plans`, because the server keeps the
-list itself. You can have 50 lists. A list holds 1,000 problems at most, each problem one time.
-A list name is 1 to 60 characters.
+### Plans & custom lists
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /next?slug=&company=&period=&list=&topic=&difficulty=&status=&order=` | Next problem after `slug`, plan progress, and up to 4 related plans (omits topics to avoid spoiling flashcards) |
+| `GET /plans` | Pinned plans followed by recent plans, each with progress and next problem |
+| `PUT /plans` `{company, period, topic, difficulty, status, order}` | Record a used plan and return it |
+| `PATCH /plans/:id` `{name?, pinned?}` | Rename (`null` clears name) or pin/unpin a plan |
+| `DELETE /plans/:id` | Delete a plan |
+| `GET /lists` | Custom lists, newest first, with problems, progress, and next problem |
+| `POST /lists` `{name, slugs?}` | Create a custom list |
+| `PATCH /lists/:id` `{name?, slugs?}` | Rename a list or replace its ordered `slugs` |
+| `DELETE /lists/:id` | Delete a list (problems and progress are kept) |
+
+### Progress & system
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /report?company=` | Full progress report and coding insights (see [The report](#the-report)) |
+| `GET /readiness?company=` | Readiness score alone, for the page header |
+| `GET /health` | Database, judge, and TLS cert status (`503` if the database is down) |
+| `GET /version` | Running git revision |
+
+### Query parameters & limits
+
+| Parameter | Values |
+| --- | --- |
+| `period` | `30d`, `3m`, `6m`, `all`, `lc1000` |
+| `difficulty` | `Easy`, `Medium`, `Hard` |
+| `status` | `unsolved` (no Accepted), `untried` (no submission), `shaky`, `all`. Defaults to `unsolved` in plans and `all` in problem lists. |
+| `order` | `rank` (default list order), `number`, `easy-first`, `random` (deterministic shuffle) |
+| `list` | Custom list ID. Overrides company list in `/problems` and `/next`; `rank` matches insertion order. |
+
+Unknown filter values are ignored.
+
+- **Plans**: Up to 8 recent unpinned plans and 50 pinned plans; names are 1 to 60 characters.
+  Custom lists aren't duplicated into `/plans`.
+- **Lists**: Up to 50 custom lists, 1,000 unique problems per list; names are 1 to 60 characters.
 
 ## The report
 
-`GET /report?company=` (with `any`, every company) returns `report` and the insights of the
-progress page. Each figure covers one of three scopes: the most-asked problems of the company
-(readiness), its 6-month list, or everything that you did on any list.
+`GET /report?company=` (pass `any` for all companies) returns `report` and coding insights. Each
+metric uses one of three scopes: the company's most-asked problems (readiness), its 6-month list,
+or all activity across any list. All days use the server's timezone.
 
-`report` holds:
+### `report` fields
 
-| Field | Scope | Holds |
+| Field | Scope | Contents |
 | --- | --- | --- |
-| `readiness` | Most asked | As `GET /readiness` returns it, below |
-| `trend` | Most asked | `{practiceDays, points}`: readiness at the end of each day, `{day, readiness}`, from your first day of practice (at most 90 days back) to today. The list omits days before readiness had any data. `points` is empty until `practiceDays`, your distinct days with practice, reaches 7 |
-| `counts` | 6-month list | Cards `due`, `new`, on the `again` list and on the `less` list |
-| `byDifficulty` | 6-month list | `{difficulty, seen, total}`: cards graded at least once, per difficulty |
-| `accuracy` | Any list | Mean topic score (F1) of the last 50 graded cards; `null` before any grade |
-| `graded` | Any list | Number of grades given, without skips |
-| `streakDays` | Any list | Consecutive days with a graded card or a submission, that end today or yesterday: the days that the activity calendar shades |
-| `topics` | Any list | The topics that you name least, weakest first: `{topic, score, named, seen}`. A topic gets a rating when `seen`, the graded cards that carry it, reaches 5. `score` is `named / (named + (misses + false alarms) / 2)`, where a false alarm is when you name the topic on a card that does not have it. The list shows only topics under 0.6 |
+| `readiness` | Most asked | Same object as `GET /readiness` |
+| `trend` | Most asked | `{practiceDays, points}`: daily `{day, readiness}` from first practice (max 90 days back) to today, omitting days without data. `points` stays empty until `practiceDays >= 7`. |
+| `counts` | 6-month list | Card counts: `due`, `new`, `again`, `less` |
+| `byDifficulty` | 6-month list | `{difficulty, seen, total}`: cards graded at least once per difficulty |
+| `accuracy` | Any list | Mean topic F1 score over the last 50 graded cards (`null` if none) |
+| `graded` | Any list | Total graded cards, excluding skips |
+| `streakDays` | Any list | Consecutive days with a graded card or submission, ending today or yesterday |
+| `topics` | Any list | Weakest topics first: `{topic, score, named, seen}`. Rated once `seen >= 5` and shown only when `score < 0.6`, where `score = named / (named + (misses + false_alarms) / 2)`. |
 
-`GET /readiness?company=` returns the readiness alone, for the page header:
-`{score, period, problems, recent, solved, shaky, cards, fading}`. It covers the `problems`
-most-asked problems of the company (at most 100), from its 6-month list, or from its all-time
-list (`period` is then `all`) when the 6-month list has fewer than 25 problems. `recent` is the
-size of the 6-month list. For each problem, with `f` its frequency in that list:
+### Readiness formula
+
+`GET /readiness?company=` returns `{score, period, problems, recent, solved, shaky, cards, fading}`.
+It covers up to 100 most-asked problems from the 6-month list, falling back to `all` if the
+6-month list has fewer than 25 problems (`recent` is the 6-month list size). With frequency `f`
+per problem:
 
 ```text
 score = Σ f · (0.6 · code + 0.4 · card) / Σ f
-code  = 1 for a clean solve in the judge, 0.5 for a shaky one, else 0
-card  = 1 when the card's last grade was "Got it" or "Visit less often" and it is not overdue,
-        0.5 when it is overdue by less than its interval, else 0
+code  = 1 (clean solve) | 0.5 (shaky solve) | 0
+card  = 1 ("Got it" / "Visit less often" and not overdue)
+      | 0.5 (overdue by less than its interval)
+      | 0
 ```
 
-`score` is `null` until you grade a card or submit a solution for one of the problems. `solved`
-and `shaky` count the problems with each coding credit. `cards` and `fading` count the problems
-with a full card credit and with a half card credit.
+`score` is `null` until at least one problem is graded or submitted. `solved` / `shaky` count full
+and half coding credits; `cards` / `fading` count full and half card credits.
 
-The insights cover the 6-month list of the company:
+### Insights (6-month list)
 
-| Field | Holds |
+| Field | Contents |
 | --- | --- |
-| `coding` | `byDifficulty` (`{difficulty, solved, total}`), `tried`, `firstTry` (solves with no real failure before the first Accepted), `submissions` and `failures`: the failed submissions before the first Accepted of each problem (all of them while the problem is unsolved), as counts of `wrongAnswer`, `timeLimitExceeded`, `memoryLimitExceeded`, `runtimeError`, `compileError` and `outputLimitExceeded` |
-| `shaky` | The shaky solves of the list, newest first: `{id, slug, title, difficulty, failures, solvedAt}`, with the failures before the first Accepted |
-| `shakyElsewhere` | How many shaky solves are outside the list |
-| `topicMap` | The topics of the list, most problems first: `{topic, problems, covered, solved, graded, named}`. `covered` counts the problems that you graded or solved, `graded` the graded cards of the problems of the list with the topic, and `named` how many of those cards name it (`null` below 5) |
-| `activity` | `{start, today, days}`: 26 weeks from a Monday, in the time zone of the server, with `{day, reviews, submissions}` for each day that you practiced |
+| `coding` | `byDifficulty` (`{difficulty, solved, total}`), `tried`, `firstTry` (Accepted with zero real failures before it), `submissions`, and `failures` (pre-Accepted failure counts for `wrongAnswer`, `timeLimitExceeded`, `memoryLimitExceeded`, `runtimeError`, `compileError`, `outputLimitExceeded`) |
+| `shaky` | Shaky solves in this list, newest first: `{id, slug, title, difficulty, failures, solvedAt}` |
+| `shakyElsewhere` | Count of shaky solves outside this list |
+| `topicMap` | Topics sorted by problem count: `{topic, problems, covered, solved, graded, named}` (`named` is `null` when `graded < 5`) |
+| `activity` | `{start, today, days}`: 26 weeks starting on a Monday, with `{day, reviews, submissions}` for active days |
 
-A real failure is a wrong answer, a time limit, a memory limit or a runtime error. Compile
-errors and output limits do not count. A solve is shaky when two or more real failures came
-before the first Accepted, or when any time limit did. A later Accepted clears the shaky state.
-That Accepted is one at least a calendar day after the first Accepted, with no real failure
-since the Accepted before it.
+### Shaky solves
 
-The report counts every submission. `GET /submissions/:id` returns the code and result only
-for the newest 100 submissions of a problem and its latest Accepted submission. Days are
-calendar days in the time zone of the server.
+A **real failure** is Wrong Answer, TLE, MLE, or Runtime Error (compile errors and output limits
+don't count).
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unsolved
+    Unsolved --> Clean: Accepted (<2 real failures, no TLE)
+    Unsolved --> Shaky: Accepted (>=2 real failures or any TLE)
+    Shaky --> Clean: Accepted on a later calendar day<br/>with no real failures since last Accepted
+```
 
 ## Errors
 
-An error is `{"error": "..."}` with status 400 for invalid input, 404 for an unknown problem, plan
-or endpoint, and 415 when the body is not `application/json`.
+Error responses return `{"error": "..."}` with status `400` (invalid input), `404` (unknown
+problem, plan, list, or route), or `415` (content type is not `application/json`).

@@ -6,40 +6,76 @@ flowchart LR
     CI --> R["edge release<br/>openleet-REV.tar.zst"]
     CI -- "signed POST /api/deploy" --> S[openleet]
     S -- writes deploy-request --> PU[openleet-update.path]
-    T[openleet-update.timer<br/>every 5 min, fallback] --> U
+    T[openleet-update.timer<br/>every 5 min fallback] --> U
     PU --> U["update.sh (root)<br/>verify sha256, unpack,<br/>switch current, restart"]
     R --> U
     U --> V["CI polls /api/version<br/>until REV is live"]
 ```
 
-A push to `main` runs the checks, builds a release archive and asks the server to deploy it. The
-server only records the request. `update.sh` runs as root, verifies the archive, switches
-`/opt/openleet/current` to it and restarts the services.
+Every push to `main` builds a release archive in GitHub Actions and sends a signed deploy request
+to the server. The server writes a trigger file; `update.sh` (running as root) downloads and
+verifies the archive, atomically switches `/opt/openleet/current`, and restarts the services.
 
 ## On the server
 
-Every part is a systemd unit that starts at boot, so a reboot needs no manual step.
+Everything runs as enabled systemd units, so reboots require no manual intervention:
 
-- `openleet-http.socket` and `openleet-https.socket` hold ports 80 and 443, so a restart drops no
-  connections.
-- systemd restarts the server if it exits or does not answer its watchdog.
-  `openleet-health.timer` restarts the server after three failed health checks. It restarts the
-  judge when the judge is down.
-- The server renews its TLS certificate 30 days before the certificate expires.
-- The server copies the database to `/var/lib/openleet/backups/` every day and keeps the last 14
-  copies.
+| Unit | Role |
+| --- | --- |
+| `openleet-http.socket`, `openleet-https.socket` | Hold ports 80 and 443 across restarts (zero dropped connections) |
+| `openleet.service` | Rust server; watchdog-monitored, renews Let's Encrypt cert 30 days before expiry, takes daily DB backups (14 kept in `/var/lib/openleet/backups/`) |
+| `openleet-judge.service` | Sandboxed judge daemon |
+| `openleet-health.timer` | Restarts `openleet` after 3 failed health checks and restarts `openleet-judge` if down |
+| `openleet-update.path`, `openleet-update.timer` | Runs `update.sh` on deploy requests and every 5 minutes as a fallback |
 
-When the server starts, it runs any pending migrations. If it cannot open the database file, it
-moves the file to `/var/lib/openleet/quarantine/` and restores the newest backup. If the file
-opens but a migration fails, the server stops and leaves the file as it is.
+### Database startup & recovery
+
+```mermaid
+flowchart LR
+    ST[Server starts] --> O{Open DuckDB?}
+    O -- yes --> M{Run migrations}
+    M -- ok --> UP[Serve traffic]
+    M -- failed --> STOP[Exit and leave DB untouched]
+    O -- failed --> Q[Move DB to /var/lib/openleet/quarantine/]
+    Q --> R[Restore newest backup] --> M
+```
+
+## New server
+
+Requirements: Ubuntu 24.04 with at least 1 GB RAM (a free GCP `e2-micro` works), ports 80 and 443
+open, and a DNS `A` record pointing to the VM.
+
+```bash
+git clone https://github.com/nsudhanva/openleet && cd openleet
+sudo SITE_ADDRESS=openleet.example.com deploy/install.sh
+```
+
+The installer takes ~2 minutes and sets up:
+
+- The `openleet` system user and Python runtime for the judge
+- 1 GB swap file (if none exists) and automatic security-update reboots at 10:00
+- `/etc/openleet.env`, systemd units, and the latest release (server, web UI, data, test corpus)
+
+Let's Encrypt issues the TLS certificate within a minute. Verify with:
+
+```bash
+curl https://openleet.example.com/api/health
+```
+
+Optional environment variables (re-run `install.sh` to update them; omitted values are preserved):
+
+- `TZ`: timezone for streak day boundaries (e.g., `America/Los_Angeles`, default `UTC`)
+- `DEPLOY_SECRET`: shared HMAC secret for instant deploys from CI
+- `SITE_ADDRESS=http://HOST`: plain HTTP without TLS
+
+New releases are installed automatically within 5 minutes. To migrate progress from another
+server, restore its backup below.
 
 ## Restore a backup
 
-`/var/lib/openleet/backups/` holds a copy of the database for each of the last 14 days
-(`DATE.duckdb`) and for each of the last three migrations, taken right before the migration ran
-(`pre-migration-STAMP.duckdb`). A restore loses every change that you made after the backup was
-taken. To restore a backup, stop the server, move the database aside and put the backup in its
-place:
+`/var/lib/openleet/backups/` stores the last 14 daily backups (`DATE.duckdb`) and the last 3
+pre-migration snapshots (`pre-migration-STAMP.duckdb`). Restoring discards changes made after the
+backup was taken:
 
 ```bash
 sudo systemctl stop openleet
@@ -48,12 +84,12 @@ sudo install -o openleet -g openleet -m 0600 BACKUP.duckdb /var/lib/openleet/ope
 sudo systemctl start openleet
 ```
 
-The server migrates a backup with an older schema when it starts.
+If the backup uses an older schema, the server migrates it automatically on start.
 
 ## Roll back
 
-`update.sh` keeps the newest three releases in `/opt/openleet/releases/`. To run an older
-release, install its units and scripts, point `current` at it and restart the services:
+`update.sh` keeps the 3 newest releases in `/opt/openleet/releases/`. To switch back to an older
+revision:
 
 ```bash
 old=/opt/openleet/releases/REV
@@ -62,54 +98,25 @@ sudo ln -sfn "$old" /opt/openleet/current
 sudo systemctl restart openleet-judge openleet
 ```
 
-`update.sh` never installs a revision that it installed before. Thus neither the deploy request
-of CI nor the 5-minute timer undoes the rollback. The next push to `main` does.
+`update.sh` records every deployed revision and never reinstalls an older one, so neither CI nor
+the 5-minute timer will undo a rollback. The next push to `main` resumes normal deploys.
 
-A build cannot open a database that a newer release migrated. The server stops with "newer
-than this build's" in its log (`journalctl -u openleet`). To roll back past a migration, also
-restore the copy that the server took right before that migration, or the newest daily backup
-older than that migration (see above).
-
-## New server
-
-You need an Ubuntu 24.04 machine with 1 GB of memory or more (a free e2-micro on Google Cloud
-works), ports 80 and 443 open to the internet, and a DNS A record that points a domain at the
-machine.
-
-```bash
-git clone https://github.com/nsudhanva/openleet && cd openleet
-sudo SITE_ADDRESS=openleet.example.com deploy/install.sh
-```
-
-The installer takes about two minutes. It creates the `openleet` user and installs Python for the
-judge. It adds 1 GB of swap when the machine has none. It lets security updates reboot the
-machine at 10:00 and writes `/etc/openleet.env`.
-
-Then the installer downloads the newest release (server, web app, problems and test corpus) and
-starts it. The server gets its TLS certificate from Let's Encrypt within a minute. To check it,
-run `curl https://openleet.example.com/api/health`.
-
-The installer also takes `TZ` (the day boundary for streaks, such as `America/Los_Angeles`; UTC
-by default) and `DEPLOY_SECRET` (see below). Run the installer again to change them. It keeps the
-values that you leave out. Set `SITE_ADDRESS=http://HOST` to serve plain HTTP without a
-certificate.
-
-The server installs each new release within 5 minutes. To move progress from another server,
-restore a backup of that server (see above).
+> **Schema downgrades:** A binary refuses to open a database migrated by a newer release (logged
+> as `"newer than this build's"` in `journalctl -u openleet`). To roll back across a migration,
+> also restore the corresponding `pre-migration-*.duckdb` or older daily backup.
 
 ## Deploy from your own fork
 
-A server installs releases from the GitHub repository that you cloned on it (`OPENLEET_REPO` in
-`/etc/openleet.env`), so clone your fork on the server. Then, in the settings of the fork:
+The installer reads `OPENLEET_REPO` from the clone's `origin` remote and saves it to
+`/etc/openleet.env`, so clone your fork on the server. Then in your fork's GitHub settings:
 
-1. Enable GitHub Actions. Each push to `main` publishes a release, and your server installs it
-   within 5 minutes.
-2. For deploys within seconds of a push, add the repository variable `SITE_URL`
-   (`https://openleet.example.com`) and the secret `DEPLOY_SECRET` (any long random string,
-   such as the output of `openssl rand -hex 32`). Give the server the same secret:
-   `sudo DEPLOY_SECRET=... deploy/install.sh`.
+1. **Enable GitHub Actions**: every push to `main` publishes an `edge` release that your server
+   picks up within 5 minutes.
+2. **Instant deploys (optional)**: add repository variable `SITE_URL`
+   (`https://openleet.example.com`) and secret `DEPLOY_SECRET` (e.g., `openssl rand -hex 32`),
+   then pass the same secret on the server: `sudo DEPLOY_SECRET=... deploy/install.sh`.
 
-The test corpus is not in git: `data/judge/corpus.json` names the repository and release asset
-that hold it. Thus a fork uses the corpus of its upstream until it rebuilds and publishes its own
-(`uv run openleet judge publish`). The `images` workflow of the fork publishes Docker images to
-`ghcr.io/OWNER`. Run them with `IMAGES=ghcr.io/OWNER docker compose up -d`.
+The test corpus isn't committed to git; `data/judge/corpus.json` points to the upstream release
+asset until you rebuild and publish your own (`uv run openleet judge publish`). The `images`
+workflow publishes Docker images to `ghcr.io/OWNER` (run with
+`IMAGES=ghcr.io/OWNER docker compose up -d`).

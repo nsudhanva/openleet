@@ -12,14 +12,14 @@ flowchart LR
 
 ```bash
 docker compose up -d           # prebuilt images from ghcr.io
-docker compose up -d --build   # or build both images from this checkout
+docker compose up -d --build   # build both images from this checkout
 ```
 
-## Work on the server or web app
+## Run from source
 
-You need [uv](https://docs.astral.sh/uv/), [Bun](https://bun.sh), the Rust toolchain in
-`rust-toolchain.toml`, and Docker. The judge needs Linux, so on macOS only the judge runs in a
-container:
+Prerequisites: [uv](https://docs.astral.sh/uv/), [Bun](https://bun.sh), the Rust toolchain in
+`rust-toolchain.toml`, and Docker. Because the judge requires Linux, macOS runs only the judge in
+a container:
 
 ```bash
 uv sync && uv run openleet judge fetch && bun install && bun run build
@@ -27,37 +27,42 @@ docker compose --profile dev up -d judge-dev   # judge on 127.0.0.1:7777
 JUDGE_SOCKET=tcp://127.0.0.1:7777 cargo run --release -p openleet
 ```
 
-The first `cargo run --release` compiles DuckDB and takes a few minutes. Then the app is at
-<http://localhost:8080>. `bun run dev` serves the web app with hot reload on
-<http://localhost:3000> and sends `/api` to the server on port 8080. With
-`API_URL=http://openleet.localhost bun run dev` it uses the compose stack instead.
+The first `cargo run --release` compiles DuckDB and takes a few minutes. Once built:
 
-Local progress goes to `data/openleet.duckdb`, with daily copies in `data/backups/`. Git ignores
-both. To start over, stop the server and delete them. To stop the judge, run
-`docker compose --profile dev down judge-dev`.
+- Server: <http://localhost:8080>
+- Frontend hot reload: `bun run dev` serves <http://localhost:3000> and proxies `/api` to port
+  8080 (set `API_URL=http://openleet.localhost bun run dev` to target the Compose stack instead).
+- Local state: stored in `data/openleet.duckdb` with daily backups in `data/backups/` (both
+  gitignored). Stop the server and delete them to reset.
+- Stop the dev judge: `docker compose --profile dev down judge-dev`.
 
-## Checks
+## Checks & smoke tests
 
-CI runs the same checks as the pre-push hook. Install the hook with `uv run prek install`, or run
-all the checks once:
+CI runs the exact same checks as the pre-push hook. Install the hooks with `uv run prek install`,
+or run everything manually:
 
 ```bash
 uv run prek run --all-files --hook-stage pre-push
 ```
 
-`openleet smoke` tests a running server over HTTP: reference solutions, wrong and crashing
-variants, time and memory limits, sandbox escapes and bad requests. It restores the drafts that it
-changes, but its submissions stay in the history.
+Run end-to-end judge tests (reference solutions, wrong/crashing code, time/memory limits, sandbox
+escapes, and invalid requests) against a running server:
 
 ```bash
 uv run openleet smoke --base-url http://localhost:8080 --allow-network
 ```
 
-## Layout
+`openleet smoke` restores any drafts it modifies, though its test submissions remain in history.
 
-```text
-server/  Rust API and web server     judge/  judge daemon; judge/py is the Python sandbox
-proto/   types shared by both        web/    React app
-src/     Python data tools           data/   problems, approaches, videos, judge specs
-deploy/  systemd units and scripts   docs/   these pages
-```
+## Repository layout
+
+| Path | Contents |
+| --- | --- |
+| `server/` | Rust API and web server (embeds `web/dist`) |
+| `judge/` | Rust judge daemon; `judge/py/` is the Python zygote, sandbox, generators, and constraints |
+| `proto/` | Types shared between `server/` and `judge/` |
+| `web/` | React app (Vite, TanStack Router, Tailwind) |
+| `src/` | Python data and judge CLI (`openleet`) |
+| `data/` | Problems, approaches, videos, and judge specs |
+| `deploy/` | Systemd units and install/update scripts |
+| `docs/` | Project documentation |

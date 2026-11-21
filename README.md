@@ -1,80 +1,83 @@
 # OpenLeet
 
-Practice the LeetCode problems that top tech companies ask. Flashcards schedule your reviews, and
-a judge checks the Python solutions that you write in the browser.
+Self-hosted LeetCode practice app with company problem lists, flashcards, and a Python judge.
+No accounts; progress is stored on the server.
 
-[Live site](https://openleet.sudhanva.me) · [Quick start](#quick-start) · [Docs](docs/)
+[Live demo](https://openleet.sudhanva.me) · [Quick start](#quick-start) · [Docs](docs/)
 
 ## Features
 
-- Problem lists for 24 companies, sorted by how recently the company asked each problem (30 days,
-  3 months, 6 months or all time). The site also has every free problem from 1 to 1000.
-- Flashcards: name the topics of a problem, then check the approach and its complexity. Spaced
-  repetition decides when each card comes back.
-- Run your solutions against the examples, the hidden tests and the large stress tests. The judge
-  gives the same verdicts as LeetCode.
-- Next moves to the next problem in your practice plan, with or without a solve. After an
-  accepted submission, it also offers related plans. A plan is a list, topic, difficulty and
-  order that you can change at any time. The app remembers your recent plans. You can pin the
-  plans that you want to keep.
-- Your own lists: tick problems, or use Add to list on a problem, to put them in a named list.
-  Next, progress and the plan filters work on your list as they work on a company list. You can
-  rename a list, remove problems from it, or delete it.
-- Readiness for the 100 most-asked problems of a company, weighted by how often the company asks
-  each problem: 60% for a clean solve in the judge, 40% for a current flashcard. A daily trend,
-  your streak and the topics that you name least show beside it.
-- Video explanations on YouTube for each problem that has one: the NeetCode video first, then
-  the Greg Hogg video, then the most viewed video by anyone else.
-- Keyboard shortcuts. The About page of the site lists them.
-- No account. The server that runs the app stores your progress.
+- **Company lists**: 24 top tech companies filtered by recency (`30d`, `3m`, `6m`, `all`), plus
+  all free problems from 1 to 1000.
+- **Spaced-repetition flashcards**: Recall a problem's topics, then check the approach, hints, and
+  complexity. Reviews are scheduled automatically.
+- **Sandboxed Python judge**: Run code against examples, hidden tests, and stress tests with
+  LeetCode-style verdicts.
+- **Practice plans & custom lists**: Filter by company, topic, difficulty, status, and sort order;
+  pin plans or build custom problem lists.
+- **Readiness & progress**: Weighted readiness score (60% clean solves, 40% current flashcards)
+  across a company's top 100 problems, with daily trends, streaks, and weak-topic tracking.
+- **Video explanations**: Embedded YouTube walkthroughs prioritized by NeetCode, Greg Hogg, and
+  top-viewed explanations.
 
 ## Quick start
 
-If Docker is installed, run:
+### Docker
 
 ```bash
 git clone https://github.com/nsudhanva/openleet && cd openleet
 docker compose up -d
 ```
 
-Open <http://openleet.localhost>. If port 80 is in use, run `HTTP_PORT=8088 docker compose up -d`
+Open <http://openleet.localhost>. If port 80 is in use, set `HTTP_PORT=8088 docker compose up -d`
 and open <http://openleet.localhost:8088>.
 
-On an Ubuntu server, point a domain at the server and open ports 80 and 443. Then run:
+### Ubuntu server (auto-HTTPS + auto-updates)
+
+On an Ubuntu 24.04 machine with a domain pointed at it and ports 80/443 open:
 
 ```bash
 git clone https://github.com/nsudhanva/openleet && cd openleet
 sudo SITE_ADDRESS=openleet.example.com deploy/install.sh
 ```
 
-The server serves <https://openleet.example.com> with a certificate from Let's Encrypt. It
-installs new releases automatically. See [Deployment](docs/deployment.md#new-server).
+This sets up systemd units, gets a Let's Encrypt certificate for `https://openleet.example.com`,
+and automatically pulls new releases. See [Deployment](docs/deployment.md#new-server) for options.
+
+## How it works
+
+```mermaid
+flowchart LR
+    B[Browser] -- HTTPS --> S["openleet<br/>Rust server + React UI"]
+    S -- read/write --> D[(openleet.duckdb<br/>progress & plans)]
+    S -- read-only --> T[(tests.duckdb<br/>test corpus)]
+    S -- Unix socket --> J["openleet-judge<br/>sandboxed Python"]
+```
+
+Single Rust binary (Axum + embedded React frontend), DuckDB for state, and an isolated Linux judge
+daemon that runs on a 1 GB VM.
 
 ## Documentation
 
-- [Architecture](docs/architecture.md): how pages load, how the judge checks a submission, and
-  where the tests come from.
-- [Development](docs/development.md): how to run the app from source, the checks and the
-  end-to-end tests.
-- [Deployment](docs/deployment.md): releases, the production server and recovery.
-- [API](docs/api.md): the JSON endpoints.
+| Doc | What it covers |
+| --- | --- |
+| [Architecture](docs/architecture.md) | Server internals, judge sandbox, time limits, and test corpus pipeline |
+| [Development](docs/development.md) | Running from source, linters, tests, and smoke tests |
+| [Deployment](docs/deployment.md) | Production systemd setup, backups, rollbacks, and forks |
+| [API](docs/api.md) | JSON endpoints, readiness formula, and report schema |
 
 ## Data sources
 
-- Company lists: [liquidslr/leetcode-company-wise-problems](https://github.com/liquidslr/leetcode-company-wise-problems)
-- Problem statements and solutions: [doocs/leetcode](https://github.com/doocs/leetcode)
-  (CC BY-SA 4.0)
-- Starter code, tests and solutions: [LeetCodeDataset](https://huggingface.co/datasets/newfacade/LeetCodeDataset)
-  (Apache-2.0)
-- Accepted submissions. OpenLeet uses them only to check tests at build time and never ships
-  them: [Mercury](https://huggingface.co/datasets/Elfsong/Mercury) (CC BY-NC)
-- Video explanations: the video that [neetcode.io](https://neetcode.io) links for each problem
-  ([neetcode-gh/leetcode](https://github.com/neetcode-gh/leetcode)), and YouTube channel uploads
-  and searches that [yt-dlp](https://github.com/yt-dlp/yt-dlp) lists (`uv run openleet videos`
-  writes `data/videos.json`)
-- Approaches and hints: Claude agents wrote them and Codex CLI reviewed them
-  (`data/approach-reviews.json`).
+- **Company lists**: [liquidslr/leetcode-company-wise-problems](https://github.com/liquidslr/leetcode-company-wise-problems)
+- **Statements & solutions**: [doocs/leetcode](https://github.com/doocs/leetcode) (CC BY-SA 4.0)
+- **Starter code, tests & solutions**:
+  [LeetCodeDataset](https://huggingface.co/datasets/newfacade/LeetCodeDataset) (Apache-2.0)
+- **Build-time test verification (not shipped)**:
+  [Mercury](https://huggingface.co/datasets/Elfsong/Mercury) (CC BY-NC)
+- **Videos**: [neetcode-gh/leetcode](https://github.com/neetcode-gh/leetcode) and YouTube search via
+  [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`uv run openleet videos` writes `data/videos.json`)
+- **Approaches & hints**: Generated and reviewed (`data/approach-reviews.json`)
 
 ## License
 
-[MIT](LICENSE). Problem statements from doocs/leetcode keep the CC BY-SA 4.0 license.
+[MIT](LICENSE). Problem statements from `doocs/leetcode` remain under CC BY-SA 4.0.
