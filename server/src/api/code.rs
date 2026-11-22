@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use openleet_proto::Verdict;
 
 use super::{Params, param};
-use crate::db::{NewSubmission, Store, TestRow, Tests};
+use crate::auth::Me;
+use crate::db::{NewSubmission, TestRow, Tests};
 use crate::error::{ApiError, ApiResult};
 use crate::judge::{self, Entry};
 use crate::state::{Shared, now_ms};
@@ -61,12 +62,16 @@ struct CodeInfo<'a> {
 /// Starter, draft, judge support and the examples shown above the editor.
 pub async fn code_info(
     State(state): State<Shared>,
+    me: Me,
     Path(slug): Path<String>,
 ) -> ApiResult<Response> {
     let examples = tests(&state, &slug, Tests::Examples).await?;
     // Every problem in the corpus has examples.
     let tested = !examples.is_empty();
-    let draft = state.db_for(&slug, Store::draft).await?;
+    let user = me.user;
+    let draft = state
+        .db_for(&slug, move |store, slug| store.draft(user, slug))
+        .await?;
     let entry = state.judge.entry(&slug);
     let supported = entry.is_some_and(|e| e.supported) && tested;
     let reason = match entry {
@@ -90,7 +95,7 @@ pub async fn code_info(
             time_limit_ms: entry.filter(|_| supported).map(Entry::limit_ms),
         },
         examples: entry.map_or_else(Vec::new, |entry| judge::testcases(entry, &examples)),
-        solved: state.progress.read().coding.solved(&slug),
+        solved: me.learner.progress.read().coding.solved(&slug),
     };
     Ok(Json(&info).into_response())
 }
@@ -105,12 +110,16 @@ pub struct DraftInput {
 /// Saves the editor's code ('' for "back to the starter").
 pub async fn save_draft(
     State(state): State<Shared>,
+    me: Me,
     Json(input): Json<DraftInput>,
 ) -> ApiResult<StatusCode> {
     judge::check_code_size(&input.code)?;
+    let slug = state.problem(&input.slug)?.slug.clone();
     state
-        .db_for(&input.slug, move |store, slug| {
-            store.save_draft(slug, &input.code, now_ms())
+        .update_progress(&me.learner, move |state, learner| {
+            state
+                .store
+                .save_draft(learner.user, &slug, &input.code, now_ms())
         })
         .await?;
     Ok(StatusCode::NO_CONTENT)
@@ -119,12 +128,16 @@ pub async fn save_draft(
 /// Reset to the starter; the editor's code becomes the previous version.
 pub async fn reset_draft(
     State(state): State<Shared>,
+    me: Me,
     Json(input): Json<DraftInput>,
 ) -> ApiResult<impl IntoResponse> {
     judge::check_code_size(&input.code)?;
+    let slug = state.problem(&input.slug)?.slug.clone();
     let draft = state
-        .db_for(&input.slug, move |store, slug| {
-            store.reset_draft(slug, &input.code, now_ms())
+        .update_progress(&me.learner, move |state, learner| {
+            state
+                .store
+                .reset_draft(learner.user, &slug, &input.code, now_ms())
         })
         .await?;
     Ok(Json(draft))
@@ -133,12 +146,16 @@ pub async fn reset_draft(
 /// Bring back the previous version; the editor's code becomes the previous one.
 pub async fn restore_draft(
     State(state): State<Shared>,
+    me: Me,
     Json(input): Json<DraftInput>,
 ) -> ApiResult<impl IntoResponse> {
     judge::check_code_size(&input.code)?;
+    let slug = state.problem(&input.slug)?.slug.clone();
     state
-        .db_for(&input.slug, move |store, slug| {
-            store.restore_draft(slug, &input.code, now_ms())
+        .update_progress(&me.learner, move |state, learner| {
+            state
+                .store
+                .restore_draft(learner.user, &slug, &input.code, now_ms())
         })
         .await?
         .map(Json)
@@ -153,9 +170,11 @@ pub struct RunInput {
     input: Option<String>,
 }
 
-/// Runs the examples, or the custom cases in `input`.
+/// Runs the examples, or the custom cases in `input`. Only for a signed-in account, like
+/// everything that uses the judge; nothing is stored.
 pub async fn run(
     State(state): State<Shared>,
+    _: Me,
     Json(input): Json<RunInput>,
 ) -> ApiResult<impl IntoResponse> {
     let entry = judged(&state, &input.slug)?;
@@ -182,6 +201,7 @@ pub struct SubmitInput {
 /// Judges every test and records the submission.
 pub async fn submit(
     State(state): State<Shared>,
+    me: Me,
     Json(input): Json<SubmitInput>,
 ) -> ApiResult<impl IntoResponse> {
     let entry = judged(&state, &input.slug)?;
@@ -206,19 +226,22 @@ pub async fn submit(
         (result.verdict, result.passed, result.total, result.cpu_ms);
     let code = input.code;
     result.id = state
-        .update_progress(move |state| {
+        .update_progress(&me.learner, move |state, learner| {
             let at = now_ms();
-            let id = state.store.insert_submission(&NewSubmission {
-                slug: &input.slug,
-                at,
-                code: &code,
-                verdict,
-                passed,
-                total,
-                cpu_ms,
-                detail: &detail,
-            })?;
-            state
+            let id = state.store.insert_submission(
+                learner.user,
+                &NewSubmission {
+                    slug: &input.slug,
+                    at,
+                    code: &code,
+                    verdict,
+                    passed,
+                    total,
+                    cpu_ms,
+                    detail: &detail,
+                },
+            )?;
+            learner
                 .progress
                 .write()
                 .record_submission(&input.slug, at, outcome.verdict);
@@ -231,25 +254,30 @@ pub async fn submit(
 /// `?slug=`: a problem's submissions, newest first.
 pub async fn submissions(
     State(state): State<Shared>,
+    me: Me,
     Query(params): Params,
 ) -> ApiResult<impl IntoResponse> {
     let slug =
         param(&params, "slug").ok_or_else(|| ApiError::BadRequest("slug is required".into()))?;
+    let user = me.user;
     let rows = state
-        .db_for(slug, |store, slug| {
-            store.submissions(slug, SUBMISSIONS_SHOWN)
+        .db_for(slug, move |store, slug| {
+            store.submissions(user, slug, SUBMISSIONS_SHOWN)
         })
         .await?;
     Ok(Json(rows))
 }
 
-/// One submission with its code and result.
+/// One of your submissions with its code and result; another account's is a 404, like a
+/// missing one.
 pub async fn submission(
     State(state): State<Shared>,
+    me: Me,
     Path(id): Path<i64>,
 ) -> ApiResult<impl IntoResponse> {
+    let user = me.user;
     state
-        .db(move |store| store.submission(id))
+        .db(move |store| store.submission(user, id))
         .await?
         .map(Json)
         .ok_or_else(|| ApiError::NotFound(format!("No submission {id}")))

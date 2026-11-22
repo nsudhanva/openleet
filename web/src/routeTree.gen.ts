@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as AccountRouteImport } from './routes/account'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProblemsRouteImport } from './routes/problems'
 import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as CodeSlugRouteImport } from './routes/code.$slug'
@@ -23,6 +25,16 @@ const IndexRoute = IndexRouteImport.update({
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProblemsRoute = ProblemsRouteImport.update({
@@ -44,6 +56,8 @@ const CodeSlugRoute = CodeSlugRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
+  '/login': typeof LoginRoute
   '/problems': typeof ProblemsRoute
   '/progress': typeof ProgressRoute
   '/code/$slug': typeof CodeSlugRoute
@@ -51,6 +65,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
+  '/login': typeof LoginRoute
   '/problems': typeof ProblemsRoute
   '/progress': typeof ProgressRoute
   '/code/$slug': typeof CodeSlugRoute
@@ -59,21 +75,47 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
+  '/login': typeof LoginRoute
   '/problems': typeof ProblemsRoute
   '/progress': typeof ProgressRoute
   '/code/$slug': typeof CodeSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/problems' | '/progress' | '/code/$slug'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/account'
+    | '/login'
+    | '/problems'
+    | '/progress'
+    | '/code/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/problems' | '/progress' | '/code/$slug'
-  id: '__root__' | '/' | '/about' | '/problems' | '/progress' | '/code/$slug'
+  to:
+    | '/'
+    | '/about'
+    | '/account'
+    | '/login'
+    | '/problems'
+    | '/progress'
+    | '/code/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/account'
+    | '/login'
+    | '/problems'
+    | '/progress'
+    | '/code/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  AccountRoute: typeof AccountRoute
+  LoginRoute: typeof LoginRoute
   ProblemsRoute: typeof ProblemsRoute
   ProgressRoute: typeof ProgressRoute
   CodeSlugRoute: typeof CodeSlugRoute
@@ -93,6 +135,20 @@ declare module '@tanstack/react-router' {
       path: '/about'
       fullPath: '/about'
       preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/problems': {
@@ -122,6 +178,8 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  AccountRoute: AccountRoute,
+  LoginRoute: LoginRoute,
   ProblemsRoute: ProblemsRoute,
   ProgressRoute: ProgressRoute,
   CodeSlugRoute: CodeSlugRoute,

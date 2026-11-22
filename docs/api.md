@@ -2,7 +2,29 @@
 
 All endpoints live under `/api` and return JSON.
 
+Most endpoints need a session: a signed-in browser sends the session cookie, and the answer holds
+only that account's progress. Without a session they answer `401 {"error": "Sign in to
+continue"}`. The public endpoints are `/session`, `/users`, `/companies`, `/topics`, `/search`,
+`/health`, and `/version`. Writes from another site (`Origin` or `Sec-Fetch-Site` shows it) answer
+`403`.
+
 ## Endpoints
+
+### Accounts
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /session?company=` | The signed-in account (`{email, admin}` or `null`), its readiness for the company, `signupsOpen`, and `needsSetup` |
+| `POST /session` `{email, password}` | Sign in; sets the session cookie. `401` for a wrong email or password (the same answer for both) |
+| `DELETE /session` | Sign out this browser |
+| `POST /users` `{email, password, setupCode?}` | Make an account and sign in. With the setup code, makes the first admin. `403` when sign-ups are closed, `409` when the email has an account |
+| `PUT /account/password` `{current, password}` | Change the password; ends the account's other sessions |
+| `DELETE /account` `{password}` | Delete the account and all its progress (not the admin's) |
+| `GET /admin/settings`, `PATCH /admin/settings` `{signupsOpen}` | Admin only: open or close sign-ups, and the number of accounts |
+
+Passwords have 8 to 128 characters. Sign-in and sign-up allow 30 attempts per address in 15
+minutes, 10 wrong passwords per account and address in 15 minutes, and 10 new accounts per address
+in an hour (`429` past a limit). An address is an IPv4 address or an IPv6 /56.
 
 ### Problems & flashcards
 
@@ -27,7 +49,7 @@ All endpoints live under `/api` and return JSON.
 | `POST /run` `{slug, code, input?}` | Run against examples or custom input |
 | `POST /submit` `{slug, code}` | Run full test suite; returns verdict, CPU time vs. limit, and intended complexity |
 | `GET /submissions?slug=` | Submission list for a problem |
-| `GET /submissions/:id` | Single submission with code and result (kept for newest 100 per problem plus latest Accepted) |
+| `GET /submissions/:id` | One of your submissions with code and result (kept for the newest 100 per problem plus the latest Accepted); another account's id answers `404` |
 
 ### Plans & custom lists
 
@@ -48,7 +70,7 @@ All endpoints live under `/api` and return JSON.
 | Endpoint | Description |
 | --- | --- |
 | `GET /report?company=` | Full progress report and coding insights (see [The report](#the-report)) |
-| `GET /readiness?company=` | Readiness score alone, for the page header |
+| `GET /readiness?company=` | Readiness score alone (the page header reads it from `GET /session`) |
 | `GET /health` | Database, judge, and TLS cert status (`503` if the database is down) |
 | `GET /version` | Running git revision |
 

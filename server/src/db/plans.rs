@@ -5,7 +5,7 @@
 use anyhow::Result;
 use duckdb::{OptionalExt, params};
 
-use super::Store;
+use super::{Store, UserId};
 
 /// Unpinned plans kept; using another drops the least recently used.
 pub const MAX_RECENT_PLANS: usize = 8;
@@ -57,19 +57,19 @@ pub enum Changed {
 }
 
 /// Drops the unpinned plans beyond the [`MAX_RECENT_PLANS`] most recently used.
-const PRUNE: &str = "DELETE FROM plans WHERE NOT pinned AND id NOT IN (
-    SELECT id FROM plans WHERE NOT pinned ORDER BY used_at DESC, id DESC LIMIT ?)";
+const PRUNE: &str = "DELETE FROM plans WHERE user_id = $1 AND NOT pinned AND id NOT IN (
+    SELECT id FROM plans WHERE user_id = $1 AND NOT pinned ORDER BY used_at DESC, id DESC LIMIT $2)";
 
 impl Store {
     /// Every stored plan: pinned first, then by when it was last used, newest first.
-    pub fn plans(&self) -> Result<Vec<SavedPlan>> {
+    pub fn plans(&self, user: UserId) -> Result<Vec<SavedPlan>> {
         self.with(|c| {
             let mut stmt = c.prepare_cached(
                 "SELECT id, company, period, topic, difficulty, status::VARCHAR,
                     sort_order::VARCHAR, name, pinned, epoch_ms(used_at)
-                 FROM plans ORDER BY pinned DESC, used_at DESC, id DESC",
+                 FROM plans WHERE user_id = ? ORDER BY pinned DESC, used_at DESC, id DESC",
             )?;
-            let rows = stmt.query_map([], |r| {
+            let rows = stmt.query_map([user], |r| {
                 Ok(SavedPlan {
                     id: r.get(0)?,
                     company: r.get(1)?,
@@ -91,17 +91,18 @@ impl Store {
     /// matching NULL) is touched, or a new one inserted; then the oldest unpinned plans past
     /// [`MAX_RECENT_PLANS`] go. Returns the plan's id. One row per plan holds only while
     /// writes are serialized, as `AppState::update_progress` does.
-    pub fn use_plan(&self, key: &PlanKey<'_>, at: i64) -> Result<i64> {
+    pub fn use_plan(&self, user: UserId, key: &PlanKey<'_>, at: i64) -> Result<i64> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
         let found: Option<i64> = tx
             .prepare_cached(
-                "SELECT id FROM plans WHERE company = ? AND period = ?
+                "SELECT id FROM plans WHERE user_id = ? AND company = ? AND period = ?
                     AND topic IS NOT DISTINCT FROM ? AND difficulty IS NOT DISTINCT FROM ?
                     AND status = ? AND sort_order = ?",
             )?
             .query_row(
                 params![
+                    user,
                     key.company,
                     key.period,
                     key.topic,
@@ -114,15 +115,18 @@ impl Store {
             .optional()?;
         let id = match found {
             Some(id) => {
-                tx.prepare_cached("UPDATE plans SET used_at = to_timestamp(? / 1000) WHERE id = ?")?
-                    .execute(params![at, id])?;
+                tx.prepare_cached(
+                    "UPDATE plans SET used_at = to_timestamp(? / 1000) WHERE user_id = ? AND id = ?",
+                )?
+                .execute(params![at, user, id])?;
                 id
             }
             None => tx
                 .prepare_cached(
-                    "INSERT INTO plans (company, period, topic, difficulty, status, sort_order,
-                        created_at, used_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, to_timestamp($7 / 1000), to_timestamp($7 / 1000))
+                    "INSERT INTO plans (user_id, company, period, topic, difficulty, status,
+                        sort_order, created_at, used_at)
+                     VALUES ($8, $1, $2, $3, $4, $5, $6, to_timestamp($7 / 1000),
+                        to_timestamp($7 / 1000))
                      RETURNING id",
                 )?
                 .query_row(
@@ -133,57 +137,69 @@ impl Store {
                         key.difficulty,
                         key.status,
                         key.order,
-                        at
+                        at,
+                        user
                     ],
                     |r| r.get(0),
                 )?,
         };
-        tx.prepare_cached(PRUNE)?.execute([MAX_RECENT_PLANS])?;
+        tx.prepare_cached(PRUNE)?
+            .execute(params![user, MAX_RECENT_PLANS])?;
         tx.commit()?;
         Ok(id)
     }
 
     /// Renames, pins or unpins a plan. Unpinning counts as using it, so it heads the recent
     /// plans instead of being dropped at once.
-    pub fn change_plan(&self, id: i64, change: &PlanChange, at: i64) -> Result<Changed> {
+    pub fn change_plan(
+        &self,
+        user: UserId,
+        id: i64,
+        change: &PlanChange,
+        at: i64,
+    ) -> Result<Changed> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
         let pinned: Option<bool> = tx
-            .prepare_cached("SELECT pinned FROM plans WHERE id = ?")?
-            .query_row([id], |r| r.get(0))
+            .prepare_cached("SELECT pinned FROM plans WHERE user_id = ? AND id = ?")?
+            .query_row(params![user, id], |r| r.get(0))
             .optional()?;
         let Some(was_pinned) = pinned else {
             return Ok(Changed::Missing);
         };
         if change.pinned == Some(true) && !was_pinned {
-            let pinned: i64 =
-                tx.query_row("SELECT count(*) FROM plans WHERE pinned", [], |r| r.get(0))?;
+            let pinned: i64 = tx.query_row(
+                "SELECT count(*) FROM plans WHERE user_id = ? AND pinned",
+                [user],
+                |r| r.get(0),
+            )?;
             if usize::try_from(pinned).unwrap_or(usize::MAX) >= MAX_PINNED_PLANS {
                 return Ok(Changed::TooManyPinned);
             }
         }
         if let Some(name) = &change.name {
-            tx.prepare_cached("UPDATE plans SET name = ? WHERE id = ?")?
-                .execute(params![name, id])?;
+            tx.prepare_cached("UPDATE plans SET name = ? WHERE user_id = ? AND id = ?")?
+                .execute(params![name, user, id])?;
         }
         if let Some(pinned) = change.pinned {
             tx.prepare_cached(
                 "UPDATE plans SET pinned = $1,
                     used_at = CASE WHEN $1 THEN used_at ELSE to_timestamp($2 / 1000) END
-                 WHERE id = $3",
+                 WHERE user_id = $4 AND id = $3",
             )?
-            .execute(params![pinned, at, id])?;
-            tx.prepare_cached(PRUNE)?.execute([MAX_RECENT_PLANS])?;
+            .execute(params![pinned, at, id, user])?;
+            tx.prepare_cached(PRUNE)?
+                .execute(params![user, MAX_RECENT_PLANS])?;
         }
         tx.commit()?;
         Ok(Changed::Done)
     }
 
     /// Forgets a plan; `false` when no plan has the id.
-    pub fn delete_plan(&self, id: i64) -> Result<bool> {
+    pub fn delete_plan(&self, user: UserId, id: i64) -> Result<bool> {
         self.with(|c| {
-            c.prepare_cached("DELETE FROM plans WHERE id = ?")?
-                .execute([id])
+            c.prepare_cached("DELETE FROM plans WHERE user_id = ? AND id = ?")?
+                .execute(params![user, id])
                 .map(|n| n > 0)
         })
     }
@@ -192,6 +208,8 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const U: UserId = UserId::test(1);
     use crate::db::testing::TempDir;
 
     fn store() -> (Store, TempDir) {
@@ -213,22 +231,22 @@ mod tests {
     #[test]
     fn keeps_one_row_per_plan_matching_null_filters() {
         let (store, _dir) = store();
-        let first = store.use_plan(&GOOGLE, 1_000).unwrap();
-        assert_eq!(store.use_plan(&GOOGLE, 2_000).unwrap(), first);
+        let first = store.use_plan(U, &GOOGLE, 1_000).unwrap();
+        assert_eq!(store.use_plan(U, &GOOGLE, 2_000).unwrap(), first);
         let graph = PlanKey {
             topic: Some("Graph"),
             ..GOOGLE
         };
-        let second = store.use_plan(&graph, 3_000).unwrap();
+        let second = store.use_plan(U, &graph, 3_000).unwrap();
         assert_ne!(second, first);
-        assert_eq!(store.use_plan(&graph, 4_000).unwrap(), second);
+        assert_eq!(store.use_plan(U, &graph, 4_000).unwrap(), second);
         let hard = PlanKey {
             difficulty: Some("Hard"),
             order: "random",
             ..graph
         };
-        let third = store.use_plan(&hard, 5_000).unwrap();
-        let plans = store.plans().unwrap();
+        let third = store.use_plan(U, &hard, 5_000).unwrap();
+        let plans = store.plans(U).unwrap();
         assert_eq!(
             plans.iter().map(|p| (p.id, p.used_at)).collect::<Vec<_>>(),
             [(third, 5_000), (second, 4_000), (first, 2_000)]
@@ -250,11 +268,11 @@ mod tests {
                     topic: Some(topic),
                     ..GOOGLE
                 };
-                store.use_plan(&key, at).unwrap()
+                store.use_plan(U, &key, at).unwrap()
             })
             .collect();
         // The first two went when the ninth and tenth were used.
-        let kept: Vec<i64> = store.plans().unwrap().iter().map(|p| p.id).collect();
+        let kept: Vec<i64> = store.plans(U).unwrap().iter().map(|p| p.id).collect();
         assert_eq!(kept.len(), MAX_RECENT_PLANS);
         assert!(!kept.contains(&ids[0]) && !kept.contains(&ids[1]));
 
@@ -263,9 +281,12 @@ mod tests {
             pinned: Some(true),
             name: Some(Some("Graphs".into())),
         };
-        assert_eq!(store.change_plan(ids[2], &pin, 20).unwrap(), Changed::Done);
-        store.use_plan(&GOOGLE, 30).unwrap();
-        let plans = store.plans().unwrap();
+        assert_eq!(
+            store.change_plan(U, ids[2], &pin, 20).unwrap(),
+            Changed::Done
+        );
+        store.use_plan(U, &GOOGLE, 30).unwrap();
+        let plans = store.plans(U).unwrap();
         assert_eq!(plans[0].id, ids[2]);
         assert_eq!(
             (plans[0].pinned, plans[0].name.as_deref()),
@@ -279,20 +300,22 @@ mod tests {
             name: Some(None),
         };
         assert_eq!(
-            store.change_plan(ids[2], &unpin, 40).unwrap(),
+            store.change_plan(U, ids[2], &unpin, 40).unwrap(),
             Changed::Done
         );
-        let plans = store.plans().unwrap();
+        let plans = store.plans(U).unwrap();
         assert_eq!((plans[0].id, plans[0].used_at), (ids[2], 40));
         assert_eq!((plans[0].pinned, plans[0].name.as_deref()), (false, None));
         assert_eq!(plans.len(), MAX_RECENT_PLANS);
 
         assert_eq!(
-            store.change_plan(999, &PlanChange::default(), 0).unwrap(),
+            store
+                .change_plan(U, 999, &PlanChange::default(), 0)
+                .unwrap(),
             Changed::Missing
         );
-        assert!(store.delete_plan(ids[2]).unwrap());
-        assert!(!store.delete_plan(ids[2]).unwrap());
+        assert!(store.delete_plan(U, ids[2]).unwrap());
+        assert!(!store.delete_plan(U, ids[2]).unwrap());
     }
 
     #[test]
@@ -309,11 +332,11 @@ mod tests {
                 topic: Some(name),
                 ..GOOGLE
             };
-            let id = store.use_plan(&key, at).unwrap();
-            last = store.change_plan(id, &pin, at).unwrap();
+            let id = store.use_plan(U, &key, at).unwrap();
+            last = store.change_plan(U, id, &pin, at).unwrap();
         }
         assert_eq!(last, Changed::TooManyPinned);
-        let pinned = store.plans().unwrap().iter().filter(|p| p.pinned).count();
+        let pinned = store.plans(U).unwrap().iter().filter(|p| p.pinned).count();
         assert_eq!(pinned, MAX_PINNED_PLANS);
     }
 }

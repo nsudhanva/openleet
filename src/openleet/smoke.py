@@ -8,13 +8,18 @@ Only HTTP is used, so the same command checks a local server and production:
     uv run openleet smoke --base-url https://openleet.sudhanva.me --seed 7
 
 Reference solutions come from data/judge/specs.json (`--specs`), which should match the server's
-release. Safe for production: requests are sequential (except the concurrency check), progress
-and notes are never touched, and every draft it changes is put back. Submissions it makes stay
-in each problem's history, and an accepted one marks the problem solved.
+release. The server needs an account. With OPENLEET_EMAIL and OPENLEET_PASSWORD set, the smoke
+test signs in as that account; otherwise it makes a throwaway account (sign-ups must be open) and
+deletes it, with everything it submitted, at the end. Safe for production: requests are
+sequential (except the concurrency check), progress and notes are never touched, and every draft
+it changes is put back. In a named account, submissions it makes stay in each problem's
+history, and an accepted one marks the problem solved.
 """
 
 import json
+import os
 import random
+import secrets
 import sys
 import time
 import urllib.error
@@ -85,20 +90,27 @@ class Reply:
 class Api:
     def __init__(self, base: str):
         self.base = base.rstrip("/")
+        # The session cookie ("name=token"), once signed in.
+        self.cookie: str | None = None
 
     def raw(self, method: str, path: str, data: bytes | None = None) -> Reply:
+        headers = {"Content-Type": "application/json", "User-Agent": "openleet-smoke"}
+        if self.cookie:
+            headers["Cookie"] = self.cookie
         request = urllib.request.Request(
-            self.base + path,
-            data=data,
-            method=method,
-            headers={"Content-Type": "application/json", "User-Agent": "openleet-smoke"},
+            self.base + path, data=data, method=method, headers=headers
         )
         started = time.monotonic()
         try:
             with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
                 status, text = response.status, response.read()
+                set_cookie = response.headers.get("Set-Cookie")
         except urllib.error.HTTPError as error:
             status, text = error.code, error.read()
+            set_cookie = error.headers.get("Set-Cookie")
+        if set_cookie:
+            pair = set_cookie.split(";", 1)[0]
+            self.cookie = pair if pair.split("=", 1)[1:] != [""] else None
         try:
             body = json.loads(text) if text else None
         except ValueError:
@@ -113,6 +125,30 @@ class Api:
                 return reply
             time.sleep(BUSY_WAIT_S)
         return reply
+
+    def sign_in(self) -> str | None:
+        """Signs in as OPENLEET_EMAIL, or makes a throwaway account; returns the throwaway
+        account's password (to delete it later), else None."""
+        email, password = os.environ.get("OPENLEET_EMAIL"), os.environ.get("OPENLEET_PASSWORD")
+        if email and password:
+            reply = self.call("POST", "/api/session", {"email": email, "password": password})
+            if reply.status != 200:
+                raise RuntimeError(f"signing in as {email}: {reply.status} {reply.error}")
+            return None
+        password = secrets.token_urlsafe(24)
+        email = f"smoke-{secrets.token_hex(6)}@openleet.invalid"
+        reply = self.call("POST", "/api/users", {"email": email, "password": password})
+        if reply.status != 201:
+            raise RuntimeError(
+                f"making a throwaway account: {reply.status} {reply.error} "
+                "(set OPENLEET_EMAIL and OPENLEET_PASSWORD to use an account)"
+            )
+        return password
+
+    def delete_account(self, password: str) -> None:
+        reply = self.call("DELETE", "/api/account", {"password": password})
+        if reply.status != 204:
+            raise RuntimeError(f"deleting the throwaway account: {reply.status} {reply.error}")
 
     def submit(self, slug: str, code: str, retry_busy: bool = True) -> Reply:
         return self.call("POST", "/api/submit", {"slug": slug, "code": code}, retry_busy)
@@ -1030,6 +1066,7 @@ def smoke(
     chosen = sample(specs, size, rng)
     abuse = abuse_problem(specs)
     api = Api(base_url)
+    throwaway = api.sign_in()
 
     def show(row: Row) -> None:
         print(line(row), file=out, flush=True)
@@ -1039,6 +1076,8 @@ def smoke(
     print(header(), file=out, flush=True)
     run.health("at start")
     if not run.rows[-1].ok:
+        if throwaway:
+            api.delete_account(throwaway)
         return finish(run, seed, base_url, as_json, [], [], out)
     used = [*dict.fromkeys([*chosen, abuse])]
     saved = run.snapshot(used)
@@ -1053,7 +1092,10 @@ def smoke(
     finally:
         broken = run.restore(saved)
         run.health("at end")
-    solved = [slug for slug, (_, _, was) in saved.items() if not was]
+        if throwaway:
+            api.delete_account(throwaway)
+    # A throwaway account went with everything it did.
+    solved = [] if throwaway else [slug for slug, (_, _, was) in saved.items() if not was]
     return finish(run, seed, base_url, as_json, broken, solved, out)
 
 

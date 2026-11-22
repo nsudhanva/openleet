@@ -13,8 +13,10 @@ use openleet::service::{ProblemParams, ProblemQuery};
 use openleet::user_lists::UserLists;
 
 use super::{Params, param};
+use crate::auth::Me;
 use crate::db::{Changed, MAX_PINNED_PLANS, PlanChange, PlanKey, SavedPlan};
 use crate::error::{ApiError, ApiResult};
+use crate::state::Learner;
 use crate::state::{Shared, now_ms};
 
 /// Longest plan name, in characters.
@@ -48,7 +50,11 @@ fn parse_plan(content: &Content, params: &ProblemParams<'_>) -> Plan {
 /// `?slug=&company=&period=&topic=&difficulty=&status=&order=`: the plan's next problem after
 /// `slug` (from the start without one), its progress and, from `slug`, the pivots. All from
 /// memory; an unknown slug is a 404.
-pub async fn next(State(state): State<Shared>, Query(params): Params) -> ApiResult<Response> {
+pub async fn next(
+    State(state): State<Shared>,
+    me: Me,
+    Query(params): Params,
+) -> ApiResult<Response> {
     let content = &state.content;
     let current = match param(&params, "slug").filter(|s| !s.is_empty()) {
         Some(slug) => Some(state.problem(slug)?),
@@ -69,10 +75,10 @@ pub async fn next(State(state): State<Shared>, Query(params): Params) -> ApiResu
     );
     let (progress, report) = match current {
         Some(_) => {
-            let (progress, report) = state.report(plan.list.company, now_ms());
+            let (progress, report) = me.learner.report(content, plan.list.company, now_ms());
             (progress, Some(report))
         }
-        None => (state.progress.read(), None),
+        None => (me.learner.progress.read(), None),
     };
     // The topic you name least, as the progress page lists them: rated on every graded card,
     // so any company's report names the same one.
@@ -132,8 +138,8 @@ fn entry<'a>(content: &'a Content, saved: &'a SavedPlan, marks: Marks<'_>) -> Pl
 }
 
 /// Pinned plans first, then the recent ones, last used first.
-pub async fn plans(State(state): State<Shared>) -> Response {
-    let progress = state.progress.read();
+pub async fn plans(State(state): State<Shared>, me: Me) -> Response {
+    let progress = me.learner.progress.read();
     let entries: Vec<PlanEntry<'_>> = progress
         .plans
         .iter()
@@ -143,8 +149,8 @@ pub async fn plans(State(state): State<Shared>) -> Response {
 }
 
 /// The stored plan with `id`, as the API shows it, else a 404.
-fn plan_response(state: &Shared, id: i64) -> ApiResult<Response> {
-    let progress = state.progress.read();
+fn plan_response(state: &Shared, learner: &Learner, id: i64) -> ApiResult<Response> {
+    let progress = learner.progress.read();
     let saved = progress
         .plans
         .iter()
@@ -170,6 +176,7 @@ pub struct PlanInput {
 /// learner's own lists is not recorded: the list itself is kept.
 pub async fn use_plan(
     State(state): State<Shared>,
+    me: Me,
     Json(input): Json<PlanInput>,
 ) -> ApiResult<Response> {
     if input.list.as_ref().is_some_and(|list| !list.is_null()) {
@@ -191,7 +198,7 @@ pub async fn use_plan(
         },
     );
     let id = state
-        .update_progress(move |state| {
+        .update_progress(&me.learner, move |state, learner| {
             let view = plan.view(&state.content);
             let key = PlanKey {
                 company: view.company,
@@ -201,13 +208,13 @@ pub async fn use_plan(
                 status: view.status.as_str(),
                 order: view.order.as_str(),
             };
-            let id = state.store.use_plan(&key, now_ms())?;
-            let plans = state.store.plans()?;
-            state.progress.write().plans = plans;
+            let id = state.store.use_plan(learner.user, &key, now_ms())?;
+            let plans = state.store.plans(learner.user)?;
+            learner.progress.write().plans = plans;
             Ok(id)
         })
         .await?;
-    plan_response(&state, id)
+    plan_response(&state, &me.learner, id)
 }
 
 /// Body of `PATCH /api/plans/{id}`: a new name (`null` for none, so the label shows), a pin,
@@ -239,22 +246,25 @@ impl PlanEdit {
 /// Renames, pins or unpins a plan.
 pub async fn edit_plan(
     State(state): State<Shared>,
+    me: Me,
     Path(id): Path<i64>,
     Json(edit): Json<PlanEdit>,
 ) -> ApiResult<Response> {
     let change = edit.change()?;
     let changed = state
-        .update_progress(move |state| {
-            let changed = state.store.change_plan(id, &change, now_ms())?;
+        .update_progress(&me.learner, move |state, learner| {
+            let changed = state
+                .store
+                .change_plan(learner.user, id, &change, now_ms())?;
             if changed == Changed::Done {
-                let plans = state.store.plans()?;
-                state.progress.write().plans = plans;
+                let plans = state.store.plans(learner.user)?;
+                learner.progress.write().plans = plans;
             }
             Ok(changed)
         })
         .await?;
     match changed {
-        Changed::Done => plan_response(&state, id),
+        Changed::Done => plan_response(&state, &me.learner, id),
         Changed::Missing => Err(ApiError::NotFound(format!("No plan {id}"))),
         Changed::TooManyPinned => Err(ApiError::BadRequest(format!(
             "At most {MAX_PINNED_PLANS} plans can be pinned"
@@ -264,13 +274,14 @@ pub async fn edit_plan(
 
 pub async fn delete_plan(
     State(state): State<Shared>,
+    me: Me,
     Path(id): Path<i64>,
 ) -> ApiResult<StatusCode> {
     let deleted = state
-        .update_progress(move |state| {
-            let deleted = state.store.delete_plan(id)?;
+        .update_progress(&me.learner, move |state, learner| {
+            let deleted = state.store.delete_plan(learner.user, id)?;
             if deleted {
-                state.progress.write().plans.retain(|p| p.id != id);
+                learner.progress.write().plans.retain(|p| p.id != id);
             }
             Ok(deleted)
         })
@@ -287,12 +298,12 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::api::testing::{json, query, state};
+    use crate::api::testing::{json, me, query, state};
     use crate::db::testing::TempDir;
 
     async fn next_of(state: &Shared, pairs: &[(&str, &str)]) -> serde_json::Value {
         json(
-            next(State(Arc::clone(state)), query(pairs))
+            next(State(Arc::clone(state)), me(state).await, query(pairs))
                 .await
                 .expect("next"),
         )
@@ -312,11 +323,11 @@ mod tests {
         let total = first["progress"]["total"].as_u64().expect("total");
         assert!(total > 100);
 
-        state
-            .progress
-            .write()
-            .coding
-            .record("two-sum", 1, openleet_proto::Verdict::Accepted);
+        me(&state).await.learner.progress.write().coding.record(
+            "two-sum",
+            1,
+            openleet_proto::Verdict::Accepted,
+        );
         let after = next_of(&state, &[("slug", "two-sum")]).await;
         assert_ne!(after["next"]["slug"], "two-sum");
         assert_eq!(after["progress"]["solved"], 1);
@@ -338,6 +349,7 @@ mod tests {
         assert_eq!(lenient["plan"], first["plan"]);
         let unknown = next(
             State(Arc::clone(&state)),
+            me(&state).await,
             query(&[("slug", "no-such-problem")]),
         )
         .await;
@@ -364,7 +376,7 @@ mod tests {
         let state = state(&dir);
         let used = |input| async {
             json(
-                use_plan(State(Arc::clone(&state)), Json(input))
+                use_plan(State(Arc::clone(&state)), me(&state).await, Json(input))
                     .await
                     .expect("used"),
             )
@@ -381,17 +393,22 @@ mod tests {
         assert_eq!(again["id"], first["id"]);
         let graph = used(input(Some("Graph Theory"))).await;
         assert_ne!(graph["id"], first["id"]);
-        let list = json(plans(State(Arc::clone(&state))).await).await;
+        let list = json(plans(State(Arc::clone(&state)), me(&state).await).await).await;
         assert_eq!(list.as_array().map(Vec::len), Some(2));
         assert_eq!(list[0]["id"], graph["id"], "last used first");
-        assert_eq!(state.progress.read().plans, state.store.plans().unwrap());
+        let mine = me(&state).await;
+        assert_eq!(
+            mine.learner.progress.read().plans,
+            state.store.plans(mine.user).unwrap()
+        );
 
         let id = first["id"].as_i64().expect("id");
         let edit = |body: serde_json::Value| {
             let state = Arc::clone(&state);
             async move {
                 let edit: PlanEdit = serde_json::from_value(body).expect("edit");
-                edit_plan(State(state), Path(id), Json(edit)).await
+                let me = me(&state).await;
+                edit_plan(State(state), me, Path(id), Json(edit)).await
             }
         };
         let named = json(
@@ -404,7 +421,7 @@ mod tests {
             (&named["name"], &named["pinned"]),
             (&"Meta warm-up".into(), &true.into())
         );
-        let list = json(plans(State(Arc::clone(&state))).await).await;
+        let list = json(plans(State(Arc::clone(&state)), me(&state).await).await).await;
         assert_eq!(list[0]["id"], id, "pinned first");
         for bad in [
             serde_json::json!({"name": "   "}),
@@ -429,21 +446,27 @@ mod tests {
         assert_eq!(cleared["name"], serde_json::Value::Null);
 
         assert_eq!(
-            delete_plan(State(Arc::clone(&state)), Path(id))
+            delete_plan(State(Arc::clone(&state)), me(&state).await, Path(id))
                 .await
                 .expect("deleted"),
             StatusCode::NO_CONTENT
         );
         assert!(matches!(
-            delete_plan(State(Arc::clone(&state)), Path(id)).await,
+            delete_plan(State(Arc::clone(&state)), me(&state).await, Path(id)).await,
             Err(ApiError::NotFound(_))
         ));
         let missing: PlanEdit =
             serde_json::from_value(serde_json::json!({"pinned": true})).expect("edit");
         assert!(matches!(
-            edit_plan(State(Arc::clone(&state)), Path(id), Json(missing)).await,
+            edit_plan(
+                State(Arc::clone(&state)),
+                me(&state).await,
+                Path(id),
+                Json(missing)
+            )
+            .await,
             Err(ApiError::NotFound(_))
         ));
-        assert_eq!(state.progress.read().plans.len(), 1);
+        assert_eq!(me(&state).await.learner.progress.read().plans.len(), 1);
     }
 }

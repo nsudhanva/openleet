@@ -175,6 +175,13 @@ function About() {
 							something looks off.
 						</p>
 					</Section>
+					<Section title="Accounts">
+						<p>
+							Each person signs in with an email and a password. Progress,
+							notes, drafts, plans and lists belong to the account. Delete the
+							account on the Account page to remove all of it.
+						</p>
+					</Section>
 					<Section title="API">
 						<p>
 							The app serves JSON under <code>/api</code>:{" "}

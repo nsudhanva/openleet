@@ -51,6 +51,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "user_lists",
         sql: include_str!("migrations/0006_user_lists.sql"),
     },
+    Migration {
+        version: 7,
+        name: "accounts",
+        sql: include_str!("migrations/0007_accounts.sql"),
+    },
 ];
 
 /// The version this build migrates databases to.
@@ -297,7 +302,8 @@ mod tests {
                 "shaky_plans",
                 "metric_comments",
                 "submissions_kept",
-                "user_lists"
+                "user_lists",
+                "accounts"
             ]
         );
         // Migration 4 changes only comments: the daily scores stay, described as kept data.
@@ -312,8 +318,8 @@ mod tests {
         // The new table takes plans, with NULL filters, and rejects impossible ones.
         let id: i64 = conn
             .query_row(
-                "INSERT INTO plans (company, period, status, sort_order, created_at, used_at)
-                 VALUES ('google', '6m', 'unsolved', 'rank', now(), now()) RETURNING id",
+                "INSERT INTO plans (user_id, company, period, status, sort_order, created_at, used_at)
+                 VALUES (1, 'google', '6m', 'unsolved', 'rank', now(), now()) RETURNING id",
                 [],
                 |r| r.get(0),
             )
@@ -321,8 +327,8 @@ mod tests {
         assert_eq!(id, 1);
         let insert = |columns: &str, values: &str| {
             conn.execute_batch(&format!(
-                "INSERT INTO plans (company, period, status, sort_order{columns}, created_at, used_at)
-                 VALUES ({values}, now(), now())"
+                "INSERT INTO plans (user_id, company, period, status, sort_order{columns}, created_at, used_at)
+                 VALUES (1, {values}, now(), now())"
             ))
         };
         insert(
@@ -381,8 +387,8 @@ mod tests {
         );
         let id: i64 = conn
             .query_row(
-                "INSERT INTO plans (company, period, status, sort_order, created_at, used_at)
-                 VALUES ('google', '6m', 'shaky', 'rank', now(), now()) RETURNING id",
+                "INSERT INTO plans (user_id, company, period, status, sort_order, created_at, used_at)
+                 VALUES (1, 'google', '6m', 'shaky', 'rank', now(), now()) RETURNING id",
                 [],
                 |r| r.get(0),
             )
@@ -390,10 +396,102 @@ mod tests {
         assert_eq!(id, 2, "the id sequence goes on");
         assert!(
             conn.execute_batch(
-                "INSERT INTO plans (company, period, status, sort_order, created_at, used_at)
-                 VALUES ('google', '6m', 'solved', 'rank', now(), now())"
+                "INSERT INTO plans (user_id, company, period, status, sort_order, created_at, used_at)
+                 VALUES (1, 'google', '6m', 'solved', 'rank', now(), now())"
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn migrates_version_6_progress_to_the_first_admin() {
+        let dir = TempDir::new("migrate-v6");
+        let path = dir.path("p.duckdb");
+        {
+            let mut conn = Connection::open(&path).unwrap();
+            migrate_to(&mut conn, 6).unwrap();
+            conn.execute_batch(
+                "INSERT INTO attempts (slug, answered_at, grade, guessed_topics, topic_score,
+                    hints_used) VALUES ('two-sum', to_timestamp(1), 'good', ['Array'], 1.0, 0);
+                 INSERT INTO notes VALUES ('two-sum', 'mine', to_timestamp(1));
+                 INSERT INTO drafts VALUES ('two-sum', 'code', NULL, to_timestamp(1));
+                 INSERT INTO daily_scores VALUES ('2026-11-01', to_timestamp(1), 0.5, 0.5, NULL);
+                 INSERT INTO submissions (slug, submitted_at, code, verdict, tests_passed,
+                    tests_total, cpu_ms) VALUES ('two-sum', to_timestamp(1), 'x', 'accepted', 1, 1, 1);
+                 INSERT INTO plans (company, period, status, sort_order, created_at, used_at)
+                    VALUES ('google', '6m', 'all', 'rank', now(), now());
+                 INSERT INTO user_lists (name, created_at, updated_at) VALUES ('L', now(), now());
+                 INSERT INTO user_list_problems VALUES (1, 'two-sum', 0);",
+            )
+            .unwrap();
+        }
+        let mut conn = Connection::open(&path).unwrap();
+        assert_eq!(migrate(&mut conn).unwrap().from, Shape::Version(6));
+        for table in [
+            "attempts",
+            "notes",
+            "drafts",
+            "daily_scores",
+            "submissions",
+            "plans",
+            "user_lists",
+        ] {
+            assert_eq!(
+                strings(
+                    &conn,
+                    &format!("SELECT format('{{}}', list(DISTINCT user_id)) FROM {table}")
+                ),
+                ["[1]"],
+                "{table}"
+            );
+        }
+        // Keys now include the account: two accounts may each note the same problem.
+        conn.execute_batch(
+            "INSERT INTO notes VALUES (2, 'two-sum', 'theirs', now());
+             INSERT INTO drafts VALUES (2, 'two-sum', 'code', NULL, now());",
+        )
+        .unwrap();
+        assert!(
+            conn.execute_batch("INSERT INTO notes VALUES (2, 'two-sum', 'again', now())")
+                .is_err()
+        );
+        // Every progress row names its account.
+        assert!(
+            conn.execute_batch(
+                "INSERT INTO attempts (slug, answered_at, grade, guessed_topics, topic_score,
+                    hints_used) VALUES ('a', now(), 'skip', [], NULL, 0)"
+            )
+            .is_err()
+        );
+        // Sign-ups start open; new accounts get ids from 2, as user 1 is the first admin.
+        assert_eq!(
+            strings(&conn, "SELECT signups_open::VARCHAR FROM settings"),
+            ["true"]
+        );
+        let id: i64 = conn
+            .query_row(
+                "INSERT INTO users (email, password_hash, created_at, password_changed_at)
+                 VALUES ('a@example.com', '$argon2id$x', now(), now()) RETURNING id",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(id, 2);
+        assert!(
+            conn.execute_batch(
+                "INSERT INTO users (email, password_hash, created_at, password_changed_at)
+                 VALUES ('a@example.com', '$argon2id$y', now(), now())"
+            )
+            .is_err(),
+            "one account per email"
+        );
+        assert!(
+            conn.execute_batch(
+                "INSERT INTO users (email, password_hash, created_at, password_changed_at)
+                 VALUES ('b@example.com', 'plaintext', now(), now())"
+            )
+            .is_err(),
+            "only Argon2id hashes"
         );
     }
 

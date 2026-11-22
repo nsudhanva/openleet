@@ -1,15 +1,19 @@
-//! Durable state in DuckDB: the attempt log, notes, daily scores, code drafts, submissions and
-//! practice plans (`STATE_DIR/openleet.duckdb`, schema in `migrations/`), plus the judge's
-//! read-only test corpus attached alongside.
+//! Durable state in DuckDB: accounts and sessions, and each account's attempt log, notes, daily
+//! scores, code drafts, submissions, practice plans and lists (`STATE_DIR/openleet.duckdb`,
+//! schema in `migrations/`), plus the judge's read-only test corpus attached alongside.
 //!
-//! Hot reads never come here: the server keeps the attempt log, card states and notes in
-//! memory and only writes through. DuckDB earns its place on the analytical side (submission
+//! Every progress method takes the [`UserId`] whose rows it reads or writes, and every query
+//! filters on it: no method reaches another account's rows.
+//!
+//! Hot reads never come here: the server keeps each active account's attempt log, card states
+//! and notes in memory and only writes through. DuckDB earns its place on the analytical side (submission
 //! history and statistics) and as a compact, compressed store for the test corpus.
 //!
 //! The API speaks Unix milliseconds; the tables hold TIMESTAMPTZ. Every query converts at the
 //! boundary: `to_timestamp(? / 1000)` in, `epoch_ms(column)` out (exact, and independent of
 //! any time zone; see `migrations/0001_progress.sql`).
 
+mod accounts;
 pub mod backup;
 mod corpus;
 mod lists;
@@ -30,6 +34,7 @@ use serde_json::value::RawValue;
 use openleet::coding::{CodingLog, verdict_named};
 use openleet::model::{Attempt, Grade};
 
+pub use accounts::{NewUser, StoredSession, User, UserId};
 pub use backup::Backup;
 use corpus::Corpus;
 pub use corpus::{TestRow, Tests};
@@ -307,15 +312,15 @@ impl Store {
         backup::daily(&self.conn.lock(), &self.backups, day)
     }
 
-    /// The whole attempt log, oldest first.
-    pub fn attempts(&self) -> Result<Vec<Attempt>> {
+    /// An account's attempt log, oldest first.
+    pub fn attempts(&self, user: UserId) -> Result<Vec<Attempt>> {
         self.with(|c| {
             let mut stmt = c.prepare_cached(
                 "SELECT slug, epoch_ms(answered_at), grade::VARCHAR,
                     to_json(guessed_topics)::VARCHAR, topic_score, hints_used
-                 FROM attempts ORDER BY answered_at, id",
+                 FROM attempts WHERE user_id = ? ORDER BY answered_at, id",
             )?;
-            let rows = stmt.query_map([], |r| {
+            let rows = stmt.query_map([user], |r| {
                 let grade: String = r.get(2)?;
                 let guessed: String = r.get(3)?;
                 Ok(Attempt {
@@ -332,15 +337,16 @@ impl Store {
     }
 
     /// Appends one attempt to the log.
-    pub fn insert_attempt(&self, a: &Attempt) -> Result<()> {
+    pub fn insert_attempt(&self, user: UserId, a: &Attempt) -> Result<()> {
         let guessed = serde_json::to_string(&a.guessed)?;
         self.with(|c| {
             c.prepare_cached(
-                "INSERT INTO attempts (slug, answered_at, grade, guessed_topics, topic_score,
-                    hints_used)
-                 VALUES (?, to_timestamp(? / 1000), ?, json(?)::VARCHAR[], ?, ?)",
+                "INSERT INTO attempts (user_id, slug, answered_at, grade, guessed_topics,
+                    topic_score, hints_used)
+                 VALUES (?, ?, to_timestamp(? / 1000), ?, json(?)::VARCHAR[], ?, ?)",
             )?
             .execute(params![
+                user,
                 a.slug,
                 a.at,
                 a.grade.as_str(),
@@ -352,121 +358,138 @@ impl Store {
         })
     }
 
-    /// Clears one problem's history, or every attempt and daily score.
-    pub fn delete_attempts(&self, slug: Option<&str>) -> Result<()> {
+    /// Clears an account's history of one problem, or all its attempts and daily scores.
+    pub fn delete_attempts(&self, user: UserId, slug: Option<&str>) -> Result<()> {
         self.with(|c| match slug {
             Some(slug) => c
-                .execute("DELETE FROM attempts WHERE slug = ?", [slug])
+                .execute(
+                    "DELETE FROM attempts WHERE user_id = ? AND slug = ?",
+                    params![user, slug],
+                )
                 .map(drop),
-            None => c.execute_batch("DELETE FROM attempts; DELETE FROM daily_scores;"),
+            None => {
+                c.execute("DELETE FROM attempts WHERE user_id = ?", [user])?;
+                c.execute("DELETE FROM daily_scores WHERE user_id = ?", [user])
+                    .map(drop)
+            }
         })
     }
 
-    /// Every note, by slug.
-    pub fn notes(&self) -> Result<HashMap<String, String>> {
+    /// An account's notes, by slug.
+    pub fn notes(&self, user: UserId) -> Result<HashMap<String, String>> {
         self.with(|c| {
-            let mut stmt = c.prepare("SELECT slug, body FROM notes")?;
-            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            let mut stmt = c.prepare_cached("SELECT slug, body FROM notes WHERE user_id = ?")?;
+            let rows = stmt.query_map([user], |r| Ok((r.get(0)?, r.get(1)?)))?;
             rows.collect()
         })
     }
 
     /// Saves your answer to a problem; empty text deletes it.
-    pub fn save_note(&self, slug: &str, text: &str, at: i64) -> Result<()> {
+    pub fn save_note(&self, user: UserId, slug: &str, text: &str, at: i64) -> Result<()> {
         self.with(|c| {
             if text.is_empty() {
-                c.prepare_cached("DELETE FROM notes WHERE slug = ?")?
-                    .execute([slug])
+                c.prepare_cached("DELETE FROM notes WHERE user_id = ? AND slug = ?")?
+                    .execute(params![user, slug])
                     .map(drop)
             } else {
                 c.prepare_cached(
-                    "INSERT INTO notes (slug, body, updated_at)
-                     VALUES (?, ?, to_timestamp(? / 1000))
-                     ON CONFLICT (slug) DO UPDATE
+                    "INSERT INTO notes (user_id, slug, body, updated_at)
+                     VALUES (?, ?, ?, to_timestamp(? / 1000))
+                     ON CONFLICT (user_id, slug) DO UPDATE
                          SET body = excluded.body, updated_at = excluded.updated_at",
                 )?
-                .execute(params![slug, text, at])
+                .execute(params![user, slug, text, at])
                 .map(drop)
             }
         })
     }
 
     /// Saves the editor's code ('' for "back to the starter"), keeping any previous version.
-    pub fn save_draft(&self, slug: &str, code: &str, at: i64) -> Result<()> {
+    pub fn save_draft(&self, user: UserId, slug: &str, code: &str, at: i64) -> Result<()> {
         self.with(|c| {
             if code.is_empty() {
                 // Back to the starter: a row with nothing left to keep goes.
-                c.prepare_cached("DELETE FROM drafts WHERE slug = ? AND previous_code IS NULL")?
-                    .execute([slug])?;
+                c.prepare_cached(
+                    "DELETE FROM drafts WHERE user_id = ? AND slug = ? AND previous_code IS NULL",
+                )?
+                .execute(params![user, slug])?;
                 c.prepare_cached(
                     "UPDATE drafts SET code = NULL, updated_at = to_timestamp(? / 1000)
-                     WHERE slug = ?",
+                     WHERE user_id = ? AND slug = ?",
                 )?
-                .execute(params![at, slug])
+                .execute(params![at, user, slug])
                 .map(drop)
             } else {
                 c.prepare_cached(
-                    "INSERT INTO drafts (slug, code, updated_at)
-                     VALUES (?, ?, to_timestamp(? / 1000))
-                     ON CONFLICT (slug) DO UPDATE
+                    "INSERT INTO drafts (user_id, slug, code, updated_at)
+                     VALUES (?, ?, ?, to_timestamp(? / 1000))
+                     ON CONFLICT (user_id, slug) DO UPDATE
                          SET code = excluded.code, updated_at = excluded.updated_at",
                 )?
-                .execute(params![slug, code, at])
+                .execute(params![user, slug, code, at])
                 .map(drop)
             }
         })
     }
 
     /// A problem's draft; empty when there is none.
-    pub fn draft(&self, slug: &str) -> Result<Draft> {
+    pub fn draft(&self, user: UserId, slug: &str) -> Result<Draft> {
         let row = self.with(|c| {
-            c.prepare_cached("SELECT code, previous_code FROM drafts WHERE slug = ?")?
-                .query_row([slug], |r| {
-                    Ok(Draft {
-                        code: r.get(0)?,
-                        previous: r.get(1)?,
-                    })
+            c.prepare_cached(
+                "SELECT code, previous_code FROM drafts WHERE user_id = ? AND slug = ?",
+            )?
+            .query_row(params![user, slug], |r| {
+                Ok(Draft {
+                    code: r.get(0)?,
+                    previous: r.get(1)?,
                 })
-                .optional()
+            })
+            .optional()
         })?;
         Ok(row.unwrap_or_default())
     }
 
     /// Reset: the editor goes back to the starter and `current` becomes the previous version
     /// (an empty `current` keeps the previous version there was).
-    pub fn reset_draft(&self, slug: &str, current: &str, at: i64) -> Result<Draft> {
+    pub fn reset_draft(&self, user: UserId, slug: &str, current: &str, at: i64) -> Result<Draft> {
         if current.is_empty() {
-            self.save_draft(slug, "", at)?;
+            self.save_draft(user, slug, "", at)?;
         } else {
             self.with(|c| {
                 c.prepare_cached(
-                    "INSERT INTO drafts (slug, code, previous_code, updated_at)
-                     VALUES (?, NULL, ?, to_timestamp(? / 1000))
-                     ON CONFLICT (slug) DO UPDATE SET code = NULL,
+                    "INSERT INTO drafts (user_id, slug, code, previous_code, updated_at)
+                     VALUES (?, ?, NULL, ?, to_timestamp(? / 1000))
+                     ON CONFLICT (user_id, slug) DO UPDATE SET code = NULL,
                          previous_code = excluded.previous_code, updated_at = excluded.updated_at",
                 )?
-                .execute(params![slug, current, at])
+                .execute(params![user, slug, current, at])
                 .map(drop)
             })?;
         }
-        self.draft(slug)
+        self.draft(user, slug)
     }
 
     /// Restore: the previous version comes back and `current` becomes the previous one, so
     /// Restore again undoes it. `None` when there is nothing to restore.
-    pub fn restore_draft(&self, slug: &str, current: &str, at: i64) -> Result<Option<Draft>> {
+    pub fn restore_draft(
+        &self,
+        user: UserId,
+        slug: &str,
+        current: &str,
+        at: i64,
+    ) -> Result<Option<Draft>> {
         let restored = self.with(|c| {
             c.prepare_cached(
                 "UPDATE drafts SET code = previous_code, previous_code = nullif(?, ''),
                     updated_at = to_timestamp(? / 1000)
-                 WHERE slug = ? AND previous_code IS NOT NULL",
+                 WHERE user_id = ? AND slug = ? AND previous_code IS NOT NULL",
             )?
-            .execute(params![current, at, slug])
+            .execute(params![current, at, user, slug])
         })?;
         if restored == 0 {
             return Ok(None);
         }
-        self.draft(slug).map(Some)
+        self.draft(user, slug).map(Some)
     }
 
     /// A problem's tests in order; none without a corpus.
@@ -478,55 +501,65 @@ impl Store {
     }
 
     /// Stores a judged submission and returns its id. Every submission stays (the coding
-    /// analytics are replayed from them), but only the problem's newest [`SUBMISSIONS_KEPT`]
-    /// and its latest accepted one keep their code and detail; the others lose them in the same
-    /// transaction.
-    pub fn insert_submission(&self, s: &NewSubmission) -> Result<i64> {
+    /// analytics are replayed from them), but only the account's newest [`SUBMISSIONS_KEPT`]
+    /// of the problem and its latest accepted one keep their code and detail; the others lose
+    /// them in the same transaction.
+    pub fn insert_submission(&self, user: UserId, s: &NewSubmission) -> Result<i64> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
         let id = tx
             .prepare_cached(
-                "INSERT INTO submissions (slug, submitted_at, code, verdict, tests_passed,
-                    tests_total, cpu_ms, detail)
-                 VALUES (?, to_timestamp(? / 1000), ?, ?, ?, ?, ?, ?::JSON::VARIANT)
+                "INSERT INTO submissions (user_id, slug, submitted_at, code, verdict,
+                    tests_passed, tests_total, cpu_ms, detail)
+                 VALUES (?, ?, to_timestamp(? / 1000), ?, ?, ?, ?, ?, ?::JSON::VARIANT)
                  RETURNING id",
             )?
             .query_row(
                 params![
-                    s.slug, s.at, s.code, s.verdict, s.passed, s.total, s.cpu_ms, s.detail
+                    user, s.slug, s.at, s.code, s.verdict, s.passed, s.total, s.cpu_ms, s.detail
                 ],
                 |r| r.get(0),
             )?;
         tx.prepare_cached(
             "UPDATE submissions SET code = NULL, detail = NULL
-             WHERE slug = $1 AND code IS NOT NULL
-                AND id NOT IN (SELECT id FROM submissions WHERE slug = $1 ORDER BY id DESC LIMIT $2)
+             WHERE user_id = $3 AND slug = $1 AND code IS NOT NULL
+                AND id NOT IN (SELECT id FROM submissions WHERE user_id = $3 AND slug = $1
+                               ORDER BY id DESC LIMIT $2)
                 AND id IS DISTINCT FROM (SELECT max(id) FROM submissions
-                                         WHERE slug = $1 AND verdict = 'accepted')",
+                                         WHERE user_id = $3 AND slug = $1
+                                            AND verdict = 'accepted')",
         )?
-        .execute(params![s.slug, SUBMISSIONS_KEPT])?;
+        .execute(params![s.slug, SUBMISSIONS_KEPT, user])?;
         tx.commit()?;
         Ok(id)
     }
 
-    /// A problem's submissions, newest first, without code or detail.
-    pub fn submissions(&self, slug: &str, limit: usize) -> Result<Vec<SubmissionRow>> {
+    /// An account's submissions to a problem, newest first, without code or detail.
+    pub fn submissions(
+        &self,
+        user: UserId,
+        slug: &str,
+        limit: usize,
+    ) -> Result<Vec<SubmissionRow>> {
         self.with(|c| {
             let mut stmt = c.prepare_cached(&format!(
-                "SELECT {SUBMISSION_COLUMNS} FROM submissions WHERE slug = ? ORDER BY id DESC LIMIT ?"
+                "SELECT {SUBMISSION_COLUMNS} FROM submissions WHERE user_id = ? AND slug = ?
+                 ORDER BY id DESC LIMIT ?"
             ))?;
-            let rows = stmt.query_map(params![slug, limit], SubmissionRow::from_row)?;
+            let rows = stmt.query_map(params![user, slug, limit], SubmissionRow::from_row)?;
             rows.collect()
         })
     }
 
-    /// One submission with its code and result detail.
-    pub fn submission(&self, id: i64) -> Result<Option<SubmissionRow>> {
+    /// One of the account's submissions with its code and result detail; `None` when the id
+    /// is unknown or another account's.
+    pub fn submission(&self, user: UserId, id: i64) -> Result<Option<SubmissionRow>> {
         self.with(|c| {
             c.prepare_cached(&format!(
-                "SELECT {SUBMISSION_COLUMNS}, code, detail::JSON::VARCHAR FROM submissions WHERE id = ?"
+                "SELECT {SUBMISSION_COLUMNS}, code, detail::JSON::VARCHAR FROM submissions
+                 WHERE user_id = ? AND id = ?"
             ))?
-            .query_row([id], |r| {
+            .query_row(params![user, id], |r| {
                 let detail: Option<String> = r.get(7)?;
                 Ok(SubmissionRow {
                     code: r.get(6)?,
@@ -538,13 +571,15 @@ impl Store {
         })
     }
 
-    /// Every submission's problem, time and verdict, replayed in the order they were judged.
-    pub fn coding_log(&self) -> Result<CodingLog> {
+    /// Each of the account's submissions' problem, time and verdict, replayed in the order they
+    /// were judged.
+    pub fn coding_log(&self, user: UserId) -> Result<CodingLog> {
         let rows: Vec<(String, i64, String)> = self.with(|c| {
-            let mut stmt = c.prepare(
-                "SELECT slug, epoch_ms(submitted_at), verdict::VARCHAR FROM submissions ORDER BY id",
+            let mut stmt = c.prepare_cached(
+                "SELECT slug, epoch_ms(submitted_at), verdict::VARCHAR FROM submissions
+                 WHERE user_id = ? ORDER BY id",
             )?;
-            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            let rows = stmt.query_map([user], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
             rows.collect()
         })?;
         let mut log = CodingLog::default();
@@ -602,6 +637,8 @@ pub mod testing {
 mod tests {
     use super::testing::TempDir;
     use super::*;
+
+    const U: UserId = UserId::test(1);
     use openleet_proto::Expected;
 
     fn store() -> (Store, TempDir) {
@@ -627,12 +664,12 @@ mod tests {
     fn attempts_round_trip_in_order() {
         let (store, _dir) = store();
         store
-            .insert_attempt(&attempt("b", 1_793_316_907_567, Grade::Good))
+            .insert_attempt(U, &attempt("b", 1_793_316_907_567, Grade::Good))
             .unwrap();
         store
-            .insert_attempt(&attempt("a", 1_793_316_907_566, Grade::Again))
+            .insert_attempt(U, &attempt("a", 1_793_316_907_566, Grade::Again))
             .unwrap();
-        let all = store.attempts().unwrap();
+        let all = store.attempts(U).unwrap();
         assert_eq!(
             all.iter()
                 .map(|a| (a.slug.as_str(), a.at))
@@ -641,10 +678,10 @@ mod tests {
         );
         assert_eq!(all[0].grade, Grade::Again);
         assert_eq!(all[0].guessed, ["Array", "Hash Table"]);
-        store.delete_attempts(Some("a")).unwrap();
-        assert_eq!(store.attempts().unwrap().len(), 1);
-        store.delete_attempts(None).unwrap();
-        assert_eq!(store.attempts().unwrap().len(), 0);
+        store.delete_attempts(U, Some("a")).unwrap();
+        assert_eq!(store.attempts(U).unwrap().len(), 1);
+        store.delete_attempts(U, None).unwrap();
+        assert_eq!(store.attempts(U).unwrap().len(), 0);
     }
 
     /// The Python tools write the corpus this engine reads, so both use one minor version.
@@ -699,13 +736,17 @@ mod tests {
             score: Some(0.5),
             ..attempt("a", 1, Grade::Skip)
         };
-        assert!(store.insert_attempt(&skip_with_score).is_err());
-        assert!(store.insert_attempt(&attempt("", 1, Grade::Good)).is_err());
+        assert!(store.insert_attempt(U, &skip_with_score).is_err());
+        assert!(
+            store
+                .insert_attempt(U, &attempt("", 1, Grade::Good))
+                .is_err()
+        );
         let too_many_hints = Attempt {
             hints: 11,
             ..attempt("a", 1, Grade::Good)
         };
-        assert!(store.insert_attempt(&too_many_hints).is_err());
+        assert!(store.insert_attempt(U, &too_many_hints).is_err());
         let more_passed_than_total = NewSubmission {
             slug: "a",
             at: 1,
@@ -716,25 +757,25 @@ mod tests {
             cpu_ms: 0,
             detail: "null",
         };
-        assert!(store.insert_submission(&more_passed_than_total).is_err());
+        assert!(store.insert_submission(U, &more_passed_than_total).is_err());
     }
 
     #[test]
     fn notes_and_drafts_upsert_and_delete() {
         let (store, _dir) = store();
-        store.save_note("a", "first", 1).unwrap();
-        store.save_note("a", "second", 2).unwrap();
+        store.save_note(U, "a", "first", 1).unwrap();
+        store.save_note(U, "a", "second", 2).unwrap();
         assert_eq!(
-            store.notes().unwrap().get("a").map(String::as_str),
+            store.notes(U).unwrap().get("a").map(String::as_str),
             Some("second")
         );
-        store.save_note("a", "", 3).unwrap();
-        assert!(store.notes().unwrap().is_empty());
-        store.save_draft("a", "code 1", 1).unwrap();
-        store.save_draft("a", "code 2", 2).unwrap();
-        assert_eq!(store.draft("a").unwrap().code.as_deref(), Some("code 2"));
-        store.save_draft("a", "", 3).unwrap();
-        assert_eq!(store.draft("a").unwrap().code, None);
+        store.save_note(U, "a", "", 3).unwrap();
+        assert!(store.notes(U).unwrap().is_empty());
+        store.save_draft(U, "a", "code 1", 1).unwrap();
+        store.save_draft(U, "a", "code 2", 2).unwrap();
+        assert_eq!(store.draft(U, "a").unwrap().code.as_deref(), Some("code 2"));
+        store.save_draft(U, "a", "", 3).unwrap();
+        assert_eq!(store.draft(U, "a").unwrap().code, None);
         let rows: i64 = store
             .with(|c| c.query_row("SELECT count(*) FROM drafts", [], |r| r.get(0)))
             .unwrap();
@@ -745,24 +786,27 @@ mod tests {
     fn reset_and_restore_swap_versions() {
         let (store, _dir) = store();
         // Reset with nothing saved yet still keeps what was in the editor.
-        let reset = store.reset_draft("a", "mine", 1).unwrap();
+        let reset = store.reset_draft(U, "a", "mine", 1).unwrap();
         assert_eq!(
             (reset.code, reset.previous.as_deref()),
             (None, Some("mine"))
         );
-        store.save_draft("a", "new try", 2).unwrap();
-        let restored = store.restore_draft("a", "new try", 3).unwrap().unwrap();
+        store.save_draft(U, "a", "new try", 2).unwrap();
+        let restored = store.restore_draft(U, "a", "new try", 3).unwrap().unwrap();
         assert_eq!(restored.code.as_deref(), Some("mine"));
         assert_eq!(restored.previous.as_deref(), Some("new try"));
         // Restoring again swaps back.
-        let again = store.restore_draft("a", "mine", 4).unwrap().unwrap();
+        let again = store.restore_draft(U, "a", "mine", 4).unwrap().unwrap();
         assert_eq!(again.code.as_deref(), Some("new try"));
         // Reset of an empty editor keeps the earlier previous version.
-        store.reset_draft("a", "", 5).unwrap();
-        assert_eq!(store.draft("a").unwrap().previous.as_deref(), Some("mine"));
-        assert!(store.restore_draft("b", "x", 6).unwrap().is_none());
+        store.reset_draft(U, "a", "", 5).unwrap();
+        assert_eq!(
+            store.draft(U, "a").unwrap().previous.as_deref(),
+            Some("mine")
+        );
+        assert!(store.restore_draft(U, "b", "x", 6).unwrap().is_none());
         // Reset of an empty editor with nothing saved leaves no row.
-        assert!(store.reset_draft("c", "", 7).unwrap().previous.is_none());
+        assert!(store.reset_draft(U, "c", "", 7).unwrap().previous.is_none());
     }
 
     #[test]
@@ -778,20 +822,20 @@ mod tests {
             cpu_ms: 40,
             detail: r#"{"failing":{"input":"x = 1","kind":"hidden"},"limitMs":2000}"#,
         };
-        let first = store.insert_submission(&new("wrong_answer")).unwrap();
-        let second = store.insert_submission(&new("accepted")).unwrap();
+        let first = store.insert_submission(U, &new("wrong_answer")).unwrap();
+        let second = store.insert_submission(U, &new("accepted")).unwrap();
         assert!(second > first);
-        let list = store.submissions("a", 10).unwrap();
+        let list = store.submissions(U, "a", 10).unwrap();
         assert_eq!(
             list.iter().map(|s| s.id).collect::<Vec<_>>(),
             [second, first]
         );
         assert_eq!(list[0].at, 1_793_316_000_004);
-        let one = store.submission(first).unwrap().unwrap();
+        let one = store.submission(U, first).unwrap().unwrap();
         assert_eq!(one.code.as_deref(), Some("print(1)"));
         let detail: serde_json::Value = serde_json::from_str(one.detail.unwrap().get()).unwrap();
         assert_eq!(detail["failing"]["kind"], "hidden");
-        let log = store.coding_log().unwrap();
+        let log = store.coding_log(U).unwrap();
         assert!(log.solved("a") && !log.problem("a").unwrap().first_try());
     }
 
@@ -800,16 +844,19 @@ mod tests {
         let (store, _dir) = store();
         let submit = |slug, verdict| {
             store
-                .insert_submission(&NewSubmission {
-                    slug,
-                    at: 1,
-                    code: "x",
-                    verdict,
-                    passed: 0,
-                    total: 1,
-                    cpu_ms: 1,
-                    detail: r#"{"limitMs":2000}"#,
-                })
+                .insert_submission(
+                    U,
+                    &NewSubmission {
+                        slug,
+                        at: 1,
+                        code: "x",
+                        verdict,
+                        passed: 0,
+                        total: 1,
+                        cpu_ms: 1,
+                        detail: r#"{"limitMs":2000}"#,
+                    },
+                )
                 .unwrap()
         };
         let first = submit("a", "wrong_answer");
@@ -818,11 +865,11 @@ mod tests {
         for _ in 0..SUBMISSIONS_KEPT + 5 {
             submit("a", "wrong_answer");
         }
-        let all = store.submissions("a", 1000).unwrap();
+        let all = store.submissions(U, "a", 1000).unwrap();
         assert_eq!(all.len(), SUBMISSIONS_KEPT + 7);
         let with_code: Vec<i64> = all
             .iter()
-            .filter(|s| store.submission(s.id).unwrap().unwrap().code.is_some())
+            .filter(|s| store.submission(U, s.id).unwrap().unwrap().code.is_some())
             .map(|s| s.id)
             .collect();
         // The newest ones, and the latest Accepted for the solved problem.
@@ -835,17 +882,17 @@ mod tests {
                 .collect::<Vec<_>>()
         );
         assert_eq!(with_code[SUBMISSIONS_KEPT], accepted);
-        let pruned = store.submission(first).unwrap().unwrap();
+        let pruned = store.submission(U, first).unwrap().unwrap();
         assert!(pruned.code.is_none() && pruned.detail.is_none());
         assert_eq!(
             (pruned.verdict.as_str(), pruned.cpu_ms),
             ("wrong_answer", 1)
         );
         // The analytics after a restart see every submission: the first try failed.
-        let log = store.coding_log().unwrap();
+        let log = store.coding_log(U).unwrap();
         let problem = log.problem("a").unwrap();
         assert!(log.solved("a") && !problem.first_try());
-        assert_eq!(store.submissions("b", 10).unwrap()[0].id, other);
+        assert_eq!(store.submissions(U, "b", 10).unwrap()[0].id, other);
     }
 
     #[test]
@@ -873,21 +920,24 @@ mod tests {
         {
             let (store, _) = Store::open(&path, &dir.path("none")).unwrap();
             store
-                .insert_attempt(&attempt("a", 1_793_316_907_566, Grade::Good))
+                .insert_attempt(U, &attempt("a", 1_793_316_907_566, Grade::Good))
                 .unwrap();
-            store.save_note("a", "note", 2).unwrap();
-            store.save_draft("a", "code", 3).unwrap();
+            store.save_note(U, "a", "note", 2).unwrap();
+            store.save_draft(U, "a", "code", 3).unwrap();
             let id = store
-                .insert_submission(&NewSubmission {
-                    slug: "a",
-                    at: 4,
-                    code: "print(1)",
-                    verdict: "accepted",
-                    passed: 1,
-                    total: 1,
-                    cpu_ms: 5,
-                    detail: r#"{"limitMs":2000}"#,
-                })
+                .insert_submission(
+                    U,
+                    &NewSubmission {
+                        slug: "a",
+                        at: 4,
+                        code: "print(1)",
+                        verdict: "accepted",
+                        passed: 1,
+                        total: 1,
+                        cpu_ms: 5,
+                        detail: r#"{"limitMs":2000}"#,
+                    },
+                )
                 .unwrap();
             assert_eq!(id, 1);
             // Sixteen days of backups; only the newest fourteen stay.
@@ -923,24 +973,27 @@ mod tests {
         };
         assert!(backup.ends_with("2026-11-16.duckdb"));
         assert!(quarantined.join("openleet.duckdb").exists());
-        let attempts = store.attempts().unwrap();
+        let attempts = store.attempts(U).unwrap();
         assert_eq!(attempts[0].at, 1_793_316_907_566);
-        assert_eq!(store.notes().unwrap()["a"], "note");
-        assert_eq!(store.draft("a").unwrap().code.as_deref(), Some("code"));
-        let one = store.submission(1).unwrap().unwrap();
+        assert_eq!(store.notes(U).unwrap()["a"], "note");
+        assert_eq!(store.draft(U, "a").unwrap().code.as_deref(), Some("code"));
+        let one = store.submission(U, 1).unwrap().unwrap();
         assert_eq!(one.detail.unwrap().get(), r#"{"limitMs":2000}"#);
         // Ids continue after the restored ones.
         let next = store
-            .insert_submission(&NewSubmission {
-                slug: "a",
-                at: 5,
-                code: "x",
-                verdict: "wrong_answer",
-                passed: 0,
-                total: 1,
-                cpu_ms: 1,
-                detail: "null",
-            })
+            .insert_submission(
+                U,
+                &NewSubmission {
+                    slug: "a",
+                    at: 5,
+                    code: "x",
+                    verdict: "wrong_answer",
+                    passed: 0,
+                    total: 1,
+                    cpu_ms: 1,
+                    detail: "null",
+                },
+            )
             .unwrap();
         assert_eq!(next, 2);
         // The restored schema is the migrated one, comments included.
@@ -962,7 +1015,7 @@ mod tests {
         let path = dir.path("openleet.duckdb");
         std::fs::write(&path, b"not a database").unwrap();
         let (store, opening) = Store::open(&path, &dir.path("none")).unwrap();
-        assert_eq!(store.attempts().unwrap().len(), 0);
+        assert_eq!(store.attempts(U).unwrap().len(), 0);
         let Opening::Recovered {
             quarantined,
             backup: None,
@@ -1014,7 +1067,7 @@ mod tests {
         {
             let (store, _) = Store::open(&path, &dir.path("none")).unwrap();
             store.backup(Date::new(2026, 11, 9).unwrap()).unwrap();
-            store.save_note("a", "latest data", 1).unwrap();
+            store.save_note(U, "a", "latest data", 1).unwrap();
             store
                 .with(|conn| {
                     conn.execute(
@@ -1045,7 +1098,7 @@ mod tests {
     fn backup_quotes_the_source_database_name() {
         let dir = TempDir::new("db-backup-quoted");
         let (store, _) = Store::open(&dir.path("my\"progress.duckdb"), &dir.path("none")).unwrap();
-        store.save_note("a", "preserved", 1).unwrap();
+        store.save_note(U, "a", "preserved", 1).unwrap();
         let backup = store
             .backup(Date::new(2026, 11, 10).unwrap())
             .unwrap()
@@ -1073,7 +1126,7 @@ mod tests {
             .unwrap();
         let (store, opening) = Store::open(&path, &dir.path("none")).unwrap();
         assert!(matches!(opening, Opening::Existing(m) if m.from == Shape::Unversioned));
-        assert_eq!(store.attempts().unwrap()[0].at, 1_793_316_907_566);
+        assert_eq!(store.attempts(U).unwrap()[0].at, 1_793_316_907_566);
         let copies: Vec<_> = std::fs::read_dir(dir.path("backups"))
             .unwrap()
             .filter_map(Result::ok)

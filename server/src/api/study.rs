@@ -14,6 +14,7 @@ use openleet::scorer::{ScoreReport, local_zone};
 use openleet::service::{self, AttemptInput, DeckParams, DeckQuery, ProblemParams, ProblemQuery};
 
 use super::{Params, param};
+use crate::auth::Me;
 use crate::error::{ApiError, ApiResult};
 use crate::state::{Shared, now_ms};
 
@@ -75,7 +76,7 @@ pub async fn topics(
 }
 
 /// `?set=&company=&period=&topic=&difficulty=&slug=`: the next card and the cards left.
-pub async fn deck(State(state): State<Shared>, Query(params): Params) -> Response {
+pub async fn deck(State(state): State<Shared>, me: Me, Query(params): Params) -> Response {
     let query = DeckQuery::parse(
         &state.content,
         &DeckParams {
@@ -87,7 +88,7 @@ pub async fn deck(State(state): State<Shared>, Query(params): Params) -> Respons
             slug: param(&params, "slug"),
         },
     );
-    let progress = state.progress.read();
+    let progress = me.learner.progress.read();
     let deck = service::deck(&state.content, &progress.states, &query, now_ms(), |slug| {
         progress.notes.get(slug).cloned()
     });
@@ -103,16 +104,17 @@ struct Scored {
 /// are recomputed when next read.
 pub async fn record_attempt(
     State(state): State<Shared>,
+    me: Me,
     Json(input): Json<AttemptInput>,
 ) -> ApiResult<impl IntoResponse> {
     input.validate()?;
     state.problem(&input.slug)?;
     let score = state
-        .update_progress(move |state| {
+        .update_progress(&me.learner, move |state, learner| {
             let attempt = service::new_attempt(&state.content, input, now_ms())?;
             let score = attempt.score;
-            state.store.insert_attempt(&attempt)?;
-            state.progress.write().push(attempt);
+            state.store.insert_attempt(learner.user, &attempt)?;
+            learner.progress.write().push(attempt);
             Ok(score)
         })
         .await?;
@@ -134,6 +136,7 @@ struct Note {
 /// Saves your answer to a problem; empty text deletes it.
 pub async fn save_note(
     State(state): State<Shared>,
+    me: Me,
     Json(input): Json<NoteInput>,
 ) -> ApiResult<impl IntoResponse> {
     let text = input.text.trim().to_owned();
@@ -145,9 +148,11 @@ pub async fn save_note(
     let stored = text.clone();
     state.problem(&input.slug)?;
     state
-        .update_progress(move |state| {
-            state.store.save_note(&input.slug, &stored, now_ms())?;
-            let mut progress = state.progress.write();
+        .update_progress(&me.learner, move |state, learner| {
+            state
+                .store
+                .save_note(learner.user, &input.slug, &stored, now_ms())?;
+            let mut progress = learner.progress.write();
             if stored.is_empty() {
                 progress.notes.remove(&input.slug);
             } else {
@@ -165,6 +170,7 @@ pub async fn save_note(
 /// `?slug=two-sum` clears one problem, `?all=true` everything; anything else is rejected.
 pub async fn reset_progress(
     State(state): State<Shared>,
+    me: Me,
     Query(params): Params,
 ) -> ApiResult<StatusCode> {
     let slug = match (param(&params, "slug"), param(&params, "all"), params.len()) {
@@ -173,9 +179,9 @@ pub async fn reset_progress(
         _ => return Err(ApiError::BadRequest("Give either slug or all=true".into())),
     };
     state
-        .update_progress(move |state| {
-            state.store.delete_attempts(slug.as_deref())?;
-            state.progress.write().clear(slug.as_deref());
+        .update_progress(&me.learner, move |state, learner| {
+            state.store.delete_attempts(learner.user, slug.as_deref())?;
+            learner.progress.write().clear(slug.as_deref());
             Ok(())
         })
         .await?;
@@ -185,7 +191,7 @@ pub async fn reset_progress(
 /// `?company=&period=&topic=&difficulty=&status=&order=&q=`: the rows of one list that pass
 /// the filter and status (every row without one), in the order, or best match first with a
 /// search.
-pub async fn problems(State(state): State<Shared>, Query(params): Params) -> Response {
+pub async fn problems(State(state): State<Shared>, me: Me, Query(params): Params) -> Response {
     let query = ProblemQuery::parse(
         &state.content,
         &ProblemParams {
@@ -199,7 +205,7 @@ pub async fn problems(State(state): State<Shared>, Query(params): Params) -> Res
             order: param(&params, "order"),
         },
     );
-    let progress = state.progress.read();
+    let progress = me.learner.progress.read();
     let rows = service::problem_rows(
         &state.content,
         &progress.lists,
@@ -212,8 +218,12 @@ pub async fn problems(State(state): State<Shared>, Query(params): Params) -> Res
 }
 
 /// One problem's study card.
-pub async fn problem(State(state): State<Shared>, Path(slug): Path<String>) -> ApiResult<Response> {
-    let progress = state.progress.read();
+pub async fn problem(
+    State(state): State<Shared>,
+    me: Me,
+    Path(slug): Path<String>,
+) -> ApiResult<Response> {
+    let progress = me.learner.progress.read();
     let note = progress.notes.get(&slug).cloned();
     let card = service::card(&state.content, &progress.states, &slug, note)?;
     Ok(Json(&card).into_response())
@@ -245,11 +255,11 @@ struct ReportPage<'a> {
 
 /// `?company=` (default google): the report for that company, with the coding progress,
 /// shaky solves, topic map and activity calendar over its 6-month list. All from memory.
-pub async fn report(State(state): State<Shared>, Query(params): Params) -> Response {
+pub async fn report(State(state): State<Shared>, me: Me, Query(params): Params) -> Response {
     let content = &state.content;
     let company = content.company_or_default(param(&params, "company"));
     let now = now_ms();
-    let (progress, report) = state.report(company, now);
+    let (progress, report) = me.learner.report(content, company, now);
     let insights = insights(content, company, progress.learner(), now, &local_zone());
     Json(&ReportPage {
         report: &report,
@@ -259,9 +269,10 @@ pub async fn report(State(state): State<Shared>, Query(params): Params) -> Respo
 }
 
 /// `?company=` (default google): that company's readiness alone.
-pub async fn readiness(State(state): State<Shared>, Query(params): Params) -> Response {
+pub async fn readiness(State(state): State<Shared>, me: Me, Query(params): Params) -> Response {
     let company = state.content.company_or_default(param(&params, "company"));
-    Json(&state.report(company, now_ms()).1.readiness).into_response()
+    let (_, report) = me.learner.report(&state.content, company, now_ms());
+    Json(&report.readiness).into_response()
 }
 
 #[cfg(test)]
@@ -269,7 +280,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::api::testing::{json, query, state};
+    use crate::api::testing::{json, me, query, state};
     use crate::db::testing::TempDir;
 
     async fn topic_list(state: &Shared, pairs: &[(&str, &str)]) -> Vec<(String, u64)> {
@@ -291,11 +302,16 @@ mod tests {
     }
 
     async fn readiness_of(state: &Shared, company: &str) -> Response {
-        readiness(State(Arc::clone(state)), query(&[("company", company)])).await
+        readiness(
+            State(Arc::clone(state)),
+            me(state).await,
+            query(&[("company", company)]),
+        )
+        .await
     }
 
     async fn rows(state: &Shared, pairs: &[(&str, &str)]) -> Vec<serde_json::Value> {
-        let response = problems(State(Arc::clone(state)), query(pairs)).await;
+        let response = problems(State(Arc::clone(state)), me(state).await, query(pairs)).await;
         json(response).await.as_array().expect("array").clone()
     }
 
@@ -396,8 +412,9 @@ mod tests {
         let dir = TempDir::new("api-report");
         let state = state(&dir);
         let now = now_ms();
+        let learner = me(&state).await.learner;
         {
-            let mut progress = state.progress.write();
+            let mut progress = learner.progress.write();
             for (slug, verdict) in [
                 ("two-sum", Accepted),
                 ("add-two-numbers", CompileError),
@@ -416,8 +433,15 @@ mod tests {
                 hints: 0,
             });
         }
-        let page =
-            json(report(State(Arc::clone(&state)), query(&[("company", "google")])).await).await;
+        let page = json(
+            report(
+                State(Arc::clone(&state)),
+                me(&state).await,
+                query(&[("company", "google")]),
+            )
+            .await,
+        )
+        .await;
         assert_eq!(page["report"]["graded"], 1);
         // Two Google problems in the judge, one card: readiness has data, the trend waits.
         let readiness = &page["report"]["readiness"];

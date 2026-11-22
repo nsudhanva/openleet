@@ -34,7 +34,7 @@ async function pageLoads(page: string): Promise<string[]> {
 	const { pathname, search } = new URL(page, "https://openleet.test");
 	const raw = defaultParseSearch(search) as SearchSchemaInput;
 	const root = { ...raw, ...parseCompanySearch(raw) };
-	await Promise.all([api.readiness(root.company), api.companies()]);
+	await Promise.all([api.session(root.company), api.companies()]);
 	const code = pathname.match(/^\/code\/([^/]+)$/);
 	if (pathname === "/") {
 		await api.deck(deckQuery({ ...root, ...parseStudySearch(root) }));

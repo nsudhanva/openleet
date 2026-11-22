@@ -2,6 +2,7 @@ import { notFound } from "@tanstack/react-router";
 import type { CompanySearch } from "@/lib/companies";
 import type { PlanSearch, ProblemsSearch, StudySearch } from "@/lib/schemas";
 import type {
+	AdminSettings,
 	AttemptInput,
 	CodeInfo,
 	Company,
@@ -10,17 +11,18 @@ import type {
 	NextPage,
 	Period,
 	ProblemRow,
-	Readiness,
 	Report,
 	RunResult,
 	SavedPlan,
 	SearchHit,
+	Session,
 	StudyCard,
 	StudyDeck,
 	Submission,
 	SubmissionSummary,
 	SubmitResult,
 	TopicCount,
+	User,
 	UserList,
 } from "@/lib/types";
 
@@ -70,6 +72,19 @@ async function errorMessage(response: Response): Promise<string> {
 	return `${response.status} ${response.statusText}`.trim();
 }
 
+/** These answer 401 for a wrong password, not for an ended session. */
+const SIGN_IN_PATHS = new Set(["/api/session", "/api/users"]);
+
+/** The session ended while the app was open: sign in again, then come back to this page. */
+function signInAgain() {
+	if (typeof window === "undefined" || window.location.pathname === "/login")
+		return;
+	const { pathname, search } = window.location;
+	window.location.assign(
+		`/login?redirect=${encodeURIComponent(pathname + search)}`,
+	);
+}
+
 async function send(
 	method: string,
 	path: string,
@@ -83,8 +98,10 @@ async function send(
 			body === undefined ? undefined : { "content-type": "application/json" },
 		body: body === undefined ? undefined : JSON.stringify(body),
 	});
-	if (!response.ok)
+	if (!response.ok) {
+		if (response.status === 401 && !SIGN_IN_PATHS.has(path)) signInAgain();
 		throw new ApiError(response.status, await errorMessage(response));
+	}
 	return response;
 }
 
@@ -170,8 +187,25 @@ export const api = {
 	/** The progress page: each figure says which list it covers. */
 	report: (company: string) =>
 		json<Report>("GET", "/api/report", { query: { company } }),
-	readiness: (company: string) =>
-		json<Readiness>("GET", "/api/readiness", { query: { company } }),
+
+	/** Who is signed in, with their readiness for the list; public. */
+	session: (company: string) =>
+		json<Session>("GET", "/api/session", { query: { company } }),
+	signIn: (email: string, password: string) =>
+		json<User>("POST", "/api/session", { body: { email, password } }),
+	signOut: () => empty("DELETE", "/api/session"),
+	/** `setupCode` is for the first account of a server, which becomes its admin. */
+	signUp: (email: string, password: string, setupCode?: string) =>
+		json<User>("POST", "/api/users", { body: { email, password, setupCode } }),
+	/** Ends the account's other sessions. */
+	changePassword: (current: string, password: string) =>
+		empty("PUT", "/api/account/password", { body: { current, password } }),
+	/** Deletes the account and all its progress. */
+	deleteAccount: (password: string) =>
+		empty("DELETE", "/api/account", { body: { password } }),
+	adminSettings: () => json<AdminSettings>("GET", "/api/admin/settings"),
+	editAdminSettings: (change: { signupsOpen: boolean }) =>
+		json<AdminSettings>("PATCH", "/api/admin/settings", { body: change }),
 
 	code: (slug: string) => json<CodeInfo>("GET", problemPath("/api/code", slug)),
 	/** Empty code deletes the draft. */

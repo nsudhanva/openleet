@@ -1,7 +1,7 @@
 # OpenLeet
 
 Self-hosted LeetCode practice app with company problem lists, flashcards, and a Python judge.
-No accounts; progress is stored on the server.
+Each person signs in with an email and a password and has their own progress.
 
 [Live demo](https://openleet.sudhanva.me) · [Quick start](#quick-start) · [Docs](docs/)
 
@@ -19,6 +19,8 @@ No accounts; progress is stored on the server.
   across a company's top 100 problems, with daily trends, streaks, and weak-topic tracking.
 - **Video explanations**: Embedded YouTube walkthroughs prioritized by NeetCode, Greg Hogg, and
   top-viewed explanations.
+- **Accounts**: Sign up with an email and a password. Each account has its own flashcards,
+  submissions, drafts, notes, plans, and lists. An admin can close sign-ups.
 
 ## Quick start
 
@@ -31,6 +33,12 @@ docker compose up -d
 
 Open <http://openleet.localhost>. If port 80 is in use, set `HTTP_PORT=8088 docker compose up -d`
 and open <http://openleet.localhost:8088>.
+
+A new server has no accounts. Make the admin account first: on the sign-in page, choose
+**Create account** and enter the setup code from the server's state directory
+(`docker compose cp app:/state/setup-code - | tar -xO` for Docker; see
+[Deployment](docs/deployment.md#make-the-admin-account) for a server). After that, anyone can
+sign up until the admin closes sign-ups on the **Account** page.
 
 ### Ubuntu server (auto-HTTPS + auto-updates)
 
@@ -49,7 +57,7 @@ and automatically pulls new releases. See [Deployment](docs/deployment.md#new-se
 ```mermaid
 flowchart LR
     B[Browser] -- HTTPS --> S["openleet<br/>Rust server + React UI"]
-    S -- read/write --> D[(openleet.duckdb<br/>progress & plans)]
+    S -- read/write --> D[(openleet.duckdb<br/>accounts, progress & plans)]
     S -- read-only --> T[(tests.duckdb<br/>test corpus)]
     S -- Unix socket --> J["openleet-judge<br/>sandboxed Python"]
 ```

@@ -71,6 +71,23 @@ Optional environment variables (re-run `install.sh` to update them; omitted valu
 New releases are installed automatically within 5 minutes. To migrate progress from another
 server, restore its backup below.
 
+## Make the admin account
+
+A server without an admin writes a one-time setup code to `/var/lib/openleet/setup-code` (mode
+`0600`) and logs where it is. Until the admin account exists, nobody can sign up.
+
+1. Read the code on the server:
+
+   ```bash
+   sudo cat /var/lib/openleet/setup-code
+   ```
+
+2. Open the site, choose **Create account**, and enter your email, a password, and the code.
+
+The account becomes user 1 and the admin. It owns all progress from before accounts existed.
+The server deletes the file and the code stops working. The admin can open or close sign-ups on
+the **Account** page. Each restart without an admin writes a new code.
+
 ## Restore a backup
 
 `/var/lib/openleet/backups/` stores the last 14 daily backups (`DATE.duckdb`) and the last 3

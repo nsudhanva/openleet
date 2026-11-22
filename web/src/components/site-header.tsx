@@ -1,23 +1,32 @@
 import { Link, type LinkProps } from "@tanstack/react-router";
-import { GalleryVerticalEndIcon } from "lucide-react";
+import { GalleryVerticalEndIcon, UserRoundIcon } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
 import { SearchDialog } from "@/components/search-dialog";
 import { buttonVariants } from "@/components/ui/button";
 import { useCompanies, useCompany } from "@/hooks/use-companies";
 import { ANY_COMPANY, companyName } from "@/lib/companies";
 import { readinessLabel, readinessText } from "@/lib/readiness";
-import type { Readiness } from "@/lib/types";
+import type { Session } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const NAV: { to: LinkProps["to"]; label: string; exact?: boolean }[] = [
-	{ to: "/", label: "Study", exact: true },
-	{ to: "/problems", label: "Problems" },
-	{ to: "/progress", label: "Progress" },
+const NAV: {
+	to: LinkProps["to"];
+	label: string;
+	exact?: boolean;
+	account?: boolean;
+}[] = [
+	{ to: "/", label: "Study", exact: true, account: true },
+	{ to: "/problems", label: "Problems", account: true },
+	{ to: "/progress", label: "Progress", account: true },
 	{ to: "/about", label: "About" },
 ];
 
-/** The header shows readiness only once there is a score; before that it leaves it out. */
-export function SiteHeader({ readiness }: { readiness: Readiness | null }) {
+/**
+ * The header shows readiness only once there is a score; before that it leaves it out. The
+ * study pages need an account, so signed out it links only About and Sign in.
+ */
+export function SiteHeader({ session }: { session: Session }) {
+	const { user, readiness } = session;
 	const company = useCompany();
 	const name = companyName(useCompanies(), company);
 	return (
@@ -36,19 +45,21 @@ export function SiteHeader({ readiness }: { readiness: Readiness | null }) {
 					<span className="hidden md:inline">OpenLeet</span>
 				</Link>
 				<nav aria-label="Main" className="flex items-center gap-0.5">
-					{NAV.map(({ to, label, exact }) => (
-						<Link
-							key={label}
-							to={to}
-							activeOptions={{ exact, includeSearch: false }}
-							className={cn(
-								buttonVariants({ variant: "ghost", size: "sm" }),
-								"px-1 text-muted-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground xs:px-2 sm:px-2.5",
-							)}
-						>
-							{label}
-						</Link>
-					))}
+					{NAV.filter(({ account }) => user || !account).map(
+						({ to, label, exact }) => (
+							<Link
+								key={label}
+								to={to}
+								activeOptions={{ exact, includeSearch: false }}
+								className={cn(
+									buttonVariants({ variant: "ghost", size: "sm" }),
+									"px-1 text-muted-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground xs:px-2 sm:px-2.5",
+								)}
+							>
+								{label}
+							</Link>
+						),
+					)}
 				</nav>
 				<div className="ml-auto flex items-center gap-0.5 sm:gap-1">
 					<SearchDialog />
@@ -65,6 +76,31 @@ export function SiteHeader({ readiness }: { readiness: Readiness | null }) {
 							<span className="font-semibold text-foreground tabular-nums">
 								{readinessText(readiness)}
 							</span>
+						</Link>
+					)}
+					{user ? (
+						<Link
+							to="/account"
+							title={user.email}
+							aria-label={`Account: ${user.email}`}
+							className={cn(
+								buttonVariants({ variant: "ghost", size: "sm" }),
+								"max-w-48 px-1.5 text-muted-foreground xs:px-2 data-[status=active]:bg-muted data-[status=active]:text-foreground",
+							)}
+						>
+							<UserRoundIcon aria-hidden />
+							<span className="hidden truncate lg:inline">{user.email}</span>
+						</Link>
+					) : (
+						<Link
+							to="/login"
+							search={{ redirect: "/" }}
+							className={cn(
+								buttonVariants({ variant: "ghost", size: "sm" }),
+								"px-1.5 text-muted-foreground xs:px-2",
+							)}
+						>
+							Sign in
 						</Link>
 					)}
 					<ModeToggle />

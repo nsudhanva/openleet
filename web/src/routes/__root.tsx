@@ -26,13 +26,13 @@ export const Route = createRootRoute({
 	},
 	loaderDeps: ({ search: { company } }) => ({ company }),
 	// Awaited, so the page paints in one go (a Suspense fallback would hold back the content
-	// that follows it). Both are niceties: when they fail, the page's own loader reports it.
+	// that follows it). The company list is a nicety: when it fails, the page's own loader reports it.
 	loader: async ({ deps: { company } }) => {
-		const [readiness, companies] = await Promise.all([
-			api.readiness(company).catch(() => null),
+		const [session, companies] = await Promise.all([
+			api.session(company),
 			api.companies(),
 		]);
-		return { readiness, companies };
+		return { session, companies };
 	},
 	head: () => ({ meta: [{ title: pageTitle() }] }),
 	component: Root,
@@ -40,11 +40,11 @@ export const Route = createRootRoute({
 });
 
 function Root() {
-	const { readiness } = Route.useLoaderData();
+	const { session } = Route.useLoaderData();
 	return (
 		<ThemeProvider>
 			<HeadContent />
-			<SiteHeader readiness={readiness} />
+			<SiteHeader session={session} />
 			{/* On a fit: screen every page fits it below the 3rem header; elsewhere the document scrolls. */}
 			<main className="mx-auto flex w-full max-w-[96rem] flex-col px-3 py-3 sm:px-5 fit:h-[calc(100dvh-3rem)] fit:overflow-y-auto">
 				<Outlet />

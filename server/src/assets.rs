@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 use axum::body::Body;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri, header};
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 
 use openleet::fingerprint;
 
@@ -73,8 +73,13 @@ fn accepts(headers: &HeaderMap, coding: &str) -> bool {
         })
 }
 
-/// Serves an embedded file, or the app's index.html for client-side routes.
-pub async fn serve(uri: Uri, headers: HeaderMap) -> Response {
+/// Serves an embedded file, or the app's index.html for client-side routes. A page that
+/// shows progress redirects a signed-out browser to `/login?redirect=<the page>`.
+pub async fn serve(
+    uri: Uri,
+    headers: HeaderMap,
+    viewer: Option<axum::Extension<crate::auth::Viewer>>,
+) -> Response {
     let path = uri.path();
     let asset = BY_PATH.get(path).or_else(|| {
         // Paths that look like files must exist; everything else is a page of the app.
@@ -84,10 +89,14 @@ pub async fn serve(uri: Uri, headers: HeaderMap) -> Response {
     let Some(asset) = asset else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    if asset.path == INDEX
-        && let Some(page) = PAGES.get(path)
-    {
-        return serve_page(page, asset, &uri, &headers);
+    if asset.path == INDEX {
+        let signed_in = viewer.is_some();
+        if !signed_in && preload::route(path).is_some_and(preload::private) {
+            return sign_in_first(&uri);
+        }
+        if let Some(page) = PAGES.get(path) {
+            return serve_page(page, asset, &uri, &headers, signed_in);
+        }
     }
     let cache = if asset.path.starts_with("/assets/") {
         IMMUTABLE
@@ -107,24 +116,44 @@ pub async fn serve(uri: Uri, headers: HeaderMap) -> Response {
     )
 }
 
+/// A redirect to the sign-in page, which comes back to `uri` after signing in.
+fn sign_in_first(uri: &Uri) -> Response {
+    let back = uri.path_and_query().map_or("/", |p| p.as_str());
+    let encoded: String = form_urlencoded::byte_serialize(back.as_bytes()).collect();
+    let mut response = Redirect::to(&format!("/login?redirect={encoded}")).into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+/// Pages differ by account (their preloads), so caches keep them per browser.
+const PAGE_CACHE: &str = "private, no-cache";
+
 /// index.html with preloads for the code and data the page at `uri` loads first.
 fn serve_page(
     (route, page): &(&str, Page),
     asset: &Asset,
     uri: &Uri,
     headers: &HeaderMap,
+    signed_in: bool,
 ) -> Response {
-    let links = preload::links(uri.path(), uri.query());
+    let links = preload::links(uri.path(), uri.query(), signed_in);
     let version = [asset.etag, route, &links].join("\n");
     let etag = fingerprint::etag(version.as_bytes());
     let rest = [links.as_bytes(), PAGES.tail].concat();
-    respond(headers, asset.mime, REVALIDATE, &etag, |coding| {
+    let mut response = respond(headers, asset.mime, PAGE_CACHE, &etag, |coding| {
         Some(Body::from(match coding {
             Coding::Br => brotli_append(page.br_head, &rest),
             Coding::Zstd => zstd_append(page.zstd_head, &rest),
             Coding::Identity => [page.head, &rest].concat(),
         }))
-    })
+    });
+    response.headers_mut().insert(
+        header::VARY,
+        HeaderValue::from_static("accept-encoding, cookie"),
+    );
+    response
 }
 
 #[derive(Clone, Copy)]
@@ -217,7 +246,17 @@ mod tests {
             header::ACCEPT_ENCODING,
             HeaderValue::from_str(encoding).unwrap(),
         );
-        serve(path.parse().unwrap(), headers).await
+        serve(
+            path.parse().unwrap(),
+            headers,
+            Some(axum::Extension(viewer())),
+        )
+        .await
+    }
+
+    /// A signed-in browser's session.
+    fn viewer() -> crate::auth::Viewer {
+        crate::auth::Viewer::test(crate::db::UserId::test(1))
     }
 
     async fn body(response: Response) -> Vec<u8> {
@@ -258,7 +297,7 @@ mod tests {
             return; // an API-only build embeds no web app
         };
         let plain = body(get("/code/two-sum?x=1", "identity").await).await;
-        let links = preload::links("/code/two-sum", Some("x=1"));
+        let links = preload::links("/code/two-sum", Some("x=1"), true);
         assert_eq!(plain, [page.head, links.as_bytes(), PAGES.tail].concat());
         assert!(links.contains("/api/code/two-sum"));
         let code = r#"<link rel="modulepreload" crossorigin href="/assets/code._slug-"#;
@@ -311,7 +350,41 @@ mod tests {
         assert_ne!(etag(&home), etag(&problems));
         let mut headers = HeaderMap::new();
         headers.insert(header::IF_NONE_MATCH, etag(&problems));
-        let again = serve("/problems".parse().unwrap(), headers).await;
+        let again = serve(
+            "/problems".parse().unwrap(),
+            headers,
+            Some(axum::Extension(viewer())),
+        )
+        .await;
         assert_eq!(again.status(), StatusCode::NOT_MODIFIED);
+    }
+
+    #[tokio::test]
+    async fn progress_pages_send_a_signed_out_browser_to_sign_in() {
+        if PAGES.routes.is_empty() {
+            return;
+        }
+        for (page, to) in [
+            ("/", "/login?redirect=%2F"),
+            (
+                "/code/two-sum?x=1",
+                "/login?redirect=%2Fcode%2Ftwo-sum%3Fx%3D1",
+            ),
+            ("/account", "/login?redirect=%2Faccount"),
+        ] {
+            let response = serve(page.parse().unwrap(), HeaderMap::new(), None).await;
+            assert_eq!(response.status(), StatusCode::SEE_OTHER, "{page}");
+            assert_eq!(response.headers()[header::LOCATION], to);
+            assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        }
+        // Public pages load, with only public data preloaded.
+        for page in ["/about", "/login", "/nope"] {
+            let response = serve(page.parse().unwrap(), HeaderMap::new(), None).await;
+            assert_eq!(response.status(), StatusCode::OK, "{page}");
+            assert_eq!(response.headers()[header::VARY], "accept-encoding, cookie");
+            let html = String::from_utf8(body(response).await).unwrap();
+            assert!(html.contains("/api/session?company=google"), "{page}");
+            assert!(!html.contains("/api/report") && !html.contains("/api/deck"));
+        }
     }
 }

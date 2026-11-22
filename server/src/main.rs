@@ -4,12 +4,15 @@
 mod acme;
 mod api;
 mod assets;
+mod auth;
 #[cfg(test)]
 mod csp;
 mod db;
 mod deploy;
 mod error;
 mod health;
+#[cfg(test)]
+mod isolation;
 mod judge;
 mod listen;
 mod preload;
@@ -28,7 +31,6 @@ use axum::http::uri::Authority;
 use axum::http::{Uri, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
-use parking_lot::RwLock;
 use rustls_acme::AcmeConfig;
 
 use tower_http::CompressionLevel;
@@ -37,11 +39,12 @@ use tower_http::compression::CompressionLayer;
 use openleet::content::Content;
 
 use crate::acme::{CertificateSlot, ObservedCache};
+use crate::auth::Auth;
 use crate::db::{Opening, Store};
 use crate::deploy::Deploy;
 use crate::judge::Judge;
 use crate::listen::Sockets;
-use crate::state::{AppState, Progress, Shared};
+use crate::state::{AppState, Shared};
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -162,25 +165,21 @@ fn load_state(config: &Config) -> Result<Shared> {
         &config.data_dir.join("judge/specs.json"),
         config.judge.clone(),
     )?;
-    let progress = Progress::new(
-        store.attempts()?,
-        store.notes()?,
-        store.coding_log()?,
-        store.plans()?,
-        state::user_lists(&content, store.lists()?),
-    );
-    let companies = api::companies_response(&content);
-    Ok(Arc::new(AppState {
-        companies,
-        revision: deploy::revision(&config.data_dir),
-        deploy: Deploy::new(config.deploy_secret.clone(), &config.state_dir),
+    let auth = Auth::load(
+        &store,
+        &config.state_dir,
+        config.tls_domains().is_some(),
+        state::now_ms(),
+    )?;
+    Ok(Arc::new(AppState::new(
         content,
+        deploy::revision(&config.data_dir),
+        Deploy::new(config.deploy_secret.clone(), &config.state_dir),
         store,
         judge,
-        progress: RwLock::new(progress),
-        progress_updates: parking_lot::Mutex::new(()),
-        certificate: CertificateSlot::default(),
-    }))
+        auth,
+        CertificateSlot::default(),
+    )))
 }
 
 fn app(state: Shared) -> Router {
@@ -194,6 +193,10 @@ fn app(state: Shared) -> Router {
     Router::new()
         .nest("/api", api)
         .fallback(assets::serve)
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::clone(&state),
+            auth::middleware,
+        ))
         .layer(axum::middleware::map_response(security::headers))
         .layer(tower::limit::GlobalConcurrencyLimitLayer::new(
             security::MAX_IN_FLIGHT,
@@ -237,10 +240,10 @@ async fn main() -> Result<()> {
     let config = Config::from_env()?;
     let state = load_state(&config)?;
     tracing::info!(
-        "OpenLeet {}: {} problems, {} attempts, {} embedded files{}",
+        "OpenLeet {}: {} problems, {} accounts, {} embedded files{}",
         state.revision,
         state.content.problems.len(),
-        state.progress.read().attempts.len(),
+        state.auth.user_count(),
         assets::embedded(),
         if sockets.activated() {
             ", socket-activated"
@@ -255,6 +258,7 @@ async fn main() -> Result<()> {
         loop {
             tick.tick().await;
             scorer.refresh_reports();
+            scorer.auth.prune(state::now_ms());
             let store = Arc::clone(&scorer);
             let _ = store.db(Store::checkpoint).await;
         }
@@ -272,9 +276,12 @@ async fn main() -> Result<()> {
             tracing::info!("serving {} on {http}", config.site);
             let listener = tokio::net::TcpListener::from_std(sockets.take("http", http)?)?;
             health::ready();
-            axum::serve(listener, router)
-                .with_graceful_shutdown(stop.wait())
-                .await?;
+            axum::serve(
+                listener,
+                router.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(stop.wait())
+            .await?;
         }
         Some(domains) => {
             serve_tls(
@@ -440,7 +447,7 @@ async fn serve_tls(
                     canonical_host,
                 ))
                 .layer(axum::middleware::map_response(hsts))
-                .into_make_service(),
+                .into_make_service_with_connect_info::<SocketAddr>(),
         )
         .await?;
     Ok(())

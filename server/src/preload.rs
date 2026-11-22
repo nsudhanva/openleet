@@ -27,9 +27,14 @@ const MAX_SLUG: usize = 128;
 
 /// `<link rel="preload">` tags for the data the page at `path?query` loads first. (Its route's
 /// code is preloaded too, by the version of index.html made for that route: build.rs.)
-pub fn links(path: &str, query: Option<&str>) -> String {
+/// Signed out, a page loads only the root route's public data: the session and companies.
+pub fn links(path: &str, query: Option<&str>, signed_in: bool) -> String {
     let mut links = String::new();
-    for url in urls(path, query) {
+    let mut urls = urls(path, query);
+    if !signed_in {
+        urls.truncate(ROOT_LOADS);
+    }
+    for url in urls {
         // URLs are percent-encoded: `&` is the only character to escape in an attribute.
         let href = url.replace('&', "&amp;");
         let _ = write!(
@@ -47,6 +52,8 @@ pub fn route(path: &str) -> Option<&'static str> {
         "/problems" => Some("problems"),
         "/progress" => Some("progress"),
         "/about" => Some("about"),
+        "/login" => Some("login"),
+        "/account" => Some("account"),
         _ => path
             .strip_prefix("/code/")
             .filter(|slug| !slug.is_empty() && !slug.contains('/'))
@@ -54,13 +61,24 @@ pub fn route(path: &str) -> Option<&'static str> {
     }
 }
 
-/// The API requests the page's route loaders make first, in order: the root route's (every
-/// page), then the page's own.
+/// Whether a route shows an account's progress, so only a signed-in browser gets its page.
+pub fn private(route: &str) -> bool {
+    matches!(
+        route,
+        "index" | "problems" | "progress" | "code.$slug" | "account"
+    )
+}
+
+/// The requests of the root route's loader, which every page makes first.
+const ROOT_LOADS: usize = 2;
+
+/// The API requests the page's route loaders make first when signed in, in order: the root
+/// route's (every page), then the page's own.
 pub fn urls(path: &str, query: Option<&str>) -> Vec<String> {
     let params = Params::parse(query.unwrap_or_default());
     let company = params.company();
     let mut urls = vec![
-        api("/api/readiness", &[("company", Some(company.clone()))]),
+        api("/api/session", &[("company", Some(company.clone()))]),
         "/api/companies".to_owned(),
     ];
     match path {
@@ -371,7 +389,7 @@ mod tests {
         assert_eq!(
             page("/progress?company=1.5"),
             [
-                "/api/readiness?company=google",
+                "/api/session?company=google",
                 "/api/companies",
                 "/api/report?company=google"
             ]
@@ -388,12 +406,14 @@ mod tests {
         assert_eq!(route("/code/"), None);
         assert_eq!(route("/code/a/b"), None);
         assert_eq!(route("/nope"), None);
+        assert!(private("code.$slug") && private("index") && private("account"));
+        assert!(!private("about") && !private("login") && !private(""));
     }
 
     #[test]
     fn writes_link_tags() {
         let data = |page| {
-            let links = links(page, None);
+            let links = links(page, None, true);
             links[..links
                 .find("<link rel=\"modulepreload\"")
                 .unwrap_or(links.len())]
@@ -402,11 +422,21 @@ mod tests {
         assert_eq!(
             data("/progress"),
             concat!(
-                r#"<link rel="preload" as="fetch" crossorigin href="/api/readiness?company=google">"#,
+                r#"<link rel="preload" as="fetch" crossorigin href="/api/session?company=google">"#,
                 r#"<link rel="preload" as="fetch" crossorigin href="/api/companies">"#,
                 r#"<link rel="preload" as="fetch" crossorigin href="/api/report?company=google">"#,
             )
         );
-        assert!(links("/", None).contains("/api/deck?company=google&amp;set=smart&amp;period=6m"));
+        assert!(
+            links("/", None, true).contains("/api/deck?company=google&amp;set=smart&amp;period=6m")
+        );
+        // Signed out, nothing private: it would only answer 401.
+        assert_eq!(
+            links("/about", Some("company=meta"), false),
+            concat!(
+                r#"<link rel="preload" as="fetch" crossorigin href="/api/session?company=meta">"#,
+                r#"<link rel="preload" as="fetch" crossorigin href="/api/companies">"#,
+            )
+        );
     }
 }

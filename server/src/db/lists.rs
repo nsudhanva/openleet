@@ -5,7 +5,7 @@
 use anyhow::Result;
 use duckdb::params;
 
-use super::Store;
+use super::{Store, UserId};
 
 /// Lists allowed.
 pub const MAX_LISTS: usize = 50;
@@ -22,13 +22,14 @@ pub struct StoredList {
 
 impl Store {
     /// Every list, newest first, with its problems in order.
-    pub fn lists(&self) -> Result<Vec<StoredList>> {
+    pub fn lists(&self, user: UserId) -> Result<Vec<StoredList>> {
         self.with(|c| {
             let mut lists: Vec<StoredList> = c
                 .prepare_cached(
-                    "SELECT id, name FROM user_lists ORDER BY created_at DESC, id DESC",
+                    "SELECT id, name FROM user_lists WHERE user_id = ?
+                     ORDER BY created_at DESC, id DESC",
                 )?
-                .query_map([], |r| {
+                .query_map([user], |r| {
                     Ok(StoredList {
                         id: r.get(0)?,
                         name: r.get(1)?,
@@ -37,10 +38,13 @@ impl Store {
                 })?
                 .collect::<Result<_, _>>()?;
             let mut items = c.prepare_cached(
-                "SELECT list_id, slug FROM user_list_problems ORDER BY list_id, position",
+                "SELECT p.list_id, p.slug FROM user_list_problems p
+                 JOIN user_lists l ON l.id = p.list_id
+                 WHERE l.user_id = ? ORDER BY p.list_id, p.position",
             )?;
-            let rows =
-                items.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+            let rows = items.query_map([user], |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+            })?;
             for row in rows {
                 let (id, slug) = row?;
                 if let Some(list) = lists.iter_mut().find(|l| l.id == id) {
@@ -53,19 +57,29 @@ impl Store {
 
     /// Makes a list of `slugs` (checked by the caller: known, each once) at `at`. Returns its
     /// id, or `None` when there are [`MAX_LISTS`] lists already.
-    pub fn create_list(&self, name: &str, slugs: &[String], at: i64) -> Result<Option<i64>> {
+    pub fn create_list(
+        &self,
+        user: UserId,
+        name: &str,
+        slugs: &[String],
+        at: i64,
+    ) -> Result<Option<i64>> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
-        let count: i64 = tx.query_row("SELECT count(*) FROM user_lists", [], |r| r.get(0))?;
+        let count: i64 = tx.query_row(
+            "SELECT count(*) FROM user_lists WHERE user_id = ?",
+            [user],
+            |r| r.get(0),
+        )?;
         if usize::try_from(count).unwrap_or(usize::MAX) >= MAX_LISTS {
             return Ok(None);
         }
         let id: i64 = tx
             .prepare_cached(
-                "INSERT INTO user_lists (name, created_at, updated_at)
-                 VALUES ($1, to_timestamp($2 / 1000), to_timestamp($2 / 1000)) RETURNING id",
+                "INSERT INTO user_lists (user_id, name, created_at, updated_at)
+                 VALUES ($3, $1, to_timestamp($2 / 1000), to_timestamp($2 / 1000)) RETURNING id",
             )?
-            .query_row(params![name, at], |r| r.get(0))?;
+            .query_row(params![name, at, user], |r| r.get(0))?;
         insert_problems(&tx, id, slugs)?;
         tx.commit()?;
         Ok(Some(id))
@@ -75,6 +89,7 @@ impl Store {
     /// list has the id.
     pub fn change_list(
         &self,
+        user: UserId,
         id: i64,
         name: Option<&str>,
         slugs: Option<&[String]>,
@@ -82,16 +97,17 @@ impl Store {
     ) -> Result<bool> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
-        let found: i64 =
-            tx.query_row("SELECT count(*) FROM user_lists WHERE id = ?", [id], |r| {
-                r.get(0)
-            })?;
+        let found: i64 = tx.query_row(
+            "SELECT count(*) FROM user_lists WHERE user_id = ? AND id = ?",
+            params![user, id],
+            |r| r.get(0),
+        )?;
         if found == 0 {
             return Ok(false);
         }
         if let Some(name) = name {
-            tx.prepare_cached("UPDATE user_lists SET name = ? WHERE id = ?")?
-                .execute(params![name, id])?;
+            tx.prepare_cached("UPDATE user_lists SET name = ? WHERE user_id = ? AND id = ?")?
+                .execute(params![name, user, id])?;
         }
         if let Some(slugs) = slugs {
             tx.prepare_cached("DELETE FROM user_list_problems WHERE list_id = ?")?
@@ -99,22 +115,24 @@ impl Store {
             insert_problems(&tx, id, slugs)?;
         }
         tx.prepare_cached(
-            "UPDATE user_lists SET updated_at = to_timestamp(? / 1000) WHERE id = ?",
+            "UPDATE user_lists SET updated_at = to_timestamp(? / 1000) WHERE user_id = ? AND id = ?",
         )?
-        .execute(params![at, id])?;
+        .execute(params![at, user, id])?;
         tx.commit()?;
         Ok(true)
     }
 
     /// Deletes a list and its problems; `false` when no list has the id.
-    pub fn delete_list(&self, id: i64) -> Result<bool> {
+    pub fn delete_list(&self, user: UserId, id: i64) -> Result<bool> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
-        tx.prepare_cached("DELETE FROM user_list_problems WHERE list_id = ?")?
-            .execute([id])?;
         let deleted = tx
-            .prepare_cached("DELETE FROM user_lists WHERE id = ?")?
-            .execute([id])?;
+            .prepare_cached("DELETE FROM user_lists WHERE user_id = ? AND id = ?")?
+            .execute(params![user, id])?;
+        if deleted > 0 {
+            tx.prepare_cached("DELETE FROM user_list_problems WHERE list_id = ?")?
+                .execute([id])?;
+        }
         tx.commit()?;
         Ok(deleted > 0)
     }
@@ -133,6 +151,8 @@ fn insert_problems(tx: &duckdb::Transaction<'_>, id: i64, slugs: &[String]) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const U: UserId = UserId::test(1);
     use crate::db::testing::TempDir;
 
     fn store() -> (Store, TempDir) {
@@ -150,14 +170,14 @@ mod tests {
     fn creates_renames_reorders_and_deletes_lists() {
         let (store, _dir) = store();
         let first = store
-            .create_list("Graphs", &slugs(&["b", "a"]), 1_000)
+            .create_list(U, "Graphs", &slugs(&["b", "a"]), 1_000)
             .unwrap()
             .expect("created");
         let second = store
-            .create_list("Empty", &[], 2_000)
+            .create_list(U, "Empty", &[], 2_000)
             .unwrap()
             .expect("created");
-        let lists = store.lists().unwrap();
+        let lists = store.lists(U).unwrap();
         assert_eq!(
             lists,
             [
@@ -177,12 +197,12 @@ mod tests {
         let reordered = slugs(&["a", "c", "b"]);
         assert!(
             store
-                .change_list(first, Some("Graph drills"), Some(&reordered), 3_000)
+                .change_list(U, first, Some("Graph drills"), Some(&reordered), 3_000)
                 .unwrap()
         );
-        assert!(!store.change_list(99, Some("x"), None, 3_000).unwrap());
+        assert!(!store.change_list(U, 99, Some("x"), None, 3_000).unwrap());
         let changed = store
-            .lists()
+            .lists(U)
             .unwrap()
             .into_iter()
             .find(|l| l.id == first)
@@ -192,17 +212,19 @@ mod tests {
             ("Graph drills", reordered)
         );
 
-        assert!(store.delete_list(first).unwrap());
-        assert!(!store.delete_list(first).unwrap());
-        assert_eq!(store.lists().unwrap().len(), 1);
+        assert!(store.delete_list(U, first).unwrap());
+        assert!(!store.delete_list(U, first).unwrap());
+        assert_eq!(store.lists(U).unwrap().len(), 1);
     }
 
     #[test]
     fn refuses_a_list_past_the_limit() {
         let (store, _dir) = store();
         for i in 0..MAX_LISTS {
-            store.create_list(&format!("List {i}"), &[], 1_000).unwrap();
+            store
+                .create_list(U, &format!("List {i}"), &[], 1_000)
+                .unwrap();
         }
-        assert_eq!(store.create_list("One more", &[], 2_000).unwrap(), None);
+        assert_eq!(store.create_list(U, "One more", &[], 2_000).unwrap(), None);
     }
 }

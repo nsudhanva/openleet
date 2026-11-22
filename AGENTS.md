@@ -54,7 +54,10 @@ changing `web/`, verify every page still scores 100 in Lighthouse on mobile and 
 ## Product rules
 
 - Python is the only supported judge language.
-- No accounts or login; progress belongs to the server instance.
+- Accounts: email and password, no email verification. Each account's progress is its own: every
+  progress query and endpoint is scoped to the signed-in account (see
+  [architecture](docs/architecture.md#accounts-and-sessions)). Never add an endpoint that reads or
+  writes progress without `auth::Me`, and never take a user id from the request.
 - Keep premium problems visible.
 - No invented study content: problems, statements, and solutions come from the sources listed in
   [README](README.md). Agent-written approaches and hints must be reviewed with Codex CLI and

@@ -2,7 +2,7 @@
 	{
 		"page": "/",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=6m"
 		]
@@ -10,7 +10,7 @@
 	{
 		"page": "/?utm_source=x&difficulty=Hard&topic=Dynamic%20Programming&company=meta",
 		"fetches": [
-			"/api/readiness?company=meta",
+			"/api/session?company=meta",
 			"/api/companies",
 			"/api/deck?company=meta&set=smart&period=6m&topic=Dynamic+Programming&difficulty=Hard"
 		]
@@ -18,7 +18,7 @@
 	{
 		"page": "/?set=nope&period=30d&slug=two-sum",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=30d&slug=two-sum"
 		]
@@ -26,7 +26,7 @@
 	{
 		"page": "/?set=again&set=due&period=lc1000",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=lc1000"
 		]
@@ -34,7 +34,7 @@
 	{
 		"page": "/?company=Meta",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=6m"
 		]
@@ -42,7 +42,7 @@
 	{
 		"page": "/?company=123",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=6m"
 		]
@@ -50,7 +50,7 @@
 	{
 		"page": "/?company=facebook&set=all",
 		"fetches": [
-			"/api/readiness?company=facebook",
+			"/api/session?company=facebook",
 			"/api/companies",
 			"/api/deck?company=facebook&set=all&period=6m"
 		]
@@ -58,7 +58,7 @@
 	{
 		"page": "/?company=%22meta%22",
 		"fetches": [
-			"/api/readiness?company=meta",
+			"/api/session?company=meta",
 			"/api/companies",
 			"/api/deck?company=meta&set=smart&period=6m"
 		]
@@ -66,7 +66,7 @@
 	{
 		"page": "/?topic=%20%20Array%20&difficulty=easy",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=6m&topic=Array"
 		]
@@ -74,7 +74,7 @@
 	{
 		"page": "/?topic=42",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=6m&topic=42"
 		]
@@ -82,7 +82,7 @@
 	{
 		"page": "/?topic=%22Hash%20Table%22",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=6m&topic=Hash+Table"
 		]
@@ -90,7 +90,7 @@
 	{
 		"page": "/?topic=true&slug=",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=6m"
 		]
@@ -98,7 +98,7 @@
 	{
 		"page": "/?topic=a&topic=b",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=6m"
 		]
@@ -106,7 +106,7 @@
 	{
 		"page": "/?topic=%EF%BB%BFTrie%E2%80%83",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=6m&topic=Trie"
 		]
@@ -114,7 +114,7 @@
 	{
 		"page": "/?topic=%C2%85Trie",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=6m&topic=%C2%85Trie"
 		]
@@ -122,7 +122,7 @@
 	{
 		"page": "/?slug=two+sum%2Fx",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/deck?company=google&set=smart&period=6m&slug=two+sum%2Fx"
 		]
@@ -130,7 +130,7 @@
 	{
 		"page": "/problems",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m",
 			"/api/plans",
@@ -140,7 +140,7 @@
 	{
 		"page": "/problems?status=unsolved&order=easy-first&topic=Trie",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m&topic=Trie&status=unsolved&order=easy-first",
 			"/api/plans",
@@ -150,7 +150,7 @@
 	{
 		"page": "/problems?status=all&order=rank",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m",
 			"/api/plans",
@@ -160,7 +160,7 @@
 	{
 		"page": "/problems?status=solved&order=best",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m",
 			"/api/plans",
@@ -170,7 +170,7 @@
 	{
 		"page": "/problems?q=two%20sum&period=lc1000&company=amazon&set=due",
 		"fetches": [
-			"/api/readiness?company=amazon",
+			"/api/session?company=amazon",
 			"/api/companies",
 			"/api/problems?company=amazon&period=lc1000&q=two+sum",
 			"/api/plans",
@@ -180,7 +180,7 @@
 	{
 		"page": "/problems?q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%20bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb&topic=Heap%20(Priority%20Queue)",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m&topic=Heap+%28Priority+Queue%29&q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			"/api/plans",
@@ -190,19 +190,19 @@
 	{
 		"page": "/progress?company=meta",
 		"fetches": [
-			"/api/readiness?company=meta",
+			"/api/session?company=meta",
 			"/api/companies",
 			"/api/report?company=meta"
 		]
 	},
 	{
 		"page": "/about?company=any",
-		"fetches": ["/api/readiness?company=any", "/api/companies"]
+		"fetches": ["/api/session?company=any", "/api/companies"]
 	},
 	{
 		"page": "/code/two-sum",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/problems/two-sum",
 			"/api/code/two-sum",
@@ -212,7 +212,7 @@
 	{
 		"page": "/code/two-sum?period=3m&topic=Array&status=all&order=random",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/problems/two-sum",
 			"/api/code/two-sum",
@@ -221,12 +221,12 @@
 	},
 	{
 		"page": "/no-such-page",
-		"fetches": ["/api/readiness?company=google", "/api/companies"]
+		"fetches": ["/api/session?company=google", "/api/companies"]
 	},
 	{
 		"page": "/problems?list=3&topic=Stack&period=nope",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m&list=3&topic=Stack",
 			"/api/plans",
@@ -236,7 +236,7 @@
 	{
 		"page": "/problems?list=-2&company=meta",
 		"fetches": [
-			"/api/readiness?company=meta",
+			"/api/session?company=meta",
 			"/api/companies",
 			"/api/problems?company=meta&period=6m",
 			"/api/plans",
@@ -246,7 +246,7 @@
 	{
 		"page": "/problems?list=2.5",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m",
 			"/api/plans",
@@ -256,7 +256,7 @@
 	{
 		"page": "/problems?list=abc",
 		"fetches": [
-			"/api/readiness?company=google",
+			"/api/session?company=google",
 			"/api/companies",
 			"/api/problems?company=google&period=6m",
 			"/api/plans",

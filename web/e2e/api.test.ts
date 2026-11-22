@@ -1,9 +1,14 @@
 import { describe, expect, inject, it } from "vitest";
 
 const base = inject("baseUrl");
+const cookie = inject("cookie");
 
+/** A request as the suite's account. */
 async function api(path: string, init?: RequestInit) {
-	const response = await fetch(`${base}${path}`, init);
+	const response = await fetch(`${base}${path}`, {
+		...init,
+		headers: { ...init?.headers, cookie },
+	});
 	const text = await response.text();
 	return { status: response.status, body: text ? JSON.parse(text) : null };
 }
@@ -185,10 +190,30 @@ describe("HTTP API, end to end", () => {
 		expect((await api("/api/problems/two-sum")).body.note).toBeNull();
 	});
 
-	it("serves the single-page app for any page", async () => {
+	it("serves the single-page app for any page, and sends a signed-out browser to sign in", async () => {
 		for (const path of ["/", "/problems", "/code/two-sum"]) {
-			const html = await (await fetch(`${base}${path}`)).text();
-			expect(html).toContain('<div id="app">');
+			const page = await fetch(`${base}${path}`, { headers: { cookie } });
+			expect(await page.text()).toContain('<div id="app">');
+			const signedOut = await fetch(`${base}${path}`, { redirect: "manual" });
+			expect(signedOut.status).toBe(303);
+			expect(signedOut.headers.get("location")).toBe(
+				`/login?redirect=${encodeURIComponent(path)}`,
+			);
 		}
+		const login = await fetch(`${base}/login`);
+		expect(await login.text()).toContain('<div id="app">');
+	});
+
+	it("answers 401 without a session, and keeps content public", async () => {
+		for (const path of ["/api/deck", "/api/report", "/api/plans"]) {
+			expect(await (await fetch(`${base}${path}`)).json()).toEqual({
+				error: "Sign in to continue",
+			});
+		}
+		expect((await fetch(`${base}/api/companies`)).status).toBe(200);
+		const session = await (await fetch(`${base}/api/session`)).json();
+		expect(session.user).toBeNull();
+		const mine = await api("/api/session");
+		expect(mine.body.user.email).toMatch(/^e2e-.*@openleet\.invalid$/);
 	});
 });

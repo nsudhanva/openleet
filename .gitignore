@@ -40,5 +40,7 @@ data/*.duckdb.wal
 data/acme/
 data/backups/
 data/quarantine/
+# The one-time code that makes the first admin (server/src/auth.rs)
+data/setup-code
 # A release asset ("corpus"), named in data/judge/corpus.json: uv run openleet judge fetch
 data/judge/tests.duckdb

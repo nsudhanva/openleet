@@ -17,9 +17,10 @@ use openleet::plan::{
 use openleet::user_lists::{UserList, UserLists};
 
 use super::plans::checked_name;
+use crate::auth::Me;
 use crate::db::{MAX_LIST_PROBLEMS, MAX_LISTS};
 use crate::error::{ApiError, ApiResult};
-use crate::state::{AppState, Shared, now_ms, user_lists};
+use crate::state::{AppState, Learner, Shared, now_ms, user_lists};
 
 /// A list as the API shows it.
 #[derive(Serialize)]
@@ -59,9 +60,9 @@ fn view<'a>(
     }
 }
 
-/// Every list, newest first.
-pub async fn lists(State(state): State<Shared>) -> Response {
-    let progress = state.progress.read();
+/// Every list of yours, newest first.
+pub async fn lists(State(state): State<Shared>, me: Me) -> Response {
+    let progress = me.learner.progress.read();
     let views: Vec<ListView<'_>> = progress
         .lists
         .all()
@@ -71,9 +72,14 @@ pub async fn lists(State(state): State<Shared>) -> Response {
     Json(&views).into_response()
 }
 
-/// The list with `id`, as the API shows it, else a 404.
-fn list_response(state: &Shared, id: i64, status: StatusCode) -> ApiResult<Response> {
-    let progress = state.progress.read();
+/// Your list with `id`, as the API shows it, else a 404.
+fn list_response(
+    state: &Shared,
+    learner: &Learner,
+    id: i64,
+    status: StatusCode,
+) -> ApiResult<Response> {
+    let progress = learner.progress.read();
     let list = progress
         .lists
         .get(id)
@@ -108,10 +114,10 @@ fn checked_slugs(content: &Content, slugs: Vec<String>) -> ApiResult<Vec<String>
     Ok(kept)
 }
 
-/// Rereads the lists after a write, so the memory matches the database.
-fn reload(state: &AppState) -> anyhow::Result<()> {
-    let lists = user_lists(&state.content, state.store.lists()?);
-    state.progress.write().lists = lists;
+/// Rereads the account's lists after a write, so the memory matches the database.
+fn reload(state: &AppState, learner: &Learner) -> anyhow::Result<()> {
+    let lists = user_lists(&state.content, state.store.lists(learner.user)?);
+    learner.progress.write().lists = lists;
     Ok(())
 }
 
@@ -125,22 +131,25 @@ pub struct NewList {
 
 pub async fn create_list(
     State(state): State<Shared>,
+    me: Me,
     Json(input): Json<NewList>,
 ) -> ApiResult<Response> {
     let name = checked_name(&input.name, "")?;
     let slugs = checked_slugs(&state.content, input.slugs)?;
     let created = state
-        .update_progress(move |state| {
-            let created = state.store.create_list(&name, &slugs, now_ms())?;
+        .update_progress(&me.learner, move |state, learner| {
+            let created = state
+                .store
+                .create_list(learner.user, &name, &slugs, now_ms())?;
             if created.is_some() {
-                reload(state)?;
+                reload(state, learner)?;
             }
             Ok(created)
         })
         .await?;
     let id = created
         .ok_or_else(|| ApiError::BadRequest(format!("You can keep at most {MAX_LISTS} lists")))?;
-    list_response(&state, id, StatusCode::CREATED)
+    list_response(&state, &me.learner, id, StatusCode::CREATED)
 }
 
 /// Body of `PATCH /api/lists/{id}`: a new name, the problems in their new order, or both.
@@ -153,6 +162,7 @@ pub struct ListEdit {
 /// Renames a list or replaces its problems.
 pub async fn edit_list(
     State(state): State<Shared>,
+    me: Me,
     Path(id): Path<i64>,
     Json(edit): Json<ListEdit>,
 ) -> ApiResult<Response> {
@@ -162,13 +172,16 @@ pub async fn edit_list(
         .map(|s| checked_slugs(&state.content, s))
         .transpose()?;
     let changed = state
-        .update_progress(move |state| {
-            let changed =
-                state
-                    .store
-                    .change_list(id, name.as_deref(), slugs.as_deref(), now_ms())?;
+        .update_progress(&me.learner, move |state, learner| {
+            let changed = state.store.change_list(
+                learner.user,
+                id,
+                name.as_deref(),
+                slugs.as_deref(),
+                now_ms(),
+            )?;
             if changed {
-                reload(state)?;
+                reload(state, learner)?;
             }
             Ok(changed)
         })
@@ -176,18 +189,19 @@ pub async fn edit_list(
     if !changed {
         return Err(ApiError::NotFound(format!("No list {id}")));
     }
-    list_response(&state, id, StatusCode::OK)
+    list_response(&state, &me.learner, id, StatusCode::OK)
 }
 
 pub async fn delete_list(
     State(state): State<Shared>,
+    me: Me,
     Path(id): Path<i64>,
 ) -> ApiResult<StatusCode> {
     let deleted = state
-        .update_progress(move |state| {
-            let deleted = state.store.delete_list(id)?;
+        .update_progress(&me.learner, move |state, learner| {
+            let deleted = state.store.delete_list(learner.user, id)?;
             if deleted {
-                reload(state)?;
+                reload(state, learner)?;
             }
             Ok(deleted)
         })
@@ -205,7 +219,7 @@ mod tests {
 
     use super::*;
     use crate::api::plans::next;
-    use crate::api::testing::{json, query, state};
+    use crate::api::testing::{json, me, query, state};
     use crate::db::testing::TempDir;
 
     fn slugs(names: &[&str]) -> Vec<String> {
@@ -213,7 +227,7 @@ mod tests {
     }
 
     async fn all(state: &Shared) -> serde_json::Value {
-        json(lists(State(Arc::clone(state))).await).await
+        json(lists(State(Arc::clone(state)), me(state).await).await).await
     }
 
     #[tokio::test]
@@ -222,6 +236,7 @@ mod tests {
         let state = state(&dir);
         let made = create_list(
             State(Arc::clone(&state)),
+            me(&state).await,
             Json(NewList {
                 name: "  Calculators ".into(),
                 slugs: slugs(&["basic-calculator", "two-sum", "basic-calculator"]),
@@ -246,7 +261,7 @@ mod tests {
         );
 
         // A plan over the list walks it in its order.
-        state.progress.write().coding.record(
+        me(&state).await.learner.progress.write().coding.record(
             "basic-calculator",
             1,
             openleet_proto::Verdict::Accepted,
@@ -255,6 +270,7 @@ mod tests {
         let walked = json(
             next(
                 State(Arc::clone(&state)),
+                me(&state).await,
                 query(&[("list", &id_text), ("slug", "basic-calculator")]),
             )
             .await
@@ -266,6 +282,7 @@ mod tests {
 
         let edited = edit_list(
             State(Arc::clone(&state)),
+            me(&state).await,
             Path(id),
             Json(ListEdit {
                 name: Some("Stack drills".into()),
@@ -285,6 +302,7 @@ mod tests {
         // Unknown problems, blank names and unknown lists are refused.
         let unknown = edit_list(
             State(Arc::clone(&state)),
+            me(&state).await,
             Path(id),
             Json(ListEdit {
                 name: None,
@@ -295,6 +313,7 @@ mod tests {
         assert!(matches!(unknown, Err(ApiError::BadRequest(_))));
         let blank = create_list(
             State(Arc::clone(&state)),
+            me(&state).await,
             Json(NewList {
                 name: "  ".into(),
                 slugs: Vec::new(),
@@ -304,6 +323,7 @@ mod tests {
         assert!(matches!(blank, Err(ApiError::BadRequest(_))));
         let missing = edit_list(
             State(Arc::clone(&state)),
+            me(&state).await,
             Path(id + 1),
             Json(ListEdit {
                 name: Some("x".into()),
@@ -314,20 +334,23 @@ mod tests {
         assert!(matches!(missing, Err(ApiError::NotFound(_))));
 
         assert_eq!(
-            delete_list(State(Arc::clone(&state)), Path(id))
+            delete_list(State(Arc::clone(&state)), me(&state).await, Path(id))
                 .await
                 .expect("deleted"),
             StatusCode::NO_CONTENT
         );
         assert!(matches!(
-            delete_list(State(Arc::clone(&state)), Path(id)).await,
+            delete_list(State(Arc::clone(&state)), me(&state).await, Path(id)).await,
             Err(ApiError::NotFound(_))
         ));
         assert_eq!(all(&state).await, serde_json::json!([]));
         // The table of a deleted list is empty, not an error.
-        let rows =
-            crate::api::study::problems(State(Arc::clone(&state)), query(&[("list", &id_text)]))
-                .await;
+        let rows = crate::api::study::problems(
+            State(Arc::clone(&state)),
+            me(&state).await,
+            query(&[("list", &id_text)]),
+        )
+        .await;
         assert_eq!(json(rows).await, serde_json::json!([]));
     }
 }

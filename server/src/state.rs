@@ -1,14 +1,17 @@
-//! Shared server state: static content, the in-memory progress cache, storage and the judge.
+//! Shared server state: static content, accounts, each active account's progress in memory,
+//! storage and the judge.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use openleet::coding::CodingLog;
 use openleet::content::Content;
-use openleet::insights::Learner;
+use openleet::insights;
 use openleet::model::{Attempt, CompanyFilter, Problem};
 use openleet::plan::Marks;
 use openleet::scheduler::{CardStates, card_states, record_attempt};
@@ -18,7 +21,8 @@ use openleet::user_lists::{UserList, UserLists};
 use openleet_proto::Verdict;
 
 use crate::acme::CertificateSlot;
-use crate::db::{SavedPlan, Store, StoredList};
+use crate::auth::Auth;
+use crate::db::{SavedPlan, Store, StoredList, UserId};
 use crate::error::{ApiError, ApiResult};
 use crate::judge::Judge;
 
@@ -32,7 +36,8 @@ pub fn user_lists(content: &Content, stored: Vec<StoredList>) -> UserLists {
     )
 }
 
-/// Everything derived from the attempt log, kept in memory so reads never touch the disk.
+/// Everything derived from one account's attempt log, kept in memory so reads never touch the
+/// disk.
 pub struct Progress {
     /// The attempt log, oldest first.
     pub attempts: Vec<Attempt>,
@@ -106,8 +111,8 @@ impl Progress {
     }
 
     /// What the learner did, for the report and the insights.
-    pub fn learner(&self) -> Learner<'_> {
-        Learner {
+    pub fn learner(&self) -> insights::Learner<'_> {
+        insights::Learner {
             attempts: &self.attempts,
             states: &self.states,
             coding: &self.coding,
@@ -131,6 +136,119 @@ impl Progress {
     }
 }
 
+/// One account's progress in memory, and the lock that orders its writes.
+pub struct Learner {
+    pub user: UserId,
+    pub progress: RwLock<Progress>,
+    /// Serializes the account's durable writes with publication to `progress`.
+    updates: Mutex<()>,
+    /// Set once the account is deleted; later writes fail instead of leaving rows behind.
+    closed: AtomicBool,
+}
+
+impl Learner {
+    fn new(user: UserId, progress: Progress) -> Self {
+        Self {
+            user,
+            progress: RwLock::new(progress),
+            updates: Mutex::new(()),
+            closed: AtomicBool::new(false),
+        }
+    }
+
+    /// Loads an account's progress from the database.
+    fn load(store: &Store, content: &Content, user: UserId) -> Result<Self> {
+        let progress = Progress::new(
+            store.attempts(user)?,
+            store.notes(user)?,
+            store.coding_log(user)?,
+            store.plans(user)?,
+            user_lists(content, store.lists(user)?),
+        );
+        Ok(Self::new(user, progress))
+    }
+
+    /// A company's report and the progress it was computed from, read-locked. Only a report
+    /// missing from the cache takes the write lock, to compute it.
+    pub fn report(
+        &self,
+        content: &Content,
+        company: CompanyFilter,
+        now: i64,
+    ) -> (RwLockReadGuard<'_, Progress>, Arc<ScoreReport>) {
+        let progress = self.progress.read();
+        if let Some(report) = progress.reports.get(&company).cloned() {
+            return (progress, report);
+        }
+        drop(progress);
+        let mut progress = self.progress.write();
+        let report = progress.report(content, company, now);
+        (RwLockWriteGuard::downgrade(progress), report)
+    }
+}
+
+/// Accounts whose progress stays in memory; the least recently used beyond this are dropped
+/// once no request holds them, and loaded again when next needed.
+const CACHED_LEARNERS: usize = 64;
+
+/// The progress of recently active accounts.
+#[derive(Default)]
+pub struct Learners {
+    /// Each account's progress and when it was last asked for (a counter).
+    cache: Mutex<HashMap<UserId, (Arc<Learner>, u64)>>,
+    clock: std::sync::atomic::AtomicU64,
+}
+
+impl Learners {
+    fn get(&self, user: UserId) -> Option<Arc<Learner>> {
+        let tick = self.clock.fetch_add(1, Ordering::Relaxed);
+        let mut cache = self.cache.lock();
+        let (learner, used) = cache.get_mut(&user)?;
+        *used = tick;
+        Some(Arc::clone(learner))
+    }
+
+    /// Caches a loaded account, unless another request cached it first (that one wins, so an
+    /// account never has two copies in memory). Then drops the least recently used accounts
+    /// past [`CACHED_LEARNERS`] that no request holds.
+    fn insert(&self, learner: Learner) -> Arc<Learner> {
+        let tick = self.clock.fetch_add(1, Ordering::Relaxed);
+        let mut cache = self.cache.lock();
+        let learner = Arc::clone(
+            &cache
+                .entry(learner.user)
+                .or_insert_with(|| (Arc::new(learner), tick))
+                .0,
+        );
+        if cache.len() > CACHED_LEARNERS {
+            let mut idle: Vec<(u64, UserId)> = cache
+                .iter()
+                .filter(|(_, (l, _))| Arc::strong_count(l) == 1)
+                .map(|(id, (_, used))| (*used, *id))
+                .collect();
+            idle.sort_unstable();
+            let excess = cache.len() - CACHED_LEARNERS;
+            for (_, id) in idle.into_iter().take(excess) {
+                cache.remove(&id);
+            }
+        }
+        learner
+    }
+
+    fn remove(&self, user: UserId) {
+        self.cache.lock().remove(&user);
+    }
+
+    /// Every cached account.
+    fn all(&self) -> Vec<Arc<Learner>> {
+        self.cache
+            .lock()
+            .values()
+            .map(|(l, _)| Arc::clone(l))
+            .collect()
+    }
+}
+
 /// Everything the handlers share.
 pub struct AppState {
     pub content: Content,
@@ -142,9 +260,12 @@ pub struct AppState {
     pub deploy: Option<crate::deploy::Deploy>,
     pub store: Store,
     pub judge: Judge,
-    pub progress: RwLock<Progress>,
-    /// Serializes durable progress writes with publication to the in-memory cache.
-    pub progress_updates: Mutex<()>,
+    pub auth: Auth,
+    /// Each active account's progress; reach it with [`AppState::learner`].
+    learners: Learners,
+    /// Held shared by every progress write and exclusively by an account's deletion, so no
+    /// write that checked the account lands after its rows are deleted.
+    deletions: RwLock<()>,
     /// The HTTPS certificate in use, for `GET /api/health`.
     pub certificate: CertificateSlot,
 }
@@ -158,9 +279,47 @@ pub fn now_ms() -> i64 {
 }
 
 impl AppState {
+    pub fn new(
+        content: Content,
+        revision: String,
+        deploy: Option<crate::deploy::Deploy>,
+        store: Store,
+        judge: Judge,
+        auth: Auth,
+        certificate: CertificateSlot,
+    ) -> Self {
+        Self {
+            companies: crate::api::companies_response(&content),
+            content,
+            revision,
+            deploy,
+            store,
+            judge,
+            auth,
+            learners: Learners::default(),
+            deletions: RwLock::new(()),
+            certificate,
+        }
+    }
+
     /// The problem with this slug, or a 404.
     pub fn problem(&self, slug: &str) -> ApiResult<&Problem> {
         Ok(service::problem_of(&self.content, slug)?)
+    }
+
+    /// An account's progress, from memory, or loaded from the database first.
+    pub async fn learner(self: &Arc<Self>, user: UserId) -> ApiResult<Arc<Learner>> {
+        if self.auth.is_deleted(user) {
+            return Err(ApiError::SignIn);
+        }
+        if let Some(learner) = self.learners.get(user) {
+            return Ok(learner);
+        }
+        let state = Arc::clone(self);
+        let loaded = self
+            .db(move |store| Learner::load(store, &state.content, user))
+            .await?;
+        Ok(self.learners.insert(loaded))
     }
 
     /// Runs storage work for a known problem (else a 404), handing it the problem's slug.
@@ -185,42 +344,52 @@ impl AppState {
             .map_err(ApiError::Internal)
     }
 
-    /// Finishes a durable write and its cache update together, even if the HTTP request is
-    /// cancelled. The cache lock is only held when publishing, so reads need not wait on IO.
+    /// Finishes a durable write to one account's progress and its cache update together, even
+    /// if the HTTP request is cancelled. Writes of one account run one at a time; the cache
+    /// lock is only held when publishing, so reads need not wait on IO.
     pub async fn update_progress<T: Send + 'static>(
         self: &Arc<Self>,
-        work: impl FnOnce(&Self) -> Result<T> + Send + 'static,
+        learner: &Arc<Learner>,
+        work: impl FnOnce(&Self, &Learner) -> Result<T> + Send + 'static,
     ) -> ApiResult<T> {
         let state = Arc::clone(self);
+        let learner = Arc::clone(learner);
         tokio::task::spawn_blocking(move || {
-            let _update = state.progress_updates.lock();
-            work(&state)
+            let _update = learner.updates.lock();
+            let _deletions = state.deletions.read();
+            if learner.closed.load(Ordering::Acquire) || state.auth.is_deleted(learner.user) {
+                return Err(ApiError::SignIn);
+            }
+            work(&state, &learner).map_err(ApiError::Internal)
+        })
+        .await
+        .map_err(|e| ApiError::Internal(e.into()))?
+    }
+
+    /// Deletes an account and all its progress. Waits for the account's writes in flight, so
+    /// none lands after the delete.
+    pub async fn delete_account(self: &Arc<Self>, learner: &Arc<Learner>) -> ApiResult<()> {
+        let state = Arc::clone(self);
+        let learner = Arc::clone(learner);
+        tokio::task::spawn_blocking(move || {
+            let _update = learner.updates.lock();
+            let _deletions = state.deletions.write();
+            learner.closed.store(true, Ordering::Release);
+            // First refuse new sessions and writes, then delete what exists.
+            state.auth.forget_user(learner.user);
+            state.learners.remove(learner.user);
+            state.store.delete_user(learner.user)
         })
         .await
         .map_err(|e| ApiError::Internal(e.into()))?
         .map_err(ApiError::Internal)
     }
 
-    /// A company's report and the progress it was computed from, read-locked. Only a report
-    /// missing from the cache takes the write lock, to compute it.
-    pub fn report(
-        &self,
-        company: CompanyFilter,
-        now: i64,
-    ) -> (RwLockReadGuard<'_, Progress>, Arc<ScoreReport>) {
-        let progress = self.progress.read();
-        if let Some(report) = progress.reports.get(&company).cloned() {
-            return (progress, report);
-        }
-        drop(progress);
-        let mut progress = self.progress.write();
-        let report = progress.report(&self.content, company, now);
-        (RwLockWriteGuard::downgrade(progress), report)
-    }
-
     /// Drops every cached report, so the next reads see cards fall overdue and days pass.
     pub fn refresh_reports(&self) {
-        self.progress.write().invalidate_reports();
+        for learner in self.learners.all() {
+            learner.progress.write().invalidate_reports();
+        }
     }
 }
 
@@ -242,23 +411,30 @@ pub fn test_state_with(dir: &std::path::Path, judge: &str, content: Content) -> 
     let (store, _) =
         Store::open(&dir.join("openleet.duckdb"), &dir.join("none.duckdb")).expect("database");
     let judge = Judge::load(&none, judge.parse().expect("endpoint")).expect("judge");
-    Arc::new(AppState {
-        companies: crate::api::companies_response(&content),
+    let auth = Auth::load(&store, dir, false, now_ms()).expect("accounts");
+    Arc::new(AppState::new(
         content,
-        revision: "test".to_owned(),
-        deploy: None,
+        "test".to_owned(),
+        None,
         store,
         judge,
-        progress: RwLock::new(Progress::new(
-            Vec::new(),
-            HashMap::new(),
-            CodingLog::default(),
-            Vec::new(),
-            UserLists::default(),
-        )),
-        progress_updates: Mutex::new(()),
-        certificate: CertificateSlot::default(),
-    })
+        auth,
+        CertificateSlot::default(),
+    ))
+}
+
+/// A new account's id and progress, for tests.
+#[cfg(test)]
+pub async fn test_learner(state: &Shared, email: &str) -> Arc<Learner> {
+    const HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA";
+    let crate::db::NewUser::Created(user) = state
+        .store
+        .create_user(email, HASH, false, now_ms())
+        .expect("create a user")
+    else {
+        panic!("{email} has an account");
+    };
+    state.learner(user).await.expect("load the account")
 }
 
 #[cfg(test)]
@@ -266,33 +442,62 @@ mod tests {
     use super::*;
     use crate::db::testing::TempDir;
 
-    #[test]
-    fn cached_reports_are_read_without_the_write_lock() {
+    #[tokio::test]
+    async fn cached_reports_are_read_without_the_write_lock() {
         let dir = TempDir::new("progress-report");
         let state = test_state(&dir.path(""), "tcp://127.0.0.1:1");
+        let learner = test_learner(&state, "a@example.com").await;
         let company = state.content.default_company();
-        let (_, computed) = state.report(company, 0);
+        let (_, computed) = learner.report(&state.content, company, 0);
         // Another reader holds the lock: a cached report must not wait for it.
-        let reader = state.progress.read();
-        let (_, cached) = state.report(company, 0);
+        let reader = learner.progress.read();
+        let (_, cached) = learner.report(&state.content, company, 0);
         drop(reader);
         assert!(Arc::ptr_eq(&computed, &cached));
+    }
+
+    #[tokio::test]
+    async fn each_account_has_one_copy_in_memory_and_idle_ones_go() {
+        let dir = TempDir::new("progress-cache");
+        let state = test_state(&dir.path(""), "tcp://127.0.0.1:1");
+        let first = test_learner(&state, "a@example.com").await;
+        assert!(Arc::ptr_eq(
+            &first,
+            &state.learner(first.user).await.unwrap()
+        ));
+        let held = first.user;
+        let mut others = Vec::new();
+        for i in 0..CACHED_LEARNERS + 5 {
+            others.push(
+                test_learner(&state, &format!("u{i}@example.com"))
+                    .await
+                    .user,
+            );
+        }
+        // Held by this test, the first stays; the idle ones beyond the limit went.
+        assert_eq!(state.learners.cache.lock().len(), CACHED_LEARNERS);
+        assert!(state.learners.get(held).is_some());
+        assert!(state.learners.get(others[0]).is_none());
+        // A dropped account loads again from the database.
+        assert_eq!(state.learner(others[0]).await.unwrap().user, others[0]);
     }
 
     #[tokio::test]
     async fn cancelled_updates_finish_and_publish_in_order() {
         let dir = TempDir::new("progress-updates");
         let state = test_state(&dir.path(""), "tcp://127.0.0.1:1");
+        let learner = test_learner(&state, "a@example.com").await;
         let (written, writing) = tokio::sync::oneshot::channel();
         let (resume, paused) = std::sync::mpsc::channel();
         let first_state = Arc::clone(&state);
+        let first_learner = Arc::clone(&learner);
         let first = tokio::spawn(async move {
             first_state
-                .update_progress(move |state| {
-                    state.store.save_note("a", "first", 1)?;
+                .update_progress(&first_learner, move |state, learner| {
+                    state.store.save_note(learner.user, "a", "first", 1)?;
                     written.send(()).unwrap();
                     paused.recv().unwrap();
-                    state
+                    learner
                         .progress
                         .write()
                         .notes
@@ -306,13 +511,14 @@ mod tests {
         first.abort();
         assert!(first.await.unwrap_err().is_cancelled());
         let second_state = Arc::clone(&state);
+        let second_learner = Arc::clone(&learner);
         let (entered, mut entering) = tokio::sync::oneshot::channel();
         let second = tokio::spawn(async move {
             second_state
-                .update_progress(move |state| {
+                .update_progress(&second_learner, move |state, learner| {
                     entered.send(()).unwrap();
-                    state.store.save_note("a", "second", 2)?;
-                    state
+                    state.store.save_note(learner.user, "a", "second", 2)?;
+                    learner
                         .progress
                         .write()
                         .notes
@@ -331,7 +537,25 @@ mod tests {
             !entered_early,
             "the later update overtook an unfinished write"
         );
-        assert_eq!(state.progress.read().notes, state.store.notes().unwrap());
-        assert_eq!(state.progress.read().notes["a"], "second");
+        assert_eq!(
+            learner.progress.read().notes,
+            state.store.notes(learner.user).unwrap()
+        );
+        assert_eq!(learner.progress.read().notes["a"], "second");
+    }
+
+    #[tokio::test]
+    async fn a_deleted_account_takes_no_more_writes() {
+        let dir = TempDir::new("progress-deleted");
+        let state = test_state(&dir.path(""), "tcp://127.0.0.1:1");
+        let learner = test_learner(&state, "a@example.com").await;
+        state.delete_account(&learner).await.unwrap();
+        let late = state
+            .update_progress(&learner, |state, learner| {
+                state.store.save_note(learner.user, "a", "late", 1)
+            })
+            .await;
+        assert!(matches!(late, Err(ApiError::SignIn)));
+        assert!(state.store.notes(learner.user).unwrap().is_empty());
     }
 }

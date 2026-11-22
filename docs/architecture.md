@@ -17,8 +17,10 @@ flowchart LR
 
 ## Server & caching
 
-- **In-memory state**: Attempt logs, card states, notes, submission verdicts
-  (`server/src/coding.rs`), and practice plans live in memory and write through to DuckDB. Next
+- **In-memory state**: Each active account's attempt log, card states, notes, submission verdicts
+  (`server/src/coding.rs`), practice plans, and lists live in memory and write through to DuckDB.
+  The server keeps the 64 most recently used accounts in memory and loads others on their next
+  request (`server/src/state.rs`). Next
   problem selection and progress analytics (`server/src/insights.rs`) are computed directly from
   memory on each request.
 - **Readiness cache**: Readiness scores and daily trends (`server/src/readiness.rs`) are replayed
@@ -26,6 +28,41 @@ flowchart LR
 - **Single-round-trip loads**: `web/index.html` inlines the stylesheet and static shell. The server
   injects preload headers for the route's JS bundle and initial API calls
   (`server/src/preload.rs`) so code and data download in parallel.
+
+## Accounts and sessions
+
+Each person signs in with an email and a password (`server/src/auth.rs`). The design follows the
+OWASP authentication, session, and password storage cheat sheets.
+
+- **Passwords**: Argon2id with a random salt and OWASP's parameters (19 MiB, 2 passes, 1 lane).
+  The database stores only the PHC string. At most 2 hashes run at once and at most 16 requests
+  wait for one, so many sign-ins cannot use up the server's memory or its request slots. An
+  unknown email costs the same hash as a wrong password, and both get the same answer.
+- **Sessions**: A random 256-bit token in a cookie with `HttpOnly`, `SameSite=Lax`, and, over
+  HTTPS, `Secure` and the `__Host-` prefix. The `sessions` table stores only the token's SHA-256,
+  so the database and its backups cannot sign anyone in. A session ends after 30 days without
+  use, at sign-out, at the browser's next sign-in, or when the account's password changes in
+  another session. An account keeps at most 20 sessions. A session moves on only at
+  `GET /api/session`, whose answer is private.
+- **Isolation**: A handler reaches progress only through `auth::Me`, which the server makes from
+  the session. Every progress table has a `user_id` column, and every query filters on it. A
+  plan, list, or submission id of another account answers `404`, the same as an unknown id. API
+  answers carry `Cache-Control: private` and `Vary: Cookie`.
+- **Cross-site requests**: The API refuses writes whose `Origin` is another host or whose
+  `Sec-Fetch-Site` is `cross-site` or `same-site`. Bodies must be JSON, which a plain HTML form
+  cannot send.
+- **Limits**: Sign-in and sign-up count attempts per IPv4 address or IPv6 /56. Wrong passwords
+  count per account and address, so nobody can lock an account out from elsewhere, and per
+  signed-in account for password changes and deletion (see [API](api.md#accounts)).
+- **Deletion**: Deleting an account removes its rows from every table in one transaction. The
+  server first refuses new sessions and writes for it, and waits for writes in flight.
+- **First admin**: A server without an admin writes a one-time setup code to
+  `STATE_DIR/setup-code`. The sign-up that gives it becomes user 1, the admin, and owns the
+  progress from before accounts. Until then no other sign-up works. See
+  [Deployment](deployment.md#make-the-admin-account).
+- **Pages**: Pages that show progress redirect a signed-out browser to `/login`. The server
+  preloads a page's private data only for a signed-in browser. After sign-in the app goes back
+  only to a page of the same origin.
 
 ## Judging a submission
 

@@ -17,6 +17,21 @@ pub enum ApiError {
     NotFound(String),
     #[error("Bad signature")]
     Unauthorized,
+    /// Sign-in with an unknown email or a wrong password (the same answer for both).
+    #[error("Wrong email or password")]
+    WrongCredentials,
+    /// No session, or it ended.
+    #[error("Sign in to continue")]
+    SignIn,
+    /// Signed in, but not allowed (an admin's endpoint), or not allowed now (sign-ups closed).
+    #[error("{0}")]
+    Forbidden(String),
+    /// The request clashes with what exists (an email with an account).
+    #[error("{0}")]
+    Conflict(String),
+    /// Too many attempts from this address or at this account; try again later.
+    #[error("{0}")]
+    TooMany(String),
     #[error("The judge is busy; try again in a few seconds.")]
     Busy,
     #[error("The judge is not available.")]
@@ -51,7 +66,10 @@ impl IntoResponse for ApiError {
         let status = match &self {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
-            Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::Unauthorized | Self::SignIn | Self::WrongCredentials => StatusCode::UNAUTHORIZED,
+            Self::Forbidden(_) => StatusCode::FORBIDDEN,
+            Self::Conflict(_) => StatusCode::CONFLICT,
+            Self::TooMany(_) => StatusCode::TOO_MANY_REQUESTS,
             Self::Busy | Self::JudgeDown => StatusCode::SERVICE_UNAVAILABLE,
             Self::Internal(error) => {
                 tracing::error!("{error:#}");

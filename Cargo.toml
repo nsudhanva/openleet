@@ -21,3 +21,10 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# Password hashing takes seconds unoptimized; tests hash too.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3

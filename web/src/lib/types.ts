@@ -492,3 +492,24 @@ export interface SavedPlan {
 	/** The first problem still to do; null when none is left. */
 	next: NextProblem | null;
 }
+
+/** A signed-in account (`GET /api/session`). */
+export interface User {
+	email: string;
+	admin: boolean;
+}
+
+/** Who is asking (`GET /api/session`); `readiness` is null when signed out. */
+export interface Session {
+	user: User | null;
+	readiness: Readiness | null;
+	signupsOpen: boolean;
+	/** No admin exists yet: only a sign-up with the server's setup code works. */
+	needsSetup: boolean;
+}
+
+/** The admin's server settings (`GET /api/admin/settings`). */
+export interface AdminSettings {
+	signupsOpen: boolean;
+	users: number;
+}

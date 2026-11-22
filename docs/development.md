@@ -52,7 +52,14 @@ escapes, and invalid requests) against a running server:
 uv run openleet smoke --base-url http://localhost:8080 --allow-network
 ```
 
-`openleet smoke` restores any drafts it modifies, though its test submissions remain in history.
+`openleet smoke` needs an account. With `OPENLEET_EMAIL` and `OPENLEET_PASSWORD` set, it signs in
+as that account, restores any drafts it modifies, and leaves its submissions in that account's
+history. Without them it makes a throwaway account (sign-ups must be open) and deletes it, with
+everything it did, at the end.
+
+The web end-to-end suite (`E2E_BASE_URL=http://localhost:8080 bun run test:e2e` in `web/`) also
+runs as a throwaway account. On a new server without an admin, set `E2E_SETUP_CODE` to the
+server's setup code; the suite's account then becomes the admin and stays.
 
 ## Repository layout
 
