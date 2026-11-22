@@ -31,7 +31,7 @@ export function SiteHeader({ session }: { session: Session }) {
 	const name = companyName(useCompanies(), company);
 	return (
 		<header className="sticky top-0 z-40 h-12 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-			<div className="mx-auto flex h-full max-w-[96rem] items-center gap-1 px-2 sm:gap-2 sm:px-5">
+			<div className="mx-auto flex h-full max-w-[96rem] items-center gap-1 px-1 xs:px-2 sm:gap-2 sm:px-5">
 				<Link
 					to="/"
 					search={{}}
@@ -44,7 +44,7 @@ export function SiteHeader({ session }: { session: Session }) {
 					/>
 					<span className="hidden md:inline">OpenLeet</span>
 				</Link>
-				<nav aria-label="Main" className="flex items-center gap-0.5">
+				<nav aria-label="Main" className="flex items-center xs:gap-0.5">
 					{NAV.filter(({ account }) => user || !account).map(
 						({ to, label, exact }) => (
 							<Link
@@ -53,7 +53,7 @@ export function SiteHeader({ session }: { session: Session }) {
 								activeOptions={{ exact, includeSearch: false }}
 								className={cn(
 									buttonVariants({ variant: "ghost", size: "sm" }),
-									"px-1 text-muted-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground xs:px-2 sm:px-2.5",
+									"px-1 text-muted-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground sm:px-2 md:px-2.5",
 								)}
 							>
 								{label}
@@ -85,7 +85,7 @@ export function SiteHeader({ session }: { session: Session }) {
 							aria-label={`Account: ${user.email}`}
 							className={cn(
 								buttonVariants({ variant: "ghost", size: "sm" }),
-								"max-w-48 px-1.5 text-muted-foreground xs:px-2 data-[status=active]:bg-muted data-[status=active]:text-foreground",
+								"max-w-48 px-1.5 text-muted-foreground sm:px-2 data-[status=active]:bg-muted data-[status=active]:text-foreground",
 							)}
 						>
 							<UserRoundIcon aria-hidden />
