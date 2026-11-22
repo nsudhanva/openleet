@@ -300,6 +300,10 @@ function ServerSettings() {
 	);
 }
 
+/** A solid red button: the tinted default reads below 4.5:1 contrast on the dark card footer. */
+const SOLID_DANGER =
+	"bg-destructive text-white hover:bg-destructive/90 dark:bg-destructive dark:text-background dark:hover:bg-destructive/90";
+
 function DeleteAccount() {
 	const [open, setOpen] = useState(false);
 	const [password, setPassword] = useState("");
@@ -334,7 +338,9 @@ function DeleteAccount() {
 			danger
 			footer={
 				<AlertDialog open={open} onOpenChange={onOpenChange}>
-					<AlertDialogTrigger render={<Button variant="destructive" />}>
+					<AlertDialogTrigger
+						render={<Button variant="destructive" className={SOLID_DANGER} />}
+					>
 						Delete account
 					</AlertDialogTrigger>
 					<AlertDialogContent>
@@ -362,7 +368,12 @@ function DeleteAccount() {
 							)}
 							<AlertDialogFooter>
 								<AlertDialogCancel>Keep account</AlertDialogCancel>
-								<Button type="submit" variant="destructive" disabled={busy}>
+								<Button
+									type="submit"
+									variant="destructive"
+									className={SOLID_DANGER}
+									disabled={busy}
+								>
 									Delete account
 								</Button>
 							</AlertDialogFooter>
