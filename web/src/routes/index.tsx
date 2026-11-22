@@ -45,10 +45,9 @@ function Study() {
 		setBusy(true);
 		try {
 			await api.recordAttempt({ slug: card.problem.slug, ...answered });
-			setHistory((h) => [...h, card.problem.slug]);
-			// A pinned card (opened from the list, or reached with Back) returns to the queue.
-			if (search.slug) await go({ slug: undefined });
-			else await router.invalidate();
+			if (!search.slug) setHistory((h) => [...h, card.problem.slug]);
+			// Stay on a pinned card (opened directly) and refresh its state; deck mode advances.
+			await router.invalidate();
 		} finally {
 			setBusy(false);
 		}

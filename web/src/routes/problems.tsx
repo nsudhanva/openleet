@@ -7,8 +7,8 @@ import {
 } from "@tanstack/react-router";
 import {
 	ArrowLeftIcon,
-	CodeXmlIcon,
 	ListMinusIcon,
+	NotebookTextIcon,
 	RotateCcwIcon,
 	SearchIcon,
 } from "lucide-react";
@@ -409,32 +409,9 @@ function Problems() {
 									{row.id}
 								</TableCell>
 								<TableCell className="w-full max-w-0">
-									{list === undefined ? (
-										<Link
-											to="/"
-											// Studying from here keeps the table's list and filters.
-											search={{
-												set: "all",
-												period,
-												topic,
-												difficulty,
-												slug: row.slug,
-											}}
-											className={TITLE_LINK}
-										>
-											<RowTitle row={row} />
-										</Link>
-									) : (
-										// The study queue walks company lists only: a title in one of
-										// your lists opens the problem in the list.
-										<PlanLink
-											plan={plan}
-											slug={row.slug}
-											className={TITLE_LINK}
-										>
-											<RowTitle row={row} />
-										</PlanLink>
-									)}
+									<PlanLink plan={plan} slug={row.slug} className={TITLE_LINK}>
+										<RowTitle row={row} />
+									</PlanLink>
 									{/* A phone has no room for these columns: they go under the title. */}
 									<div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
 										<DifficultyBadge difficulty={row.difficulty} />
@@ -458,19 +435,24 @@ function Problems() {
 									{row.lastScore === null ? "—" : percent(row.lastScore)}
 								</TableCell>
 								<TableCell>
-									{/* The plan of the table: Next goes on from this row. */}
-									<PlanLink
-										plan={plan}
-										slug={row.slug}
+									<Link
+										to="/"
+										search={{
+											set: "all",
+											period,
+											topic,
+											difficulty,
+											slug: row.slug,
+										}}
 										className={cn(
 											buttonVariants({ variant: "ghost", size: "icon-xs" }),
 											"text-muted-foreground",
 										)}
-										aria-label={`Code ${row.title}`}
-										title="Solve it in Python"
+										aria-label={`Flashcard for ${row.title}`}
+										title="Open flashcard"
 									>
-										<CodeXmlIcon />
-									</PlanLink>
+										<NotebookTextIcon />
+									</Link>
 								</TableCell>
 								<TableCell>
 									{row.lastAt && (

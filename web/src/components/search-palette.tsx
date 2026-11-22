@@ -29,7 +29,7 @@ export function SearchPalette({
 	function openProblem(slug: string) {
 		onOpenChange(false);
 		setQuery("");
-		navigate({ to: "/", search: { set: "all", slug } });
+		navigate({ to: "/code/$slug", params: { slug } });
 	}
 
 	return (
