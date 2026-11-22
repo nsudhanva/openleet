@@ -90,8 +90,7 @@ isolated Linux judge daemon that fits in a 1 GB VM.
 | Company lists | [liquidslr/leetcode-company-wise-problems](https://github.com/liquidslr/leetcode-company-wise-problems) | — |
 | Statements & solutions | [doocs/leetcode](https://github.com/doocs/leetcode) | CC BY-SA 4.0 |
 | Starter code, tests & solutions | [LeetCodeDataset](https://huggingface.co/datasets/newfacade/LeetCodeDataset) | Apache-2.0 |
-| Video links | [neetcode-gh/leetcode](https://github.com/neetcode-gh/leetcode) & [yt-dlp](https://github.com/yt-dlp/yt-dlp) | — |
-| Approaches & hints | Generated and reviewed (`data/approach-reviews.json`) | MIT |
+| Video links | [neetcode-gh/leetcode](https://github.com/neetcode-gh/leetcode) & YouTube | — |
 
 ## License
 

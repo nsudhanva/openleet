@@ -85,9 +85,9 @@ the admin account is created.
 
 2. Open `/login`, select **Create account**, and submit an email, password, and the setup code.
 
-This registers user `1` as the admin (inheriting any pre-existing progress) and deletes the setup
-code file. The admin can open or close sign-ups from the **Account** page. Restarting the server
-before setup completes regenerates the code.
+This registers user `1` as the admin and deletes the setup code file. The admin can open or close
+sign-ups from the **Account** page. Restarting the server before setup completes regenerates the
+code.
 
 ## Restore a backup
 

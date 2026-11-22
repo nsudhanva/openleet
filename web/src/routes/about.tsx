@@ -76,9 +76,8 @@ function About() {
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<PageHeader title="About">
-				OpenLeet is LeetCode practice: flashcards and a Python judge for the
-				problems top tech companies ask, and for every problem numbered 1 to
-				1000.
+				Self-hosted LeetCode practice with company problem lists, flashcards,
+				and a Python judge.
 			</PageHeader>
 			<div className="grid gap-x-10 gap-y-6 rounded-sm bg-card p-5 shadow-[0_1px_0_var(--border)] lg:grid-cols-3">
 				<div className="space-y-6">
@@ -133,83 +132,72 @@ function About() {
 					</Section>
 					<Section title="The judge">
 						<p>
-							Every problem has a code page, and most have tests.{" "}
-							<strong>Run</strong> runs your Python 3 solution on the
-							statement's examples or on your own input. <strong>Submit</strong>{" "}
-							runs the examples, hidden tests and generated stress tests of
-							maximum size against a CPU time limit set from reference
-							solutions. A reference counts only if it reproduces every example;
-							a test is kept only if all references agree on it. Your draft
-							saves itself; <strong>Reset</strong> goes back to the starter code
-							and <strong>Restore previous</strong> brings back the code it
+							Every problem has a code editor, and most include automated tests.{" "}
+							<strong>Run</strong> executes your Python 3 solution against the
+							statement examples or custom input. <strong>Submit</strong> runs
+							examples, hidden tests, and max-size stress tests under a CPU time
+							limit calibrated from reference solutions. Drafts auto-save;{" "}
+							<strong>Reset</strong> restores the starter code and{" "}
+							<strong>Restore previous</strong> brings back the code it
 							replaced.
 						</p>
 						<p>
-							<strong>Next</strong>, beside the plan chip, moves on to the next
-							problem of your practice plan, solved or not: the list you came
-							from, its topic and difficulty, which problems still count
-							(unsolved by default) and an order. Change it with the plan chip,
-							or after an accepted submission switch to a related plan under the
-							result. The Problems page lists the plans you used; pin the ones
-							to keep.
+							<strong>Next</strong> (next to the plan chip) opens the next
+							problem in your active practice plan, solved or not. Use the plan
+							chip to adjust filters or order, or switch to a related plan after
+							an Accepted submission. Pin plans from the Problems page to keep
+							them.
 						</p>
 						<p>
-							<strong>Your lists</strong> hold the problems you pick. Use{" "}
-							<strong>Add to list</strong> on a problem, or tick rows on the
-							Problems page. A list keeps the order in which you add problems,
-							and Next goes through it in that order. Use{" "}
-							<strong>Problems</strong> on a list to see its problems. Use the
-							menu of a list to rename or delete it.
+							<strong>Your lists</strong> store custom problem sets. Add
+							problems via <strong>Add to list</strong> on a problem page or by
+							selecting rows on the Problems page. Problems stay in insertion
+							order, and Next follows that order. Use a list's menu to rename or
+							delete it.
 						</p>
 					</Section>
 				</div>
 				<div className="space-y-6">
 					<Section title="Approaches and hints">
 						<p>
-							Approaches and hints cover the problems Google asked in the six
-							months before they were written; other cards show the statement
-							and topics only. Claude wrote every approach and hint. Claude
-							agents and Codex CLI reviewed them, and every disagreement was
-							settled by hand. Hints never name the technique you are guessing.
-							They can still be wrong; check the LeetCode editorial when
-							something looks off.
+							Selected problems include a written approach and hints; other
+							cards show the problem statement and topics. Hints avoid naming
+							the technique you are recalling. Check the LeetCode editorial if
+							anything looks off.
 						</p>
 					</Section>
 					<Section title="Accounts">
 						<p>
-							Each person signs in with an email and a password. Progress,
-							notes, drafts, plans and lists belong to the account. Delete the
-							account on the Account page to remove all of it.
+							Sign in with an email and password. Progress, notes, drafts,
+							plans, and custom lists are scoped to your account. Delete your
+							account from the Account page to permanently remove all data.
 						</p>
 					</Section>
 					<Section title="API">
 						<p>
-							The app serves JSON under <code>/api</code>:{" "}
-							<code>GET /api/companies</code>, <code>GET /api/search?q=</code>,{" "}
-							<code>GET /api/problems?company=&amp;period=</code>,{" "}
-							<code>GET /api/problems/:slug</code>, <code>GET /api/deck</code>,{" "}
-							<code>POST /api/attempts</code>, <code>DELETE /api/progress</code>
-							, <code>GET /api/report?company=</code>, and for code{" "}
-							<code>GET /api/code/:slug</code>, <code>POST /api/run</code>,{" "}
-							<code>POST /api/submit</code> and{" "}
-							<code>GET /api/submissions</code>.
+							JSON endpoints live under <code>/api</code>, including{" "}
+							<code>/api/companies</code>, <code>/api/search</code>,{" "}
+							<code>/api/problems</code>, <code>/api/deck</code>,{" "}
+							<code>/api/attempts</code>, <code>/api/report</code>,{" "}
+							<code>/api/code/:slug</code>, <code>/api/run</code>,{" "}
+							<code>/api/submit</code>, and <code>/api/submissions</code>.
 						</p>
 					</Section>
 					<Section title="Sources">
 						<p>
-							Company lists, frequency and topics:{" "}
+							Company lists, frequency, and topics:{" "}
 							<a href="https://github.com/liquidslr/leetcode-company-wise-problems">
 								liquidslr/leetcode-company-wise-problems
 							</a>
 							. Statements:{" "}
-							<a href="https://github.com/doocs/leetcode">doocs/leetcode</a>, CC
-							BY-SA 4.0, premium problems included. Test inputs:{" "}
+							<a href="https://github.com/doocs/leetcode">doocs/leetcode</a> (CC
+							BY-SA 4.0, including premium problems). Test inputs:{" "}
 							<a href="https://huggingface.co/datasets/newfacade/LeetCodeDataset">
 								LeetCodeDataset
-							</a>
-							, Apache-2.0, and the statements' examples. Videos: the ones{" "}
-							<a href="https://neetcode.io">neetcode.io</a> links, then Greg
-							Hogg's and the most viewed others on YouTube.
+							</a>{" "}
+							(Apache-2.0) and statement examples. Videos:{" "}
+							<a href="https://neetcode.io">neetcode.io</a>, Greg Hogg, and
+							top-viewed YouTube walkthroughs.
 						</p>
 					</Section>
 				</div>

@@ -42,7 +42,7 @@ authentication, session management, and password storage guidelines.
 | CSRF protection | Mutating endpoints reject requests with a mismatched `Origin` or `Sec-Fetch-Site` of `cross-site`/`same-site`, and require `application/json` bodies. |
 | Rate limiting | Tracked per IPv4 address or IPv6 `/56` for sign-in/sign-up, per `(account, address)` for wrong passwords (preventing remote account lockout), and per authenticated account for password changes and deletion (see [API](api.md#accounts)). |
 | Account deletion | Blocks new sessions and writes, waits for in-flight writes, then deletes all rows for that `user_id` in a single transaction. |
-| Initial admin | On a fresh instance without an admin, the server writes a one-time setup code to `STATE_DIR/setup-code`. The first registration presenting that code becomes user `1` (admin) and inherits any pre-existing progress. Other sign-ups are rejected until setup completes (see [Deployment](deployment.md#initial-admin-setup)). |
+| Initial admin | On a fresh instance without an admin, the server writes a one-time setup code to `STATE_DIR/setup-code`. The first registration presenting that code becomes user `1` (admin). Other sign-ups are rejected until setup completes (see [Deployment](deployment.md#initial-admin-setup)). |
 | Navigation | Unauthenticated requests to progress pages redirect to `/login`; private data is only preloaded for signed-in browsers, and post-login redirects are restricted to same-origin paths. |
 
 ## Judging a submission
