@@ -637,9 +637,9 @@ struct Renewal {
 
 /// Whether an unsafe request comes from another site. Browsers send `Sec-Fetch-Site`, which
 /// pages cannot set, so it decides when present (a dev proxy may rewrite `Host`, never it).
-/// Older browsers send only `Origin`, checked against `Host`. Clients with neither (curl, CI)
-/// carry no ambient cookies of a victim's.
-fn cross_site(headers: &HeaderMap) -> bool {
+/// Older browsers send only `Origin`, checked against `Host` (or the HTTP/2 `:authority` in
+/// `uri`). Clients with neither (curl, CI) carry no ambient cookies of a victim's.
+fn cross_site(headers: &HeaderMap, uri: &axum::http::Uri) -> bool {
     let fetch_site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok());
     match fetch_site {
         Some("same-origin" | "none") => return false,
@@ -649,7 +649,10 @@ fn cross_site(headers: &HeaderMap) -> bool {
     let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) else {
         return false;
     };
-    let host = headers.get(header::HOST).and_then(|v| v.to_str().ok());
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| uri.authority().map(axum::http::uri::Authority::as_str));
     let origin_host = origin
         .strip_prefix("https://")
         .or_else(|| origin.strip_prefix("http://"));
@@ -669,7 +672,10 @@ pub async fn middleware(State(state): State<Shared>, mut request: Request, next:
         *request.method(),
         Method::GET | Method::HEAD | Method::OPTIONS
     );
-    if unsafe_method && request.uri().path().starts_with("/api/") && cross_site(request.headers()) {
+    if unsafe_method
+        && request.uri().path().starts_with("/api/")
+        && cross_site(request.headers(), request.uri())
+    {
         return ApiError::Forbidden("Requests from other sites are not allowed".into())
             .into_response();
     }
@@ -911,27 +917,53 @@ mod tests {
             }
             map
         };
-        assert!(!cross_site(&headers(&[])));
-        assert!(!cross_site(&headers(&[
-            ("host", "openleet.example"),
-            ("origin", "https://openleet.example"),
-            ("sec-fetch-site", "same-origin"),
-        ])));
-        assert!(cross_site(&headers(&[
-            ("host", "openleet.example"),
-            ("origin", "https://evil.example"),
-        ])));
-        assert!(cross_site(&headers(&[("sec-fetch-site", "cross-site")])));
-        assert!(cross_site(&headers(&[("sec-fetch-site", "same-site")])));
-        assert!(cross_site(&headers(&[
-            ("host", "openleet.example"),
-            ("origin", "null"),
-        ])));
+        let rel: axum::http::Uri = "/api/users".parse().unwrap();
+        let h2: axum::http::Uri = "https://openleet.example/api/users".parse().unwrap();
+        assert!(!cross_site(&headers(&[]), &rel));
+        assert!(!cross_site(
+            &headers(&[
+                ("host", "openleet.example"),
+                ("origin", "https://openleet.example"),
+                ("sec-fetch-site", "same-origin"),
+            ]),
+            &rel,
+        ));
+        assert!(cross_site(
+            &headers(&[
+                ("host", "openleet.example"),
+                ("origin", "https://evil.example"),
+            ]),
+            &rel,
+        ));
+        assert!(cross_site(
+            &headers(&[("sec-fetch-site", "cross-site")]),
+            &rel
+        ));
+        assert!(cross_site(
+            &headers(&[("sec-fetch-site", "same-site")]),
+            &rel
+        ));
+        assert!(cross_site(
+            &headers(&[("host", "openleet.example"), ("origin", "null")]),
+            &rel,
+        ));
+        // HTTP/2 carries the host in :authority (uri), not a Host header.
+        assert!(!cross_site(
+            &headers(&[("origin", "https://openleet.example")]),
+            &h2,
+        ));
+        assert!(cross_site(
+            &headers(&[("origin", "https://evil.example")]),
+            &h2,
+        ));
         // Behind a dev proxy that rewrites Host, the browser's own word decides.
-        assert!(!cross_site(&headers(&[
-            ("host", "127.0.0.1:8080"),
-            ("origin", "http://localhost:3000"),
-            ("sec-fetch-site", "same-origin"),
-        ])));
+        assert!(!cross_site(
+            &headers(&[
+                ("host", "127.0.0.1:8080"),
+                ("origin", "http://localhost:3000"),
+                ("sec-fetch-site", "same-origin"),
+            ]),
+            &rel,
+        ));
     }
 }
