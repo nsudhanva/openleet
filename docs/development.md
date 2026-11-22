@@ -38,8 +38,8 @@ The first `cargo run --release` compiles DuckDB and takes a few minutes. Once bu
 
 ## Checks & smoke tests
 
-CI runs the same checks as the pre-push hook. Install the hooks with `uv run prek install`,
-or run everything manually:
+CI runs the same checks as the pre-push hook. Install the hooks with `uv run prek install`, or run
+everything manually:
 
 ```bash
 uv run prek run --all-files --hook-stage pre-push
@@ -52,14 +52,16 @@ escapes, and invalid requests) against a running server:
 uv run openleet smoke --base-url http://localhost:8080 --allow-network
 ```
 
-`openleet smoke` needs an account. With `OPENLEET_EMAIL` and `OPENLEET_PASSWORD` set, it signs in
-as that account, restores any drafts it modifies, and leaves its submissions in that account's
-history. Without them it makes a throwaway account (sign-ups must be open) and deletes it, with
-everything it did, at the end.
+`openleet smoke` requires authentication:
+
+- With `OPENLEET_EMAIL` and `OPENLEET_PASSWORD` set, it signs into that account, restores any
+  modified drafts, and leaves its test submissions in that account's history.
+- Without credentials, it registers a temporary account (requires open sign-ups) and deletes the
+  account and all its data on exit.
 
 The web end-to-end suite (`E2E_BASE_URL=http://localhost:8080 bun run test:e2e` in `web/`) also
-runs as a throwaway account. On a new server without an admin, set `E2E_SETUP_CODE` to the
-server's setup code; the suite's account then becomes the admin and stays.
+uses a temporary account. On a fresh server without an admin, pass `E2E_SETUP_CODE` to register
+the test account as the initial admin (the account is kept after the run).
 
 ## Repository layout
 

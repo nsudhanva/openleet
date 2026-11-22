@@ -1,12 +1,16 @@
 # API
 
-All endpoints live under `/api` and return JSON.
+All endpoints are served under `/api` and return JSON.
 
-Most endpoints need a session: a signed-in browser sends the session cookie, and the answer holds
-only that account's progress. Without a session they answer `401 {"error": "Sign in to
-continue"}`. The public endpoints are `/session`, `/users`, `/companies`, `/topics`, `/search`,
-`/health`, and `/version`. Writes from another site (`Origin` or `Sec-Fetch-Site` shows it) answer
-`403`.
+## Authentication & CSRF
+
+Most endpoints require a valid session cookie and scope all reads and writes to that account.
+Unauthenticated requests return `401 {"error": "Sign in to continue"}`.
+
+- **Public endpoints**: `/session`, `/users`, `/companies`, `/topics`, `/search`, `/health`,
+  `/version`
+- **CSRF protection**: Mutating requests from another origin (via `Origin` or `Sec-Fetch-Site`)
+  return `403`.
 
 ## Endpoints
 
@@ -14,17 +18,22 @@ continue"}`. The public endpoints are `/session`, `/users`, `/companies`, `/topi
 
 | Endpoint | Description |
 | --- | --- |
-| `GET /session?company=` | The signed-in account (`{email, admin}` or `null`), its readiness for the company, `signupsOpen`, and `needsSetup` |
-| `POST /session` `{email, password}` | Sign in; sets the session cookie. `401` for a wrong email or password (the same answer for both) |
-| `DELETE /session` | Sign out this browser |
-| `POST /users` `{email, password, setupCode?}` | Make an account and sign in. With the setup code, makes the first admin. `403` when sign-ups are closed, `409` when the email has an account |
-| `PUT /account/password` `{current, password}` | Change the password; ends the account's other sessions |
-| `DELETE /account` `{password}` | Delete the account and all its progress (not the admin's) |
-| `GET /admin/settings`, `PATCH /admin/settings` `{signupsOpen}` | Admin only: open or close sign-ups, and the number of accounts |
+| `GET /session?company=` | Current account (`{email, admin}` or `null`), readiness for `company`, `signupsOpen`, and `needsSetup` |
+| `POST /session` `{email, password}` | Sign in and set the session cookie. Returns `401` for an invalid email or password (identical response for both). |
+| `DELETE /session` | Sign out the current browser session |
+| `POST /users` `{email, password, setupCode?}` | Create an account and sign in. Passing `setupCode` registers the initial admin. Returns `403` when sign-ups are closed, `409` if the email already exists. |
+| `PUT /account/password` `{current, password}` | Update password and revoke all other sessions for the account |
+| `DELETE /account` `{password}` | Permanently delete the account and all its progress (not allowed for the admin) |
+| `GET /admin/settings`, `PATCH /admin/settings` `{signupsOpen}` | Admin only: read or toggle `signupsOpen` and view total account count |
 
-Passwords have 8 to 128 characters. Sign-in and sign-up allow 30 attempts per address in 15
-minutes, 10 wrong passwords per account and address in 15 minutes, and 10 new accounts per address
-in an hour (`429` past a limit). An address is an IPv4 address or an IPv6 /56.
+Passwords must be 8 to 128 characters. Rate limits return `429` when exceeded (where an address is
+an IPv4 address or IPv6 `/56`):
+
+| Action | Limit | Window | Scope |
+| --- | --- | --- | --- |
+| Sign-in / sign-up attempts | 30 | 15 min | Per address |
+| Failed password attempts | 10 | 15 min | Per `(account, address)` |
+| New account registrations | 10 | 1 hour | Per address |
 
 ### Problems & flashcards
 
@@ -38,7 +47,7 @@ in an hour (`429` past a limit). An address is an IPv4 address or an IPv6 /56.
 | `GET /search?q=` | Search by problem number, title, topic, or statement text |
 | `POST /attempts` `{slug, grade, guessed, hints}` | Grade or skip a flashcard |
 | `PUT /notes` `{slug, text}` | Save personal notes for a problem |
-| `DELETE /progress?slug=` or `?all=true` | Clear progress for one problem or everything |
+| `DELETE /progress?slug=` or `?all=true` | Clear progress for one problem or all problems |
 
 ### Coding & judge
 
@@ -48,8 +57,8 @@ in an hour (`429` past a limit). An address is an IPv4 address or an IPv6 /56.
 | `PUT /drafts`, `POST /drafts/reset`, `POST /drafts/restore` | Save, reset, or restore editor code |
 | `POST /run` `{slug, code, input?}` | Run against examples or custom input |
 | `POST /submit` `{slug, code}` | Run full test suite; returns verdict, CPU time vs. limit, and intended complexity |
-| `GET /submissions?slug=` | Submission list for a problem |
-| `GET /submissions/:id` | One of your submissions with code and result (kept for the newest 100 per problem plus the latest Accepted); another account's id answers `404` |
+| `GET /submissions?slug=` | Submission history for a problem |
+| `GET /submissions/:id` | Single submission with code and result (retained for the newest 100 per problem plus the latest Accepted); returns `404` for another account's ID |
 
 ### Plans & custom lists
 
@@ -71,7 +80,7 @@ in an hour (`429` past a limit). An address is an IPv4 address or an IPv6 /56.
 | --- | --- |
 | `GET /report?company=` | Full progress report and coding insights (see [The report](#the-report)) |
 | `GET /readiness?company=` | Readiness score alone (the page header reads it from `GET /session`) |
-| `GET /health` | Database, judge, and TLS cert status (`503` if the database is down) |
+| `GET /health` | Database, judge, and TLS certificate status (`503` if the database is down) |
 | `GET /version` | Running git revision |
 
 ### Query parameters & limits
@@ -87,14 +96,14 @@ in an hour (`429` past a limit). An address is an IPv4 address or an IPv6 /56.
 Unknown filter values are ignored.
 
 - **Plans**: Up to 8 recent unpinned plans and 50 pinned plans; names are 1 to 60 characters.
-  Custom lists aren't duplicated into `/plans`.
+  Custom lists are not duplicated into `/plans`.
 - **Lists**: Up to 50 custom lists, 1,000 unique problems per list; names are 1 to 60 characters.
 
 ## The report
 
 `GET /report?company=` (pass `any` for all companies) returns `report` and coding insights. Each
 metric uses one of three scopes: the company's most-asked problems (readiness), its 6-month list,
-or all activity across any list. All days use the server's timezone.
+or all activity across any list. Calendar days use the server's timezone.
 
 ### `report` fields
 
@@ -140,7 +149,7 @@ and half coding credits; `cards` / `fading` count full and half card credits.
 ### Shaky solves
 
 A **real failure** is Wrong Answer, TLE, MLE, or Runtime Error (compile errors and output limits
-don't count).
+do not count).
 
 ```mermaid
 stateDiagram-v2
@@ -152,5 +161,15 @@ stateDiagram-v2
 
 ## Errors
 
-Error responses return `{"error": "..."}` with status `400` (invalid input), `404` (unknown
-problem, plan, list, or route), or `415` (content type is not `application/json`).
+Error responses return `{"error": "..."}`:
+
+| Status | Meaning |
+| --- | --- |
+| `400` | Invalid request parameters or body |
+| `401` | Missing or invalid session, or invalid login credentials |
+| `403` | Cross-origin write blocked, sign-ups closed, or admin-only endpoint |
+| `404` | Unknown problem, plan, list, submission (including another user's), or route |
+| `409` | Email already registered |
+| `415` | Request `Content-Type` is not `application/json` |
+| `429` | Rate limit exceeded |
+| `503` | Database unavailable (`/health`) or judge busy |

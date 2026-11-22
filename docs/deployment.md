@@ -18,7 +18,7 @@ verifies the archive, atomically switches `/opt/openleet/current`, and restarts 
 
 ## On the server
 
-Everything runs as enabled systemd units, so reboots require no manual intervention:
+All components run as enabled systemd units, so reboots require no manual intervention:
 
 | Unit | Role |
 | --- | --- |
@@ -50,13 +50,13 @@ git clone https://github.com/nsudhanva/openleet && cd openleet
 sudo SITE_ADDRESS=openleet.example.com deploy/install.sh
 ```
 
-The installer takes ~2 minutes and sets up:
+The installer takes ~2 minutes and configures:
 
 - The `openleet` system user and Python runtime for the judge
-- 1 GB swap file (if none exists) and automatic security-update reboots at 10:00
+- A 1 GB swap file (if none exists) and automatic security-update reboots at 10:00
 - `/etc/openleet.env`, systemd units, and the latest release (server, web UI, data, test corpus)
 
-Let's Encrypt issues the TLS certificate within a minute. Verify with:
+Let's Encrypt provisions the TLS certificate within a minute. Verify with:
 
 ```bash
 curl https://openleet.example.com/api/health
@@ -68,29 +68,30 @@ Optional environment variables (re-run `install.sh` to update them; omitted valu
 - `DEPLOY_SECRET`: shared HMAC secret for instant deploys from CI
 - `SITE_ADDRESS=http://HOST`: plain HTTP without TLS
 
-New releases are installed automatically within 5 minutes. To migrate progress from another
-server, restore its backup below.
+New releases are installed automatically within 5 minutes. To migrate data from another server,
+restore its backup below.
 
-## Make the admin account
+## Initial admin setup
 
-A server without an admin writes a one-time setup code to `/var/lib/openleet/setup-code` (mode
-`0600`) and logs where it is. Until the admin account exists, nobody can sign up.
+When no admin account exists, the server writes a one-time setup code to
+`/var/lib/openleet/setup-code` (mode `0600`) and logs the path. Public sign-ups are blocked until
+the admin account is created.
 
-1. Read the code on the server:
+1. Read the setup code on the server:
 
    ```bash
    sudo cat /var/lib/openleet/setup-code
    ```
 
-2. Open the site, choose **Create account**, and enter your email, a password, and the code.
+2. Open `/login`, select **Create account**, and submit an email, password, and the setup code.
 
-The account becomes user 1 and the admin. It owns all progress from before accounts existed.
-The server deletes the file and the code stops working. The admin can open or close sign-ups on
-the **Account** page. Each restart without an admin writes a new code.
+This registers user `1` as the admin (inheriting any pre-existing progress) and deletes the setup
+code file. The admin can open or close sign-ups from the **Account** page. Restarting the server
+before setup completes regenerates the code.
 
 ## Restore a backup
 
-`/var/lib/openleet/backups/` stores the last 14 daily backups (`DATE.duckdb`) and the last 3
+`/var/lib/openleet/backups/` keeps the last 14 daily backups (`DATE.duckdb`) and the last 3
 pre-migration snapshots (`pre-migration-STAMP.duckdb`). Restoring discards changes made after the
 backup was taken:
 
@@ -105,7 +106,7 @@ If the backup uses an older schema, the server migrates it on start.
 
 ## Roll back
 
-`update.sh` keeps the 3 newest releases in `/opt/openleet/releases/`. To switch back to an older
+`update.sh` retains the 3 newest releases in `/opt/openleet/releases/`. To switch back to an older
 revision:
 
 ```bash
@@ -118,14 +119,14 @@ sudo systemctl restart openleet-judge openleet
 `update.sh` records every deployed revision and never reinstalls an older one, so neither CI nor
 the 5-minute timer will undo a rollback. The next push to `main` resumes normal deploys.
 
-> A binary refuses to open a database that a newer release migrated (logged as
+> A binary refuses to open a database migrated by a newer release (logged as
 > `"newer than this build's"` in `journalctl -u openleet`). To roll back across a migration, also
 > restore the matching `pre-migration-*.duckdb` or an older daily backup.
 
 ## Deploy from your own fork
 
 The installer reads `OPENLEET_REPO` from the clone's `origin` remote and saves it to
-`/etc/openleet.env`, so clone your fork on the server. Then in your fork's GitHub settings:
+`/etc/openleet.env`, so clone your fork on the server. Then configure GitHub settings on the fork:
 
 1. **Enable GitHub Actions**: every push to `main` publishes an `edge` release that your server
    picks up within 5 minutes.
@@ -133,7 +134,7 @@ The installer reads `OPENLEET_REPO` from the clone's `origin` remote and saves i
    (`https://openleet.example.com`) and secret `DEPLOY_SECRET` (e.g., `openssl rand -hex 32`),
    then pass the same secret on the server: `sudo DEPLOY_SECRET=... deploy/install.sh`.
 
-The test corpus isn't committed to git; `data/judge/corpus.json` points to the upstream release
+The test corpus is not committed to git; `data/judge/corpus.json` points to the upstream release
 asset until you rebuild and publish your own (`uv run openleet judge publish`). The `images`
 workflow publishes Docker images to `ghcr.io/OWNER` (run with
 `IMAGES=ghcr.io/OWNER docker compose up -d`).

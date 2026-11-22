@@ -1,26 +1,24 @@
 # OpenLeet
 
-Self-hosted LeetCode practice app with company problem lists, flashcards, and a Python judge.
-Each person signs in with an email and a password and has their own progress.
+Self-hosted LeetCode practice app with company problem lists, spaced-repetition flashcards, and a
+sandboxed Python judge. Supports multiple email/password accounts with isolated per-user progress.
 
-[Live demo](https://openleet.sudhanva.me) · [Quick start](#quick-start) · [Docs](docs/)
+[Live demo](https://openleet.sudhanva.me) · [Quick start](#quick-start) · [Documentation](docs/)
 
 ## Features
 
-- **Company lists**: 24 top tech companies filtered by recency (`30d`, `3m`, `6m`, `all`), plus
-  all free problems from 1 to 1000.
-- **Spaced-repetition flashcards**: Recall a problem's topics, then check the approach, hints, and
-  complexity. Reviews are scheduled automatically.
-- **Sandboxed Python judge**: Run code against examples, hidden tests, and stress tests with
-  LeetCode-style verdicts.
-- **Practice plans & custom lists**: Filter by company, topic, difficulty, status, and sort order;
-  pin plans or build custom problem lists.
-- **Readiness & progress**: Weighted readiness score (60% clean solves, 40% current flashcards)
-  across a company's top 100 problems, with daily trends, streaks, and weak-topic tracking.
-- **Video explanations**: Embedded YouTube walkthroughs prioritized by NeetCode, Greg Hogg, and
-  top-viewed explanations.
-- **Accounts**: Sign up with an email and a password. Each account has its own flashcards,
-  submissions, drafts, notes, plans, and lists. An admin can close sign-ups.
+- Company-tagged problem lists for 24 tech companies (`30d`, `3m`, `6m`, `all`), plus all free
+  LeetCode problems from 1 to 1000.
+- Spaced-repetition flashcards for recalling problem topics, approaches, hints, and complexity.
+- Sandboxed Python 3 judge that runs examples, hidden tests, and stress tests with LeetCode-style
+  verdicts.
+- Filterable practice plans (by company, topic, difficulty, status, and sort order) and custom
+  problem lists.
+- Readiness tracking across each company's top 100 problems (60% clean solves, 40% current
+  flashcards), with daily trends, streaks, and weak-topic reports.
+- Embedded YouTube walkthroughs prioritized by NeetCode, Greg Hogg, and view count.
+- Multi-user email/password accounts with per-account progress and an admin toggle to close
+  sign-ups.
 
 ## Quick start
 
@@ -34,57 +32,67 @@ docker compose up -d
 Open <http://openleet.localhost>. If port 80 is in use, set `HTTP_PORT=8088 docker compose up -d`
 and open <http://openleet.localhost:8088>.
 
-A new server has no accounts. Make the admin account first: on the sign-in page, choose
-**Create account** and enter the setup code from the server's state directory
-(`docker compose cp app:/state/setup-code - | tar -xO` for Docker; see
-[Deployment](docs/deployment.md#make-the-admin-account) for a server). After that, anyone can
-sign up until the admin closes sign-ups on the **Account** page.
+### Ubuntu server
 
-### Ubuntu server (auto-HTTPS + auto-updates)
-
-On an Ubuntu 24.04 machine with a domain pointed at it and ports 80/443 open:
+On Ubuntu 24.04 with a domain pointed at the server and ports 80 and 443 open:
 
 ```bash
 git clone https://github.com/nsudhanva/openleet && cd openleet
 sudo SITE_ADDRESS=openleet.example.com deploy/install.sh
 ```
 
-This sets up systemd units, gets a Let's Encrypt certificate for `https://openleet.example.com`,
-and automatically pulls new releases. See [Deployment](docs/deployment.md#new-server) for options.
+The installer configures systemd units, provisions a Let's Encrypt TLS certificate for
+`https://openleet.example.com`, and enables automatic release updates. See
+[Deployment](docs/deployment.md#new-server) for configuration options.
 
-## How it works
+### First-time setup
+
+A fresh instance starts with no accounts and writes a one-time setup code to its state directory.
+Read the code, open `/login`, select **Create account**, and register the initial admin account:
+
+```bash
+# Docker
+docker compose cp app:/state/setup-code - | tar -xO
+
+# Ubuntu server
+sudo cat /var/lib/openleet/setup-code
+```
+
+Once the admin account exists, anyone can register until the admin disables sign-ups on the
+**Account** page. See [Deployment](docs/deployment.md#initial-admin-setup) for details.
+
+## Architecture
 
 ```mermaid
 flowchart LR
     B[Browser] -- HTTPS --> S["openleet<br/>Rust server + React UI"]
-    S -- read/write --> D[(openleet.duckdb<br/>accounts, progress & plans)]
+    S -- read/write --> D[(openleet.duckdb<br/>accounts, progress, plans)]
     S -- read-only --> T[(tests.duckdb<br/>test corpus)]
     S -- Unix socket --> J["openleet-judge<br/>sandboxed Python"]
 ```
 
-Single Rust binary (Axum + embedded React frontend), DuckDB for state, and an isolated Linux judge
-daemon that runs on a 1 GB VM.
+Compiled to a single Rust binary (Axum with an embedded React frontend), backed by DuckDB and an
+isolated Linux judge daemon that fits in a 1 GB VM.
 
 ## Documentation
 
-| Doc | What it covers |
+| Document | Description |
 | --- | --- |
-| [Architecture](docs/architecture.md) | Server internals, judge sandbox, time limits, and test corpus pipeline |
-| [Development](docs/development.md) | Running from source, linters, tests, and smoke tests |
-| [Deployment](docs/deployment.md) | Production systemd setup, backups, rollbacks, and forks |
-| [API](docs/api.md) | JSON endpoints, readiness formula, and report schema |
+| [Architecture](docs/architecture.md) | Server internals, auth model, judge sandbox, time limits, and test corpus pipeline |
+| [Development](docs/development.md) | Local setup from source, linters, tests, and smoke tests |
+| [Deployment](docs/deployment.md) | Production systemd setup, initial admin setup, backups, rollbacks, and forks |
+| [API](docs/api.md) | REST endpoints, authentication, rate limits, readiness formula, and report schema |
 
 ## Data sources
 
-- **Company lists**: [liquidslr/leetcode-company-wise-problems](https://github.com/liquidslr/leetcode-company-wise-problems)
-- **Statements & solutions**: [doocs/leetcode](https://github.com/doocs/leetcode) (CC BY-SA 4.0)
-- **Starter code, tests & solutions**:
-  [LeetCodeDataset](https://huggingface.co/datasets/newfacade/LeetCodeDataset) (Apache-2.0)
-- **Build-time test verification (not shipped)**:
-  [Mercury](https://huggingface.co/datasets/Elfsong/Mercury) (CC BY-NC)
-- **Videos**: [neetcode-gh/leetcode](https://github.com/neetcode-gh/leetcode) and YouTube search via
-  [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`uv run openleet videos` writes `data/videos.json`)
-- **Approaches & hints**: Generated and reviewed (`data/approach-reviews.json`)
+| Data | Source | License |
+| --- | --- | --- |
+| Company lists | [liquidslr/leetcode-company-wise-problems](https://github.com/liquidslr/leetcode-company-wise-problems) | — |
+| Statements & solutions | [doocs/leetcode](https://github.com/doocs/leetcode) | CC BY-SA 4.0 |
+| Starter code, tests & solutions | [LeetCodeDataset](https://huggingface.co/datasets/newfacade/LeetCodeDataset) | Apache-2.0 |
+| Build-time test verification (not shipped) | [Mercury](https://huggingface.co/datasets/Elfsong/Mercury) | CC BY-NC |
+| Video links | [neetcode-gh/leetcode](https://github.com/neetcode-gh/leetcode) & [yt-dlp](https://github.com/yt-dlp/yt-dlp) | — |
+| Approaches & hints | Generated and reviewed (`data/approach-reviews.json`) | MIT |
 
 ## License
 
