@@ -38,7 +38,7 @@ The first `cargo run --release` compiles DuckDB and takes a few minutes. Once bu
 
 ## Checks & smoke tests
 
-CI runs the exact same checks as the pre-push hook. Install the hooks with `uv run prek install`,
+CI runs the same checks as the pre-push hook. Install the hooks with `uv run prek install`,
 or run everything manually:
 
 ```bash

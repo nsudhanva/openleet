@@ -445,7 +445,7 @@ mod tests {
                 "{table}"
             );
         }
-        // Keys now include the account: two accounts may each note the same problem.
+        // Keys include the account: two accounts may each note the same problem.
         conn.execute_batch(
             "INSERT INTO notes VALUES (2, 'two-sum', 'theirs', now());
              INSERT INTO drafts VALUES (2, 'two-sum', 'code', NULL, now());",

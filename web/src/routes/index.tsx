@@ -54,7 +54,7 @@ function Study() {
 		}
 	}
 
-	// Clearing keeps you on the same card, now unseen, instead of moving to the next one.
+	// Clearing keeps you on the same card, unseen again, instead of moving to the next one.
 	async function clear() {
 		if (!card) return;
 		await api.clearProgress({ slug: card.problem.slug });

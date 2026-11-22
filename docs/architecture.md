@@ -21,8 +21,8 @@ flowchart LR
   (`server/src/coding.rs`), practice plans, and lists live in memory and write through to DuckDB.
   The server keeps the 64 most recently used accounts in memory and loads others on their next
   request (`server/src/state.rs`). Next
-  problem selection and progress analytics (`server/src/insights.rs`) are computed directly from
-  memory on each request.
+  problem selection and progress analytics (`server/src/insights.rs`) are computed from memory on
+  each request.
 - **Readiness cache**: Readiness scores and daily trends (`server/src/readiness.rs`) are replayed
   from attempt and submission logs and cached per company until the logs change or 15 minutes pass.
 - **Single-round-trip loads**: `web/index.html` inlines the stylesheet and static shell. The server
@@ -100,9 +100,9 @@ every problem's time limit comes from references that pass all kept tests.
 
 ### Time limits
 
-Time limits measure algorithmic complexity rather than raw CPU speed. Before and after each run,
-the zygote times a small calibration workload (`judge/py/calibrate.py`) and compares it to the
-reference machine to compute a `slowdown` factor.
+Time limits test algorithmic complexity, so raw CPU speed does not decide a verdict. Before and
+after each run, the zygote times a small calibration workload (`judge/py/calibrate.py`) and
+compares it to the reference machine to compute a `slowdown` factor.
 
 - **Budget**: `machine_limit = problem_limit * slowdown` (capped at 120 s of host CPU).
 - **Reported time**: `actual_cpu_ms / slowdown` (reference milliseconds).
@@ -134,9 +134,10 @@ test suite (`src/openleet/judging/limits.py`):
 | Outlier exclusion | Trusted references >`10x` slower than the median still vote on outputs, but don't set limits |
 | Mercury submissions | Vote on outputs only (often include suboptimal complexities that LeetCode accepts) |
 
-Why `50x`? A clumsy implementation of the same complexity (memoized recursion, manual search over a
-sorted container) can take up to `41x` the fastest reference. A worse complexity class does roughly
-`n / log n` more work (`180x+` at `n >= 2,000`, and thousands of times more at `10^4` to `10^5`).
+The `50x` baseline leaves room for a clumsy implementation of the same complexity (memoized
+recursion, manual search over a sorted container), which can take up to `41x` the fastest
+reference. A worse complexity class does roughly `n / log n` more work (`180x+` at `n >= 2,000`,
+and thousands of times more at `10^4` to `10^5`).
 
 ```bash
 uv run openleet judge time     # time all references on JUDGE_SOCKETS and compute limits

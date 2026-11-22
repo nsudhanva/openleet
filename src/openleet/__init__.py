@@ -6,8 +6,8 @@ from openleet.data import PROBLEMS_PATH
 
 def main() -> None:
     """The `openleet` command; each subcommand imports only what it needs."""
-    # Every command that reads or writes the problem list takes the same option, so a new
-    # list can be staged (ingest --problems X, judge prepare --problems X) before it replaces
+    # Every command that reads or writes the problem list takes this option. It lets you
+    # stage another list (ingest --problems X, judge prepare --problems X) before it replaces
     # data/problems.json.
     problems = argparse.ArgumentParser(add_help=False)
     problems.add_argument(

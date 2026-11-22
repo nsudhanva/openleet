@@ -260,7 +260,7 @@ export function CodePage({ card, code, submissions: initial }: CodePageData) {
 	async function swapVersion(action: "reset" | "restore") {
 		setSwapping(true);
 		try {
-			// A pending save must land first, or it could overwrite the new version.
+			// A pending save must land first, or it could overwrite the replaced version.
 			await draft.flush();
 			const current = asDraft(source.current);
 			const next = await (action === "reset"

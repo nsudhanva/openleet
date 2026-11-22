@@ -93,7 +93,7 @@ fn signed_in(state: &Shared, status: StatusCode, session: &NewSession) -> Respon
         .into_response()
 }
 
-/// Starts a session for a user that just signed up or in.
+/// Starts a session for a user that signed up or signed in.
 async fn start_session(state: &Shared, user: User) -> ApiResult<NewSession> {
     let shared = std::sync::Arc::clone(state);
     state

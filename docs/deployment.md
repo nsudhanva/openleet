@@ -101,7 +101,7 @@ sudo install -o openleet -g openleet -m 0600 BACKUP.duckdb /var/lib/openleet/ope
 sudo systemctl start openleet
 ```
 
-If the backup uses an older schema, the server migrates it automatically on start.
+If the backup uses an older schema, the server migrates it on start.
 
 ## Roll back
 
@@ -118,9 +118,9 @@ sudo systemctl restart openleet-judge openleet
 `update.sh` records every deployed revision and never reinstalls an older one, so neither CI nor
 the 5-minute timer will undo a rollback. The next push to `main` resumes normal deploys.
 
-> **Schema downgrades:** A binary refuses to open a database migrated by a newer release (logged
-> as `"newer than this build's"` in `journalctl -u openleet`). To roll back across a migration,
-> also restore the corresponding `pre-migration-*.duckdb` or older daily backup.
+> A binary refuses to open a database that a newer release migrated (logged as
+> `"newer than this build's"` in `journalctl -u openleet`). To roll back across a migration, also
+> restore the matching `pre-migration-*.duckdb` or an older daily backup.
 
 ## Deploy from your own fork
 

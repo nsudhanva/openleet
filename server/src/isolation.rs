@@ -338,7 +338,7 @@ async fn the_first_admin_needs_the_setup_code_and_then_others_sign_up() {
     assert!(!dir.path("setup-code").exists());
     let again = early.sign_up("second@example.com", Some(&code)).await;
     assert_eq!(again.status, StatusCode::FORBIDDEN);
-    // Now sign-up is open to anyone, as plain accounts; each email once, in any case.
+    // Sign-up is open to anyone, as plain accounts; each email once, in any case.
     let member = early.sign_up("member@example.com", None).await;
     assert_eq!(member.status, StatusCode::CREATED);
     assert_eq!(member.body["admin"], false);

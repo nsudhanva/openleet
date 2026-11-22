@@ -26,7 +26,7 @@ export const Route = createRootRoute({
 	},
 	loaderDeps: ({ search: { company } }) => ({ company }),
 	// Awaited, so the page paints in one go (a Suspense fallback would hold back the content
-	// that follows it). The company list is a nicety: when it fails, the page's own loader reports it.
+	// that follows it). The company list is optional: when it fails, the page's own loader reports it.
 	loader: async ({ deps: { company } }) => {
 		const [session, companies] = await Promise.all([
 			api.session(company),

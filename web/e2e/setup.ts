@@ -10,7 +10,7 @@ declare module "vitest" {
 
 /**
  * Points the end-to-end suite at a running app: E2E_BASE_URL, or the local docker compose
- * stack at http://openleet.localhost. The suite runs as a new account of its own, deleted at
+ * stack at http://openleet.localhost. The suite runs as an account of its own, deleted at
  * the end, so other accounts' progress stays as it was. Sign-ups must be open; on a server with
  * no admin yet, set E2E_SETUP_CODE and the suite's account becomes the admin (and is kept).
  */
