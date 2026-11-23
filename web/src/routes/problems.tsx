@@ -413,7 +413,7 @@ function Problems() {
 										<RowTitle row={row} />
 									</PlanLink>
 									{/* A phone has no room for these columns: they go under the title. */}
-									<div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
+									<div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:hidden">
 										<DifficultyBadge difficulty={row.difficulty} />
 										<ListBadge list={row.list} />
 										{statusText(row)}
@@ -529,7 +529,7 @@ function SearchBox({
 	}, [draft]);
 
 	return (
-		<div className="relative col-span-2 w-full max-sm:order-first sm:w-64">
+		<div className="relative col-span-2 w-full max-sm:order-first sm:w-72">
 			<SearchIcon
 				className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
 				aria-hidden
