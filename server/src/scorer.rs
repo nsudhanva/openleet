@@ -244,7 +244,7 @@ pub fn civil_day(at: i64, tz: &TimeZone) -> Date {
 #[must_use]
 pub fn day_end(day: Date, tz: &TimeZone) -> i64 {
     day.tomorrow()
-        .and_then(|next| next.to_zoned(tz.clone()))
+        .and_then(|next| next.to_zoned_datetime(tz.clone()))
         .map_or(i64::MAX, |start| start.timestamp().as_millisecond() - 1)
 }
 

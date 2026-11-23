@@ -307,7 +307,7 @@ async fn back_up_daily(state: Shared) {
     loop {
         tick.tick().await;
         let day = jiff::Timestamp::now()
-            .to_zoned(jiff::tz::TimeZone::UTC)
+            .to_zoned_datetime(jiff::tz::TimeZone::UTC)
             .date();
         let started = std::time::Instant::now();
         match state.db(move |store| store.backup(day)).await {
